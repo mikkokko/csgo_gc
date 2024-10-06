@@ -1,0 +1,17 @@
+// all of these should be quite self-explanatory
+"ranks"
+{
+	"competitive_rank"	"18"
+	"competitive_wins"	"666"
+	"wingman_rank"	"18"
+	"wingman_wins"	"777"
+	"dangerzone_rank"	"15"
+	"dangerzone_wins"	"888"
+}
+
+"vac_banned"	"0"
+"cmd_friendly"	"666"
+"cmd_teaching"	"777"
+"cmd_leader"	"888"
+"player_level"	"39"
+"player_cur_xp"	"4999"

@@ -1,0 +1,32 @@
+"items"
+{
+	"2"
+	{
+		"inventory"		"1"
+		"def_index"		"507"
+		"level"		"1"
+		"quality"		"99"
+		"flags"		"0"
+		"origin"		"24"
+		"in_use"		"0"
+		"rarity"		"6"
+		"attributes"
+		{
+			"6"		"38.000000"
+			"7"		"41.000000"
+			"8"		"0.000001"
+		}
+		"equipped_state"
+		{
+			"3"		"0"
+		}
+	}
+}
+"default_equips"
+{
+	"61"
+	{
+		"class_id"		"3"
+		"slot_id"		"2"
+	}
+}
