@@ -1,0 +1,79 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build_type: [Release]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - if: matrix.os == 'ubuntu-latest'
+      name: Dependencies
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt install --yes --no-install-recommends gcc-multilib g++-multilib
+        
+    # ugh, should clean this up
+    - if: matrix.os == 'ubuntu-latest'
+      name: Build Linux
+      run: |
+        cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }}
+        cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo csgo_gc
+        cmake -B ${{ github.workspace }}/build_ds -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32
+        cmake --build ${{ github.workspace }}/build_ds --config ${{ matrix.build_type }} --target srcds csgo_gc
+
+    - if: matrix.os == 'macos-latest'
+      name: Build MacOS
+      run: |
+        cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }}
+        cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo csgo_gc
+
+    - if: matrix.os == 'windows-latest'
+      name: Build Windows
+      run: |
+        cmake -A Win32 -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }}
+        cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo srcds csgo_gc
+
+    - name: Package
+      shell: bash
+      run: |
+        # Copy the built files to the platform-specific directory
+        if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          mkdir -p $GITHUB_WORKSPACE/release/csgo_gc/linux64/
+          cp $GITHUB_WORKSPACE/build/csgo_gc/csgo_gc.so $GITHUB_WORKSPACE/release/csgo_gc/linux64/
+          cp $GITHUB_WORKSPACE/build/launcher/csgo_linux64 $GITHUB_WORKSPACE/release/
+          cp $GITHUB_WORKSPACE/build_ds/csgo_gc/csgo_gc.so $GITHUB_WORKSPACE/release/csgo_gc/
+          cp $GITHUB_WORKSPACE/build_ds/launcher/srcds_linux $GITHUB_WORKSPACE/release/
+        elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          mkdir -p $GITHUB_WORKSPACE/release/csgo_gc/osx64/
+          cp $GITHUB_WORKSPACE/build/csgo_gc/csgo_gc.dylib $GITHUB_WORKSPACE/release/csgo_gc/osx64/
+          cp $GITHUB_WORKSPACE/build/launcher/csgo_osx64 $GITHUB_WORKSPACE/release/
+        elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          mkdir -p $GITHUB_WORKSPACE/release/csgo_gc/
+          cp $GITHUB_WORKSPACE/build/csgo_gc/Release/csgo_gc.dll $GITHUB_WORKSPACE/release/csgo_gc/
+          cp $GITHUB_WORKSPACE/build/launcher/Release/csgo.exe $GITHUB_WORKSPACE/release/
+          cp $GITHUB_WORKSPACE/build/launcher/Release/srcds.exe $GITHUB_WORKSPACE/release/
+        fi
+
+        cp $GITHUB_WORKSPACE/README.md $GITHUB_WORKSPACE/release/
+        cp $GITHUB_WORKSPACE/LICENSE $GITHUB_WORKSPACE/release/
+        cp $GITHUB_WORKSPACE/examples/config.txt $GITHUB_WORKSPACE/release/csgo_gc/
+        cp $GITHUB_WORKSPACE/examples/inventory.txt $GITHUB_WORKSPACE/release/csgo_gc/
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: csgo_gc-${{ matrix.os }}
+        path: ${{ github.workspace }}/release
