@@ -19,6 +19,20 @@ inline bool ReadGCMessage(T &message, const void *data, uint32_t size)
     return message.ParseFromArray(protoData, protoSize);
 }
 
+// this also sucks
+template<typename T>
+const T *ReadGameStructMessage(const void *data, uint32_t size)
+{
+    if (size != sizeof(GameStructMsgHeader) + sizeof(T))
+    {
+        assert(false);
+        return nullptr;
+    }
+
+    const uint8_t *messageData = reinterpret_cast<const uint8_t *>(data);
+    return reinterpret_cast<const T *>(messageData + sizeof(GameStructMsgHeader));
+}
+
 inline void AppendGCMessage(std::vector<uint8_t> &buffer, uint32_t type, const google::protobuf::MessageLite &message)
 {
     assert(type & ProtobufMask);

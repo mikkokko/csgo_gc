@@ -5,6 +5,8 @@
 
 class KeyValue;
 
+using ItemMap = std::unordered_map<uint64_t, CSOEconItem>;
+
 class Inventory
 {
 public:
@@ -19,6 +21,18 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgSOMultipleObjects &updateMultiple,
         CMsgGCItemCustomizationNotification &notification);
+
+    bool UnlockCrate(uint64_t crateId,
+        uint64_t keyId,
+        CMsgSOSingleObject &destroyCrate,
+        CMsgSOSingleObject &destroyKey,
+        CMsgSOSingleObject &newItem,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool SetItemPositions(
+        const CMsgSetItemPositions &message,
+        std::vector<CMsgItemAcknowledged> &acknowledgements,
+        CMsgSOMultipleObjects &update);
 
 private:
     uint32_t AccountId() const;
@@ -36,10 +50,12 @@ private:
     // bool UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update);
     void UnequipItem(uint32_t classId, uint32_t slotId, CMsgSOMultipleObjects &update);
 
+    void DestroyItem(ItemMap::iterator iterator, CMsgSOSingleObject &message);
+
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
     Random m_random;
     uint32_t m_lastGeneratedHighItemId{ 1 };
-    std::unordered_map<uint64_t, CSOEconItem> m_items;
+    ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;
 };

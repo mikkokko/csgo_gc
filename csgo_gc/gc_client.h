@@ -27,6 +27,9 @@ private:
     void ClientPlayerDecalSign(const void *data, uint32_t size);
     void UseItemRequest(const void *data, uint32_t size);
     void ClientRequestJoinServerData(const void *data, uint32_t size);
+    void SetItemPositions(const void *data, uint32_t size);
+
+    void UnlockCrate(const void *data, uint32_t size);
 
     void BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &message);
     void BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,

@@ -48,6 +48,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             ClientRequestJoinServerData(data, size);
             break;
 
+        case k_EMsgGCSetItemPositions:
+            SetItemPositions(data, size);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n", MessageName(type));
             break;
@@ -55,12 +59,17 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     }
     else
     {
-        // switch (type)
-        //{
-        // default:
-        Platform::Print("ClientGC::HandleMessage: unhandled struct message %s\n", MessageName(type));
-        //    break;
-        //}
+        switch (type)
+        {
+
+        case k_EMsgGCUnlockCrate:
+            UnlockCrate(data, size);
+            break;
+
+        default:
+            Platform::Print("ClientGC::HandleMessage: unhandled struct message %s\n", MessageName(type));
+            break;
+        }
     }
 }
 
@@ -301,7 +310,8 @@ void ClientGC::UseItemRequest(const void *data, uint32_t size)
 
 static void AddressString(uint32_t ip, uint32_t port, char *buffer, size_t bufferSize)
 {
-    snprintf(buffer, bufferSize, "%u.%u.%u.%u:%u\n",
+    snprintf(buffer, bufferSize,
+        "%u.%u.%u.%u:%u\n",
         (ip >> 24) & 0xff,
         (ip >> 16) & 0xff,
         (ip >> 8) & 0xff,
@@ -329,6 +339,78 @@ void ClientGC::ClientRequestJoinServerData(const void *data, uint32_t size)
     response.mutable_res()->set_server_address(addressString);
 
     m_outgoingMessages.emplace(k_EMsgGCCStrike15_v2_ClientRequestJoinServerData, response);
+}
+
+void ClientGC::SetItemPositions(const void *data, uint32_t size)
+{
+    CMsgSetItemPositions message;
+    if (!ReadGCMessage(message, data, size))
+    {
+        Platform::Print("Parsing CMsgSetItemPositions failed, ignoring\n");
+        return;
+    }
+
+    std::vector<CMsgItemAcknowledged> acknowledgements;
+    acknowledgements.reserve(message.item_positions_size());
+
+    CMsgSOMultipleObjects update;
+    if (m_inventory.SetItemPositions(message, acknowledgements, update))
+    {
+        for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
+        {
+            m_networking.SendMessage(k_EMsgGCItemAcknowledged, acknowledgement);
+        }
+
+        m_outgoingMessages.emplace(k_ESOMsg_UpdateMultiple, update);
+        m_networking.SendMessage(k_ESOMsg_UpdateMultiple, update);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+void ClientGC::UnlockCrate(const void *data, uint32_t size)
+{
+    const CMsgGCUnlockCrate *message = ReadGameStructMessage<CMsgGCUnlockCrate>(data, size);
+    if (!message)
+    {
+        Platform::Print("Parsing CMsgGCUnlockCrate failed, ignoring\n");
+        return;
+    }
+
+    Platform::Print("CASE OPENING %llu with %llu\n", message->crate_id, message->key_id);
+
+    CMsgSOSingleObject destroyCrate, destroyKey, newItem;
+    CMsgGCItemCustomizationNotification notification;
+
+    if (m_inventory.UnlockCrate(
+        message->crate_id,
+        message->key_id,
+        destroyCrate,
+        destroyKey,
+        newItem,
+        notification))
+    {
+        // mikkotodo what does the server want to know
+        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroyCrate);
+        m_networking.SendMessage(k_ESOMsg_Destroy, destroyCrate);
+        
+        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroyKey);
+        m_networking.SendMessage(k_ESOMsg_Destroy, destroyKey);
+
+        m_outgoingMessages.emplace(k_ESOMsg_Create, newItem);
+        m_networking.SendMessage(k_ESOMsg_Create, newItem);
+
+        CMsgRequestInventoryRefresh empty; // just an empty message (mikkotodo fix)
+        m_outgoingMessages.emplace(k_EMsgGCUnlockCrateResponse, empty);
+
+        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        assert(false);
+    }
 }
 
 const char *MessageName(uint32_t type)

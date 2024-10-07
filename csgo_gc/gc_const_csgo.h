@@ -76,3 +76,16 @@ enum ElevatedState : uint32_t
     ElevatedStateNo = 0,
     ElevatedStatePrime = 5
 };
+
+// struct based messages
+
+#pragma pack(push, 1)
+
+// k_EMsgGCUnlockCrate
+struct CMsgGCUnlockCrate
+{
+    uint64_t key_id;
+    uint64_t crate_id;
+};
+
+#pragma pack(pop)

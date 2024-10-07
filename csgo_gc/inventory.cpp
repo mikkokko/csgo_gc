@@ -94,23 +94,16 @@ CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
         {
             item = *copyFrom;
         }
+
         item.set_id(itemId);
+        item.set_account_id(AccountId());
+
         return item;
     }
 }
 
 void Inventory::ReadFromFile()
 {
-    {
-        KeyValue stupid{ "stupid" };
-        if (!stupid.ParseFromFile("stupid.txt"))
-        {
-            return;
-        }
-
-        stupid.WriteToFile("stupid2.txt");
-    }
-    
     KeyValue inventoryKey{ "inventory" };
     if (!inventoryKey.ParseFromFile(InventoryFilePath))
     {
@@ -161,8 +154,7 @@ void Inventory::ReadFromFile()
 
 void Inventory::ReadItem(const KeyValue &itemKey, CSOEconItem &item) const
 {
-    // id was set by CreateItem
-    item.set_account_id(AccountId());
+    // id and account_id were set by CreateItem
     item.set_inventory(itemKey.GetNumber<uint32_t>("inventory"));
     item.set_def_index(itemKey.GetNumber<uint32_t>("def_index"));
     //item.set_quantity(itemKey.GetNumber<uint32_t>("quantity"));
@@ -440,36 +432,144 @@ bool Inventory::UseItem(uint64_t itemId,
         return false;
     }
 
-    CSOEconItem &item = it->second;
-
-    if (item.def_index() != m_itemSchema.SealedGraffitiDefIndex())
+    if (it->second.def_index() != m_itemSchema.SealedGraffitiDefIndex())
     {
         assert(false);
         return false;
     }
 
-    CSOEconItem itemIdOnly;
-    itemIdOnly.set_id(item.id());
+    // create an unsealed spray based on the sealed one
+    CSOEconItem &unsealed = CreateItem(0, &it->second);
+    unsealed.set_def_index(m_itemSchema.GraffitiDefIndex());
 
-    destroy.set_version(InventoryVersion); // mikkotodo is this correct
-    destroy.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    destroy.mutable_owner_soid()->set_id(m_steamId);
-    destroy.set_type_id(SOTypeItem);
-    destroy.set_object_data(itemIdOnly.SerializeAsString());
+    // remove the sealed spray from our inventory
+    DestroyItem(it, destroy);
 
-    // create a new spray based on the old one, set def index to unlocked
-    CSOEconItem &unlocked = CreateItem(0, &item);
-    unlocked.set_def_index(m_itemSchema.GraffitiDefIndex());
+    // equip the new spray, this will also unequip the old one if we had one
+    EquipItem(unsealed.id(), 0, m_itemSchema.GraffitiSlot(), updateMultiple);
 
-    // actually remove the old spray
-    m_items.erase(it);
+    // set notification
+    notification.add_item_id(unsealed.id());
+    notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
 
-    // equip the new spray, unequipping the old one
-    EquipItem(unlocked.id(), 0, m_itemSchema.GraffitiSlot(), updateMultiple);
+    return true;
+}
+
+// mikkotodo document
+constexpr uint32_t InventoryFieldCase()
+{
+    return 5u | (1u << 30);
+}
+
+bool Inventory::UnlockCrate(uint64_t crateId,
+    uint64_t keyId,
+    CMsgSOSingleObject &destroyCrate,
+    CMsgSOSingleObject &destroyKey,
+    CMsgSOSingleObject &newItem,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto crate = m_items.find(crateId);
+    if (crate == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    auto key = m_items.find(keyId);
+    if (key == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    DestroyItem(crate, destroyCrate);
+    DestroyItem(key, destroyKey);
+
+    // new item (mikkotodo actually implement...)
+    CSOEconItem &unlocked = CreateItem(0);
+    unlocked.set_inventory(InventoryFieldCase()); // set when the game sends us a k_EMsgGCSetItemPositions
+    unlocked.set_def_index(63);
+    unlocked.set_quantity(1);
+    unlocked.set_level(1);
+    unlocked.set_quality(4);
+    unlocked.set_flags(0);
+    unlocked.set_origin(8);
+    unlocked.set_in_use(0);
+    unlocked.set_rarity(1);
+    CSOEconItemAttribute *attribute = unlocked.add_attribute();
+    attribute->set_def_index(6);
+    float value = 218;
+    attribute->set_value_bytes(&value, sizeof(value));
+
+    {
+        newItem.set_version(InventoryVersion);
+        newItem.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+        newItem.mutable_owner_soid()->set_id(m_steamId);
+        newItem.set_type_id(SOTypeItem);
+        newItem.set_object_data(unlocked.SerializeAsString());
+    }
 
     // set notification
     notification.add_item_id(unlocked.id());
-    notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
+    notification.set_request(k_EGCItemCustomizationNotification_UnlockCrate);
+
+    return true;
+}
+
+// mikkotodo incomplete
+static void ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreviewDataBlock &block)
+{
+    block.set_accountid(item.account_id());
+    block.set_itemid(item.id());
+    block.set_defindex(item.def_index());
+    //block.set_paintindex(item.paintindex());
+    block.set_rarity(item.rarity());
+    block.set_quality(item.quality());
+    //block.set_paintwear(item.paintwear());
+    //block.set_paintseed(item.paintseed());
+    //block.set_killeaterscoretype(item.killeaterscoretype());
+    //block.set_killeatervalue(item.killeatervalue());
+    block.set_customname(item.custom_name());
+    //block.set_stickers(item.stickers());
+    block.set_inventory(item.inventory());
+    block.set_origin(item.origin());
+    //block.set_questid(item.questid());
+    //block.set_dropreason(item.dropreason());
+    //block.set_musicindex(item.musicindex());
+    //block.set_entindex(item.entindex());
+}
+
+bool Inventory::SetItemPositions(
+    const CMsgSetItemPositions &message,
+    std::vector<CMsgItemAcknowledged> &acknowledgements,
+    CMsgSOMultipleObjects &update)
+{
+    update.set_version(InventoryVersion);
+    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    update.mutable_owner_soid()->set_id(m_steamId);
+
+    for (const CMsgSetItemPositions_ItemPosition &position : message.item_positions())
+    {
+        auto it = m_items.find(position.item_id());
+        if (it == m_items.end())
+        {
+            assert(false);
+            return false;
+        }
+
+        CSOEconItem &item = it->second;
+
+        Platform::Print("SetItemPositions: %llu --> %u\n", position.item_id(), position.position());
+
+        CMsgItemAcknowledged &acknowledgement = acknowledgements.emplace_back();
+        ItemToPreviewDataBlock(item, *acknowledgement.mutable_iteminfo());
+
+        item.set_inventory(position.position());
+
+        CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
+        object->set_type_id(SOTypeItem);
+        object->set_object_data(item.SerializeAsString());
+    }
 
     return true;
 }
@@ -528,4 +628,18 @@ void Inventory::UnequipItem(uint32_t classId, uint32_t slotId, CMsgSOMultipleObj
             it++;
         }
     }
+}
+
+void Inventory::DestroyItem(ItemMap::iterator iterator, CMsgSOSingleObject &message)
+{
+    CSOEconItem item;
+    item.set_id(iterator->second.id());
+
+    message.set_version(InventoryVersion);
+    message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    message.mutable_owner_soid()->set_id(m_steamId);
+    message.set_type_id(SOTypeItem);
+    message.set_object_data(item.SerializeAsString());
+
+    m_items.erase(iterator);
 }
