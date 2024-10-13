@@ -22,10 +22,10 @@ struct ProtoMsgHeader
 // header for struct based messages sent by the game
 struct GameStructMsgHeader
 {
-	uint32_t type;
-	uint32_t unused1;
-	uint64_t unused2;
-	uint16_t unused3;
+    uint32_t type;
+    uint32_t unused1;
+    uint64_t unused2;
+    uint16_t unused3;
 };
 
 #pragma pack(pop)

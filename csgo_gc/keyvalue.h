@@ -22,8 +22,8 @@ inline T FromString(std::string_view string)
 template<>
 inline float FromString(std::string_view string)
 {
-	std::string temp{ string }; // should fit the short string buffer
-	return strtof(temp.c_str(), nullptr);
+    std::string temp{ string }; // should fit the short string buffer
+    return strtof(temp.c_str(), nullptr);
 }
 #endif
 
@@ -54,12 +54,12 @@ public:
     // template helpers for parsing/writing integers/floats
 
     template<typename T>
-    T GetNumber(std::string_view name) const
+    T GetNumber(std::string_view name, T fallback = 0) const
     {
         const KeyValue *subkey = GetSubkey(name);
         if (!subkey)
         {
-            return 0;
+            return fallback;
         }
 
         return FromString<T>(subkey->m_string);

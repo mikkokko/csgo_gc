@@ -1,7 +1,6 @@
 #pragma once
 
 #include "item_schema.h"
-#include "random.h"
 
 class KeyValue;
 
@@ -37,6 +36,7 @@ public:
 private:
     uint32_t AccountId() const;
 
+    // sets id and account_id fields
     // pass zero as highItemId to generate a new one
     CSOEconItem &CreateItem(uint32_t highItemId, CSOEconItem *copyFrom = nullptr);
 
@@ -47,14 +47,16 @@ private:
     void WriteItem(KeyValue &itemKey, const CSOEconItem &item) const;
 
     // helper, only called via EquipItem
-    // bool UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update);
+    bool UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update);
     void UnequipItem(uint32_t classId, uint32_t slotId, CMsgSOMultipleObjects &update);
 
     void DestroyItem(ItemMap::iterator iterator, CMsgSOSingleObject &message);
 
+    // move this to the item schema maybe?
+    void ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreviewDataBlock &block);
+
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
-    Random m_random;
     uint32_t m_lastGeneratedHighItemId{ 1 };
     ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;

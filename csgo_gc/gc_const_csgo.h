@@ -71,11 +71,50 @@ enum SOTypeId : uint32_t
     SOTypeDefaultEquippedDefinitionInstanceClient = 43
 };
 
+// CSOEconItem origin
+enum ItemOrigin
+{
+    ItemOriginCrate = 8
+};
+
 enum ElevatedState : uint32_t
 {
     ElevatedStateNo = 0,
     ElevatedStatePrime = 5
 };
+
+// dumped from client.dll strings, most of these aren't used by us
+enum UnacknowledgedType
+{
+    UnacknowledgedFound = 1,
+    UnacknowledgedCrafted,
+    UnacknowledgedTraded,
+    UnacknowledgedUnused1,
+    UnacknowledgedFoundInCrate,
+    UnacknowledgedGifted,
+    UnacknowledgedUnused2,
+    UnacknowledgedUnused3,
+    UnacknowledgedEarned,
+    UnacknowledgedRefunded,
+    UnacknowledgedGiftWrapped,
+    UnacknowledgedForeign,
+    UnacknowledgedCollectionReward,
+    UnacknowledgedPreviewItem,
+    UnacknowledgedPreviewItemPurchased,
+    UnacknowledgedPeriodicScoreReward,
+    UnacknowledgedRecycling,
+    UnacknowledgedTournamentDrop,
+    UnacknowledgedQuestReward,
+    UnacknowledgedLevelUpReward,
+    UnacknowledgedAd
+};
+
+// CSOEconItem inventory field when unacknowledged
+constexpr uint32_t InventoryUnacknowledged(UnacknowledgedType type)
+{
+    constexpr uint32_t InventroyUnacknowledgedMask = (1u << 30);
+    return type | InventroyUnacknowledgedMask;
+}
 
 // struct based messages
 
