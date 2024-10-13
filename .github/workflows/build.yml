@@ -71,6 +71,7 @@ jobs:
         cp $GITHUB_WORKSPACE/LICENSE $GITHUB_WORKSPACE/release/
         cp $GITHUB_WORKSPACE/examples/config.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/inventory.txt $GITHUB_WORKSPACE/release/csgo_gc/
+        cp $GITHUB_WORKSPACE/examples/unusual_loot_lists.txt $GITHUB_WORKSPACE/release/csgo_gc/
 
     - name: Upload
       uses: actions/upload-artifact@v4
