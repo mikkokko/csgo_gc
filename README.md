@@ -9,8 +9,9 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 ## Current features
 - Editable inventory (inventory.txt)
 - Item equipping
-- Graffiti support
 - Opening cases (including sticker capsules, patch packs, graffiti boxes and music kit boxes)
+- Graffiti support
+- Weapon StatTrak support
 - Works without full Steam API emulation
 - Full Windows, Linux and MacOS support
 - Funtional lobbies
