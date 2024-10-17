@@ -4,8 +4,6 @@ project(csgo_gc)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(OUTDIR ${CMAKE_CURRENT_LIST_DIR}/../game)
-
 if (CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(IS_32BIT ON)
 endif()

@@ -29,6 +29,7 @@ jobs:
     - if: matrix.os == 'ubuntu-latest'
       name: Build Linux
       run: |
+        mkdir ${{ github.workspace }}/release
         cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DOUTDIR=${{ github.workspace }}/release
         cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo csgo_gc
         cmake -B ${{ github.workspace }}/build_ds -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DOUTDIR=${{ github.workspace }}/release
@@ -37,12 +38,14 @@ jobs:
     - if: matrix.os == 'macos-latest'
       name: Build MacOS
       run: |
+        mkdir ${{ github.workspace }}/release
         cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DOUTDIR=${{ github.workspace }}/release
         cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo csgo_gc
 
     - if: matrix.os == 'windows-latest'
       name: Build Windows
       run: |
+        mkdir ${{ github.workspace }}/release
         cmake -A Win32 -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DOUTDIR=${{ github.workspace }}/release
         cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo srcds csgo_gc
 
