@@ -23,6 +23,7 @@ public:
 
 private:
     void OnServerHello(const void *data, uint32_t size);
+    void IncrementKillCountAttribute(const void *data, uint32_t size);
 
     std::queue<OutgoingMessage> m_outgoingMessages;
     NetworkingServer m_networking;

@@ -26,7 +26,7 @@ inline uint32_t HighItemId(uint64_t itemId)
 // helper, see ItemIdDefaultItemMask for more information
 inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paintKitIndex)
 {
-    if (itemId & ItemIdDefaultItemMask)
+    if ((itemId & ItemIdDefaultItemMask) == ItemIdDefaultItemMask)
     {
         defIndex = itemId & 0xffff;
         paintKitIndex = (itemId >> 16) & 0xffff;
@@ -60,14 +60,14 @@ CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
 
     if (!highItemId)
     {
-        m_lastGeneratedHighItemId++;
-        highItemId = m_lastGeneratedHighItemId;
+        m_lastHighItemId++;
+        highItemId = m_lastHighItemId;
     }
 
     for (; ; highItemId++)
     {
         uint64_t itemId = ComposeItemId(AccountId(), highItemId);
-        if (itemId & ItemIdDefaultItemMask)
+        if ((itemId & ItemIdDefaultItemMask) == ItemIdDefaultItemMask)
         {
             // would be interpreted as a default item (it's not)
             assert(false);
@@ -83,9 +83,9 @@ CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
             continue;
         }
 
-        if (highItemId > m_lastGeneratedHighItemId)
+        if (highItemId > m_lastHighItemId)
         {
-            m_lastGeneratedHighItemId = highItemId;
+            m_lastHighItemId = highItemId;
         }
 
         // ok
@@ -119,21 +119,8 @@ void Inventory::ReadFromFile()
         for (const KeyValue &itemKey : *itemsKey)
         {
             uint32_t highItemId = FromString<uint32_t>(itemKey.Name());
-            assert(highItemId);
             CSOEconItem &item = CreateItem(highItemId);
             ReadItem(itemKey, item);
-        }
-    }
-
-    // find the largest item id for generating new items
-    for (const auto &pair : m_items) // mikkotodo remove this code path
-    {
-        const CSOEconItem &item = pair.second;
-        uint32_t highItemId = HighItemId(item.id());
-
-        if (highItemId > m_lastGeneratedHighItemId)
-        {
-            assert(false);
         }
     }
 
@@ -492,16 +479,14 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     notification.set_request(k_EGCItemCustomizationNotification_UnlockCrate);
 
     // remove the crate
-#if 0 // mikkotodo imp
-    DestroyItem(crate, destroyCrate);
-
-    // remove the key if one was used (yes, we don't validate keys...)
-    auto key = m_items.find(keyId);
-    if (key != m_items.end())
-    {
-        DestroyItem(key, destroyKey);
-    }
-#endif
+    //DestroyItem(crate, destroyCrate);
+    //
+    //// remove the key if one was used (yes, we don't validate keys...)
+    //auto key = m_items.find(keyId);
+    //if (key != m_items.end())
+    //{
+    //    DestroyItem(key, destroyKey);
+    //}
 
     return true;
 }
@@ -585,6 +570,44 @@ bool Inventory::SetItemPositions(
     }
 
     return true;
+}
+
+bool Inventory::IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CMsgSOSingleObject &update)
+{
+    auto it = m_items.find(itemId);
+    if (it == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    CSOEconItem &item = it->second;
+    bool incremented = false;
+
+    for (int i = 0; i < item.attribute_size(); i++)
+    {
+        CSOEconItemAttribute *attribute = item.mutable_attribute(i);
+        if (attribute->def_index() == ItemSchema::AttributeKillEater)
+        {
+            int value = m_itemSchema.AttributeValueInt(*attribute) + amount;
+            m_itemSchema.SetAttributeValueInt(*attribute, value);
+            incremented = true;
+            break;
+        }
+    }
+
+    if (incremented)
+    {
+        update.set_version(InventoryVersion);
+        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+        update.mutable_owner_soid()->set_id(m_steamId);
+        update.set_type_id(SOTypeItem);
+        update.set_object_data(item.SerializeAsString());
+        return true;
+    }
+
+    assert(false);
+    return false;
 }
 
 bool Inventory::UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update)

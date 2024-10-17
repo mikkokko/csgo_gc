@@ -37,6 +37,10 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             // server doesn't want a response so ignore
             break;
 
+        case k_EMsgGC_IncrementKillCountAttribute:
+            IncrementKillCountAttribute(data, size);
+            break;
+
         default:
             Platform::Print("ServerGC::HandleMessage: unhandled message %s (protobuf %s)\n",
                 MessageName(type),
@@ -128,4 +132,18 @@ void ServerGC::OnServerHello(const void *data, uint32_t size)
     welcome.set_rtime32_gc_welcome_timestamp(static_cast<uint32_t>(time(nullptr)));
 
     m_outgoingMessages.emplace(k_EMsgGCServerWelcome, welcome);
+}
+
+void ServerGC::IncrementKillCountAttribute(const void *data, uint32_t size)
+{
+    CMsgIncrementKillCountAttribute message;
+    if (!ReadGCMessage(message, data, size))
+    {
+        Platform::Print("Parsing CMsgIncrementKillCountAttribute failed, ignoring\n");
+        return;
+    }
+
+    // just forward it to the killer
+    CSteamID killerId{ message.killer_account_id(), k_EUniversePublic, k_EAccountTypeIndividual };
+    m_networking.SendMessage(killerId.ConvertToUint64(), k_EMsgGC_IncrementKillCountAttribute, message);
 }

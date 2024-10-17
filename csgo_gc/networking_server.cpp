@@ -30,7 +30,7 @@ void NetworkingServer::Update()
 
         GCMessage gcMessage;
         NetMessageType netMessageType = ParseNetMessage(message->GetData(), message->GetSize(), gcMessage);
-        if (netMessageType != NetMessageForGC)
+        if (netMessageType != NetMessageForGame)
         {
             Platform::Print("NetworkingServer: ignored message from %llu (bad header)\n", steamId);
             message->Release();
@@ -114,6 +114,39 @@ void NetworkingServer::ClientDisconnected(uint64_t steamId)
 
         assert(sendResult == k_EResultOK);
     }
+}
+
+void NetworkingServer::SendMessage(uint64_t steamId, uint32_t type, const google::protobuf::MessageLite &message)
+{
+    auto it = m_clients.find(steamId);
+    if (it == m_clients.end())
+    {
+        Platform::Print("No csgo_gc session with %llu, not sending message!!!\n");
+        return;
+    }
+
+    type |= ProtobufMask;
+
+    std::vector<uint8_t> buffer;
+    buffer.resize(sizeof(NetMessageHeader));
+    NetMessageHeader *header = reinterpret_cast<NetMessageHeader *>(buffer.data());
+    header->sentinel = NetMessageSentinel;
+    header->type = NetMessageForGC; // ClientGC
+
+    AppendGCMessage(buffer, type, message);
+
+    // mikkotodo check return
+    SteamNetworkingIdentity identity;
+    identity.SetSteamID64(steamId);
+
+    [[maybe_unused]] EResult result = SteamGameServerNetworkingMessages()->SendMessageToUser(
+        identity,
+        buffer.data(),
+        buffer.size(),
+        MessageSendFlags,
+        MessageChannel);
+
+    assert(result == k_EResultOK);
 }
 
 void NetworkingServer::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t *param)

@@ -9,6 +9,7 @@ enum NetMessageType : uint16_t
     NetMessageInvalid,
     NetMessageConnected,
     NetMessageDisconnected,
+    NetMessageForGame,
     NetMessageForGC,
     NetMessageLast = NetMessageForGC
 };
@@ -50,7 +51,7 @@ inline NetMessageType ParseNetMessage(const void *data, uint32_t size, GCMessage
     }
 
     // fill the gc message info, if any
-    if (header->type == NetMessageForGC)
+    if (header->type == NetMessageForGame || header->type == NetMessageForGC)
     {
         // we could do more validation here but i'm lazy,
         // the game will check the messages anyway

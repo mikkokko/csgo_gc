@@ -28,7 +28,7 @@ void NetworkingClient::Update()
         // check if it's from an unknown entity
         if (m_serverSteamId && steamId != m_serverSteamId)
         {
-            Platform::Print("NetworkingClient: ignored message from %llu (not our gs)\n", steamId);
+            Platform::Print("NetworkingClient: ignored message from %llu (not our gs %llu)\n", steamId, m_serverSteamId);
             message->Release();
             continue;
         }
@@ -71,9 +71,14 @@ void NetworkingClient::Update()
                     "NetworkingClient: ignored NetMessageDisconnected from %llu (already cleared)\n", steamId);
             }
         }
-        else if (type == NetMessageForGC)
+        else if (type == NetMessageForGame)
         {
             m_clientGC->AddOutgoingMessage(gcMessage.data, gcMessage.size);
+        }
+        else if (type == NetMessageForGC)
+        {
+            // mikkotodo unsafe and crappy
+            m_clientGC->HandleMessage(*reinterpret_cast<const uint32_t *>(gcMessage.data), gcMessage.data, gcMessage.size);
         }
 
         message->Release();
@@ -94,7 +99,7 @@ void NetworkingClient::SendMessage(uint32_t type, const google::protobuf::Messag
     buffer.resize(sizeof(NetMessageHeader));
     NetMessageHeader *header = reinterpret_cast<NetMessageHeader *>(buffer.data());
     header->sentinel = NetMessageSentinel;
-    header->type = NetMessageForGC;
+    header->type = NetMessageForGame;
 
     AppendGCMessage(buffer, type, message);
 

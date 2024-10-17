@@ -52,6 +52,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             SetItemPositions(data, size);
             break;
 
+        case k_EMsgGC_IncrementKillCountAttribute:
+            IncrementKillCountAttribute(data, size);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n", MessageName(type));
             break;
@@ -363,6 +367,29 @@ void ClientGC::SetItemPositions(const void *data, uint32_t size)
 
         m_outgoingMessages.emplace(k_ESOMsg_UpdateMultiple, update);
         m_networking.SendMessage(k_ESOMsg_UpdateMultiple, update);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+void ClientGC::IncrementKillCountAttribute(const void *data, uint32_t size)
+{
+    CMsgIncrementKillCountAttribute message;
+    if (!ReadGCMessage(message, data, size))
+    {
+        Platform::Print("Parsing CMsgIncrementKillCountAttribute failed, ignoring\n");
+        return;
+    }
+
+    assert(message.event_type() == 0);
+
+    CMsgSOSingleObject update;
+    if (m_inventory.IncrementKillCountAttribute(message.item_id(), message.amount(), update))
+    {
+        m_outgoingMessages.emplace(k_ESOMsg_Update, update);
+        m_networking.SendMessage(k_ESOMsg_Update, update);
     }
     else
     {

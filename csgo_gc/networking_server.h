@@ -19,6 +19,8 @@ public:
     void ClientConnected(uint64_t steamId);
     void ClientDisconnected(uint64_t steamId);
 
+    void SendMessage(uint64_t steamId, uint32_t type, const google::protobuf::MessageLite &message);
+
 private:
     STEAM_GAMESERVER_CALLBACK(NetworkingServer,
         OnSessionRequest,

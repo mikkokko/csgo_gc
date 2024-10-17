@@ -33,6 +33,8 @@ public:
         std::vector<CMsgItemAcknowledged> &acknowledgements,
         CMsgSOMultipleObjects &update);
 
+    bool IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CMsgSOSingleObject &update);
+
 private:
     uint32_t AccountId() const;
 
@@ -57,7 +59,7 @@ private:
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
-    uint32_t m_lastGeneratedHighItemId{ 1 };
+    uint32_t m_lastHighItemId{};
     ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;
 };
