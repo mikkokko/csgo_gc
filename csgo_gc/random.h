@@ -22,3 +22,5 @@ public:
 private:
     std::mt19937 m_engine{ std::random_device{}() };
 };
+
+extern Random g_random;

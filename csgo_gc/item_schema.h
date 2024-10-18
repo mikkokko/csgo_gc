@@ -1,7 +1,5 @@
 #pragma once
 
-#include "random.h"
-
 class KeyValue;
 
 struct AttributeInfo
@@ -93,6 +91,7 @@ public:
     bool AttributeStoredAsInteger(uint32_t defIndex) const;
 
     int AttributeValueInt(const CSOEconItemAttribute &attribute) const;
+    float AttributeValueFloat(const CSOEconItemAttribute &attribute) const;
 
     void SetAttributeValueInt(CSOEconItemAttribute &attribute, int value) const;
     void SetAttributeValueFloat(CSOEconItemAttribute &attribute, float value) const;
@@ -158,9 +157,34 @@ public:
         AttributeKillEater = 80,
         AttributeKillEaterScoreType = 81,
 
+        // ugh
         AttributeStickerId0 = 113,
+        AttributeStickerWear0 = 114,
+        AttributeStickerScale0 = 115,
+        AttributeStickerRotation0 = 116,
+        AttributeStickerId1 = 117,
+        AttributeStickerWear1 = 118,
+        AttributeStickerScale1 = 119,
+        AttributeStickerRotation1 = 120,
+        AttributeStickerId2 = 121,
+        AttributeStickerWear2 = 122,
+        AttributeStickerScale2 = 123,
+        AttributeStickerRotation2 = 124,
+        AttributeStickerId3 = 125,
+        AttributeStickerWear3 = 126,
+        AttributeStickerScale3 = 127,
+        AttributeStickerRotation3 = 128,
+        AttributeStickerId4 = 129,
+        AttributeStickerWear4 = 130,
+        AttributeStickerScale4 = 131,
+        AttributeStickerRotation4 = 132,
+        AttributeStickerId5 = 133,
+        AttributeStickerWear5 = 134,
+        AttributeStickerScale5 = 135,
+        AttributeStickerRotation5 = 136,
 
         AttributeMusicId = 166,
+        AttributeQuestId = 168,
 
         AttributeSpraysRemaining = 232,
         AttributeSprayTintId = 233,
@@ -189,8 +213,6 @@ private:
     // case opening
     bool EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak statTrak);
     const LootListItem &SelectItemFromLists(const std::vector<const LootList *> &lists);
-
-    Random m_random;
 
     std::unordered_map<uint32_t, ItemInfo> m_itemInfo;
     std::unordered_map<uint32_t, AttributeInfo> m_attributeInfo;

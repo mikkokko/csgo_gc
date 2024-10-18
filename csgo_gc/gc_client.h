@@ -29,6 +29,7 @@ private:
     void ClientRequestJoinServerData(const void *data, uint32_t size);
     void SetItemPositions(const void *data, uint32_t size);
     void IncrementKillCountAttribute(const void *data, uint32_t size);
+    void ApplySticker(const void *data, uint32_t size);
 
     void UnlockCrate(const void *data, uint32_t size);
 

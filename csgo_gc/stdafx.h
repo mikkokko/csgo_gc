@@ -2,6 +2,7 @@
 
 #include <assert.h>
 
+#include <array>
 #include <charconv>
 #include <queue>
 #include <random>

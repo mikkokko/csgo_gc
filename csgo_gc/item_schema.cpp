@@ -2,6 +2,7 @@
 #include "item_schema.h"
 #include "keyvalue.h"
 #include "gc_const_csgo.h" // mikkotodo remove?
+#include "random.h"
 
 #include <tuple>
 
@@ -140,6 +141,27 @@ int ItemSchema::AttributeValueInt(const CSOEconItemAttribute &attribute) const
     }
 }
 
+float ItemSchema::AttributeValueFloat(const CSOEconItemAttribute &attribute) const
+{
+    assert(attribute.value_bytes().size() == 4);
+
+    auto it = m_attributeInfo.find(attribute.def_index());
+    if (it == m_attributeInfo.end())
+    {
+        assert(false);
+        return 0;
+    }
+
+    if (it->second.storedAsInteger)
+    {
+        return *reinterpret_cast<const int *>(attribute.value_bytes().data());
+    }
+    else
+    {
+        return *reinterpret_cast<const float *>(attribute.value_bytes().data());
+    }
+}
+
 bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak generateStatTrak)
 {
     bool statTrak;
@@ -151,7 +173,7 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
         break;
 
     case GenerateStatTrak::Maybe:
-        statTrak = (m_random.Uint32(1, 10) == 1);
+        statTrak = (g_random.Uint32(1, 10) == 1);
         break;
 
   default:
@@ -205,7 +227,7 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
 
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeSprayTintId);
-        SetAttributeValueInt(*attribute, m_random.Uint32(GraffitiTintMin, GraffitiTintMax));
+        SetAttributeValueInt(*attribute, g_random.Uint32(GraffitiTintMin, GraffitiTintMax));
     }
     else if (lootListItem.type == LootListItemPatch)
     {
@@ -230,12 +252,12 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
 
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeTextureSeed);
-        SetAttributeValueInt(*attribute, m_random.Uint32(0, 1000));
+        SetAttributeValueInt(*attribute, g_random.Uint32(0, 1000));
 
         // mikkotodo how does the float distribution work?
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeTextureWear);
-        SetAttributeValueFloat(*attribute, m_random.Float(paintKitInfo->minFloat, paintKitInfo->maxFloat));
+        SetAttributeValueFloat(*attribute, g_random.Float(paintKitInfo->minFloat, paintKitInfo->maxFloat));
     }
     else if (lootListItem.type == LootListItemNoAttribute)
     {
@@ -269,12 +291,12 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
 const LootListItem &ItemSchema::SelectItemFromLists(const std::vector<const LootList *> &lists)
 {
     // mikkotodo implement probabilities
-    size_t listIndex = m_random.RandomIndex(lists.size());
+    size_t listIndex = g_random.RandomIndex(lists.size());
     const LootList *list = lists[listIndex];
 
     assert(list->items.size() && !list->subLists.size());
 
-    size_t itemIndex = m_random.RandomIndex(list->items.size());
+    size_t itemIndex = g_random.RandomIndex(list->items.size());
     return list->items[itemIndex];
 }
 
@@ -333,7 +355,7 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
     }
     else if (lootList.items.size())
     {
-        size_t index = m_random.RandomIndex(lootList.items.size());
+        size_t index = g_random.RandomIndex(lootList.items.size());
         const LootListItem &lootListItem = lootList.items[index];
 
         return EconItemFromLootListItem(lootListItem, item, generateStatTrak);

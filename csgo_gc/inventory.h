@@ -33,6 +33,16 @@ public:
         std::vector<CMsgItemAcknowledged> &acknowledgements,
         CMsgSOMultipleObjects &update);
 
+    bool ApplySticker(const CMsgApplySticker &message,
+        CMsgSOSingleObject &update,
+        CMsgSOSingleObject &destroy,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool ScrapeSticker(const CMsgApplySticker &message,
+        CMsgSOSingleObject &update,
+        CMsgSOSingleObject &destroy,
+        CMsgGCItemCustomizationNotification &notification);
+
     bool IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CMsgSOSingleObject &update);
 
 private:

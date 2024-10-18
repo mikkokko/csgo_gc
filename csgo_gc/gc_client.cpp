@@ -56,6 +56,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             IncrementKillCountAttribute(data, size);
             break;
 
+        case k_EMsgGCApplySticker:
+            ApplySticker(data, size);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n", MessageName(type));
             break;
@@ -390,6 +394,67 @@ void ClientGC::IncrementKillCountAttribute(const void *data, uint32_t size)
     {
         m_outgoingMessages.emplace(k_ESOMsg_Update, update);
         m_networking.SendMessage(k_ESOMsg_Update, update);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+
+void ClientGC::ApplySticker(const void *data, uint32_t size)
+{
+    CMsgApplySticker message;
+    if (!ReadGCMessage(message, data, size))
+    {
+        Platform::Print("Parsing CMsgApplySticker failed, ignoring\n");
+        return;
+    }
+
+    assert(!message.item_item_id() != !message.baseitem_defidx());
+
+    CMsgSOSingleObject update, destroy;
+    CMsgGCItemCustomizationNotification notification;
+
+    if (!message.sticker_item_id())
+    {
+        // scrape
+        if (m_inventory.ScrapeSticker(message, update, destroy, notification))
+        {
+            if (destroy.has_type_id())
+            {
+                // destroying a default item
+                m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
+                m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+            }
+
+            if (update.has_type_id())
+            {
+                // if the item got removed (handled above), nothing gets updated
+                m_outgoingMessages.emplace(k_ESOMsg_Update, update);
+                m_networking.SendMessage(k_ESOMsg_Update, update);
+            }
+
+            if (notification.has_request())
+            {
+                // might get a k_EGCItemCustomizationNotification_RemoveSticker
+                m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+            }
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+    else if (m_inventory.ApplySticker(message, update, destroy, notification))
+    {
+        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
+        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+
+        m_outgoingMessages.emplace(k_ESOMsg_Update, update);
+        m_networking.SendMessage(k_ESOMsg_Update, update);
+
+        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
     }
     else
     {

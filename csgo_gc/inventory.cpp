@@ -5,6 +5,9 @@
 #include "keyvalue.h"
 #include "random.h"
 
+// keys, cases, stickers...
+//#define DESTORY_USED_ITEMS
+
 constexpr const char *InventoryFilePath = "csgo_gc/inventory.txt";
 
 // mikkotodo actual versioning
@@ -479,16 +482,49 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     notification.set_request(k_EGCItemCustomizationNotification_UnlockCrate);
 
     // remove the crate
-    //DestroyItem(crate, destroyCrate);
-    //
-    //// remove the key if one was used (yes, we don't validate keys...)
-    //auto key = m_items.find(keyId);
-    //if (key != m_items.end())
-    //{
-    //    DestroyItem(key, destroyKey);
-    //}
+#ifdef DESTORY_USED_ITEMS
+    DestroyItem(crate, destroyCrate);
+    
+    // remove the key if one was used (yes, we don't validate keys...)
+    auto key = m_items.find(keyId);
+    if (key != m_items.end())
+    {
+        DestroyItem(key, destroyKey);
+    }
+#endif
 
     return true;
+}
+
+// mikkotodo constant enum
+static int ItemWearLevel(float wearFloat)
+{
+    if (wearFloat < 0.07f)
+    {
+        // factory new
+        return 0;
+    }
+
+    if (wearFloat < 0.15f)
+    {
+        // minimal wear
+        return 1;
+    }
+
+    if (wearFloat < 0.37f)
+    {
+        // field tested
+        return 2;
+    }
+
+    if (wearFloat < 0.45f)
+    {
+        // well worn
+        return 3;
+    }
+
+    // battle scarred
+    return 4;
 }
 
 void Inventory::ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreviewDataBlock &block)
@@ -502,12 +538,11 @@ void Inventory::ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreview
     block.set_inventory(item.inventory());
     block.set_origin(item.origin());
 
-    // mikkotodo incomplete:
-    //block.set_stickers(item.stickers());
-    //block.set_questid(item.questid());
-    //block.set_dropreason(item.dropreason());
-    //block.set_musicindex(item.musicindex());
+    // not stored in CSOEconItem?
     //block.set_entindex(item.entindex());
+    //block.set_dropreason(item.dropreason());
+
+    std::array<CEconItemPreviewDataBlock_Sticker, MaxStickers> stickers;
 
     for (const CSOEconItemAttribute &attribute : item.attribute())
     {
@@ -523,8 +558,11 @@ void Inventory::ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreview
             break;
 
         case ItemSchema::AttributeTextureWear:
-            block.set_paintwear(m_itemSchema.AttributeValueInt(attribute));
+        {
+            int wearLevel = ItemWearLevel(m_itemSchema.AttributeValueFloat(attribute));
+            block.set_paintwear(wearLevel);
             break;
+        }
 
         case ItemSchema::AttributeKillEater:
             block.set_killeatervalue(m_itemSchema.AttributeValueInt(attribute));
@@ -533,7 +571,128 @@ void Inventory::ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreview
         case ItemSchema::AttributeKillEaterScoreType:
             block.set_killeaterscoretype(m_itemSchema.AttributeValueInt(attribute));
             break;
+
+        case ItemSchema::AttributeMusicId:
+            block.set_musicindex(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeQuestId:
+            block.set_questid(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeSprayTintId:
+            stickers[0].set_tint_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerId0:
+            stickers[0].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerWear0:
+            stickers[0].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerScale0:
+            stickers[0].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerRotation0:
+            stickers[0].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerId1:
+            stickers[1].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerWear1:
+            stickers[1].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerScale1:
+            stickers[1].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerRotation1:
+            stickers[1].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerId2:
+            stickers[2].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerWear2:
+            stickers[2].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerScale2:
+            stickers[2].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerRotation2:
+            stickers[2].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerId3:
+            stickers[3].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerWear3:
+            stickers[3].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerScale3:
+            stickers[3].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerRotation3:
+            stickers[3].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerId4:
+            stickers[4].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerWear4:
+            stickers[4].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerScale4:
+            stickers[4].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerRotation4:
+            stickers[4].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerId5:
+            stickers[5].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerWear5:
+            stickers[5].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerScale5:
+            stickers[5].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            break;
+
+        case ItemSchema::AttributeStickerRotation5:
+            stickers[5].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            break;
         }
+    }
+
+    for (size_t i = 0; i < stickers.size(); i++)
+    {
+        const CEconItemPreviewDataBlock_Sticker &source = stickers[i];
+        if (!source.has_sticker_id())
+        {
+            continue;
+        }
+
+        CEconItemPreviewDataBlock_Sticker *sticker = block.add_stickers();
+        *sticker = source;
+        sticker->set_slot(i);
     }
 }
 
@@ -567,6 +726,195 @@ bool Inventory::SetItemPositions(
         CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
         object->set_type_id(SOTypeItem);
         object->set_object_data(item.SerializeAsString());
+    }
+
+    return true;
+}
+
+bool Inventory::ApplySticker(const CMsgApplySticker &message,
+    CMsgSOSingleObject &update,
+    CMsgSOSingleObject &destroy,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    assert(message.has_sticker_item_id());
+    assert(message.has_sticker_slot());
+    assert(!message.has_sticker_wear());
+
+    auto sticker = m_items.find(message.sticker_item_id());
+    if (sticker == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    CSOEconItem *item = nullptr;
+
+    if (message.baseitem_defidx())
+    {
+        // mikkotodo don't hardcode these... also some of these fields are wrong...
+        item = &CreateItem(0);
+        //item->set_inventory(0);
+        item->set_def_index(message.baseitem_defidx());
+        item->set_quantity(1);
+        item->set_level(1);
+        item->set_quality(ItemSchema::QualityNormal);
+        //item->set_origin(0);
+        item->set_rarity(ItemSchema::RarityDefault);
+    }
+    else
+    {
+        auto it = m_items.find(message.item_item_id());
+        if (it == m_items.end())
+        {
+            assert(false);
+            return false;
+        }
+
+        item = &it->second;
+    }
+
+    assert(item);
+
+    // get the sticker kit def index
+    uint32_t stickerKit = 0;
+
+    for (const CSOEconItemAttribute &attribute : sticker->second.attribute())
+    {
+        if (attribute.def_index() == ItemSchema::AttributeStickerId0)
+        {
+            stickerKit = m_itemSchema.AttributeValueInt(attribute);
+            break;
+        }
+    }
+
+    if (!stickerKit)
+    {
+        assert(false);
+        return false;
+    }
+
+    // mikkotodo lookup table instead of this crap...
+    uint32_t attributeStickerId = ItemSchema::AttributeStickerId0 + (message.sticker_slot() * 4);
+
+    // add the sticker id attribute
+    CSOEconItemAttribute *attribute = item->add_attribute();
+    attribute->set_def_index(attributeStickerId);
+    m_itemSchema.SetAttributeValueInt(*attribute, stickerKit);
+
+    update.set_version(InventoryVersion);
+    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    update.mutable_owner_soid()->set_id(m_steamId);
+    update.set_type_id(SOTypeItem);
+    update.set_object_data(item->SerializeAsString());
+
+    // remove the sticker
+#ifdef DESTORY_USED_ITEMS
+    DestroyItem(sticker, destroy);
+#endif
+
+    // notification, if any
+    notification.add_item_id(item->id());
+    notification.set_request(k_EGCItemCustomizationNotification_ApplySticker);
+
+    return true;
+}
+
+bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
+    CMsgSOSingleObject &update,
+    CMsgSOSingleObject &destroy,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto it = m_items.find(message.item_item_id());
+    if (it == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    CSOEconItem &item = it->second;
+
+    // mikkotodo lookup table instead of this crap...
+    uint32_t attributeStickerId = ItemSchema::AttributeStickerId0 + (message.sticker_slot() * 4);
+    uint32_t attributeStickerWear = ItemSchema::AttributeStickerWear0 + (message.sticker_slot() * 4);
+
+    auto wearAttrib = item.mutable_attribute()->begin();
+    for (; wearAttrib != item.mutable_attribute()->end(); wearAttrib++)
+    {
+        if (wearAttrib->def_index() == attributeStickerWear)
+        {
+            break;
+        }
+    }
+
+    // mikkotodo randomize
+    float wearIncrement = 1.0f / 9;
+
+    if (wearAttrib == item.mutable_attribute()->end())
+    {
+        // no wear attribute? create it
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(attributeStickerWear);
+        m_itemSchema.SetAttributeValueFloat(*attribute, wearIncrement);
+
+        update.set_version(InventoryVersion);
+        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+        update.mutable_owner_soid()->set_id(m_steamId);
+        update.set_type_id(SOTypeItem);
+        update.set_object_data(item.SerializeAsString());
+
+        return true;
+    }
+
+    float wearLevel = m_itemSchema.AttributeValueFloat(*wearAttrib) + wearIncrement;
+    if (wearLevel > 1.0f)
+    {
+        // so long, and thanks for all the fish
+
+        if (item.rarity() == ItemSchema::RarityDefault)
+        {
+            // sticker removal notification with a fake item id
+            notification.add_item_id(item.def_index() | ItemIdDefaultItemMask);
+            notification.set_request(k_EGCItemCustomizationNotification_RemoveSticker);
+
+            // this was a default weapon clone with a sticker so destroy the entire item
+            DestroyItem(it, destroy);
+        }
+        else
+        {
+            // sticker removal notification
+            notification.add_item_id(item.id());
+            notification.set_request(k_EGCItemCustomizationNotification_RemoveSticker);
+
+            // remove the wear attribute
+            item.mutable_attribute()->erase(wearAttrib);
+    
+            // also remove the sticker id attribute (mikkotodo other attribs???)
+            for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end(); attrib++)
+            {
+                if (attrib->def_index() == attributeStickerId)
+                {
+                    item.mutable_attribute()->erase(attrib);
+                    break;
+                }
+            }
+    
+            update.set_version(InventoryVersion);
+            update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+            update.mutable_owner_soid()->set_id(m_steamId);
+            update.set_type_id(SOTypeItem);
+            update.set_object_data(item.SerializeAsString());
+        }
+    }
+    else
+    {
+        // just update the wear
+        m_itemSchema.SetAttributeValueFloat(*wearAttrib, wearLevel);
+
+        update.set_version(InventoryVersion);
+        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+        update.mutable_owner_soid()->set_id(m_steamId);
+        update.set_type_id(SOTypeItem);
+        update.set_object_data(item.SerializeAsString());
     }
 
     return true;
