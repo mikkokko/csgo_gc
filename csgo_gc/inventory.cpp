@@ -795,11 +795,20 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
 
     // mikkotodo lookup table instead of this crap...
     uint32_t attributeStickerId = ItemSchema::AttributeStickerId0 + (message.sticker_slot() * 4);
+    uint32_t attributeStickerWear = ItemSchema::AttributeStickerWear0 + (message.sticker_slot() * 4);
 
     // add the sticker id attribute
     CSOEconItemAttribute *attribute = item->add_attribute();
     attribute->set_def_index(attributeStickerId);
     m_itemSchema.SetAttributeValueInt(*attribute, stickerKit);
+
+    // add the sticker wear attribute if this is not a patch (mikkotodo revisit...)
+    if (sticker->second.def_index() != ItemSchema::ItemPatch)
+    {
+        attribute = item->add_attribute();
+        attribute->set_def_index(attributeStickerWear);
+        m_itemSchema.SetAttributeValueFloat(*attribute, 0);
+    }
 
     update.set_version(InventoryVersion);
     update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
@@ -819,6 +828,27 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
     return true;
 }
 
+static void RemoveStickerAttributes(CSOEconItem &item, uint32_t slot)
+{
+    // mikkotodo lookup table instead of this crap...
+    // mikkotodo rest of attribs???
+    uint32_t attributeStickerId = ItemSchema::AttributeStickerId0 + (slot * 4);
+    uint32_t attributeStickerWear = ItemSchema::AttributeStickerWear0 + (slot * 4);
+
+    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end(); )
+    {
+        if (attrib->def_index() == attributeStickerId
+            || attrib->def_index() == attributeStickerWear)
+        {
+            attrib = item.mutable_attribute()->erase(attrib);
+        }
+        else
+        {
+            attrib++;
+        }
+    }
+}
+
 bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
     CMsgSOSingleObject &update,
     CMsgSOSingleObject &destroy,
@@ -834,47 +864,44 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
     CSOEconItem &item = it->second;
 
     // mikkotodo lookup table instead of this crap...
-    uint32_t attributeStickerId = ItemSchema::AttributeStickerId0 + (message.sticker_slot() * 4);
     uint32_t attributeStickerWear = ItemSchema::AttributeStickerWear0 + (message.sticker_slot() * 4);
 
-    auto wearAttrib = item.mutable_attribute()->begin();
-    for (; wearAttrib != item.mutable_attribute()->end(); wearAttrib++)
+    CSOEconItemAttribute *wearAttribute = nullptr;
+    for (int i = 0; i < item.attribute_size(); i++)
     {
-        if (wearAttrib->def_index() == attributeStickerWear)
+        if (item.mutable_attribute(i)->def_index() == attributeStickerWear)
         {
+            wearAttribute = item.mutable_attribute(i);
             break;
         }
     }
 
-    // mikkotodo randomize
-    float wearIncrement = 1.0f / 9;
+    float wearLevel = 0.0f;
 
-    if (wearAttrib == item.mutable_attribute()->end())
+    if (wearAttribute)
     {
-        // no wear attribute? create it
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(attributeStickerWear);
-        m_itemSchema.SetAttributeValueFloat(*attribute, wearIncrement);
-
-        update.set_version(InventoryVersion);
-        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-        update.mutable_owner_soid()->set_id(m_steamId);
-        update.set_type_id(SOTypeItem);
-        update.set_object_data(item.SerializeAsString());
-
-        return true;
+        // mikkotodo randomize
+        float wearIncrement = 1.0f / 9;
+        wearLevel = m_itemSchema.AttributeValueFloat(*wearAttribute) + wearIncrement;
     }
 
-    float wearLevel = m_itemSchema.AttributeValueFloat(*wearAttrib) + wearIncrement;
-    if (wearLevel > 1.0f)
+    // if the wear attribute is not present, remove it outright (patches)
+    if (!wearAttribute || wearLevel > 1.0f)
     {
         // so long, and thanks for all the fish
+
+        // mikkotodo fix... should this be deduced from the item???
+        uint32_t request = k_EGCItemCustomizationNotification_RemoveSticker;
+        if (!wearAttribute)
+        {
+            request = k_EGCItemCustomizationNotification_RemovePatch;
+        }
 
         if (item.rarity() == ItemSchema::RarityDefault)
         {
             // sticker removal notification with a fake item id
             notification.add_item_id(item.def_index() | ItemIdDefaultItemMask);
-            notification.set_request(k_EGCItemCustomizationNotification_RemoveSticker);
+            notification.set_request(request);
 
             // this was a default weapon clone with a sticker so destroy the entire item
             DestroyItem(it, destroy);
@@ -883,21 +910,11 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
         {
             // sticker removal notification
             notification.add_item_id(item.id());
-            notification.set_request(k_EGCItemCustomizationNotification_RemoveSticker);
+            notification.set_request(request);
 
-            // remove the wear attribute
-            item.mutable_attribute()->erase(wearAttrib);
-    
-            // also remove the sticker id attribute (mikkotodo other attribs???)
-            for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end(); attrib++)
-            {
-                if (attrib->def_index() == attributeStickerId)
-                {
-                    item.mutable_attribute()->erase(attrib);
-                    break;
-                }
-            }
-    
+            // remove the sticker
+            RemoveStickerAttributes(item, message.sticker_slot());
+
             update.set_version(InventoryVersion);
             update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
             update.mutable_owner_soid()->set_id(m_steamId);
@@ -908,7 +925,7 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
     else
     {
         // just update the wear
-        m_itemSchema.SetAttributeValueFloat(*wearAttrib, wearLevel);
+        m_itemSchema.SetAttributeValueFloat(*wearAttribute, wearLevel);
 
         update.set_version(InventoryVersion);
         update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
