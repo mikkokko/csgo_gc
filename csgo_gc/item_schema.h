@@ -27,7 +27,9 @@ struct PaintKitInfo
 
 struct StickerKitInfo
 {
+    uint32_t defIndex; // mikkotodo could remove
     std::string name;
+    uint32_t rarity;
 };
 
 struct MusicDefinitionInfo
@@ -62,7 +64,7 @@ struct LootListItem
         uint32_t musicDefinitionIndex;
     } attribute;
 
-    uint32_t rarity; // might differ from iteminfo's
+    uint32_t raritynew; // might differ from iteminfo's
     uint32_t quality; // might differ from iteminfo's (forced stattrak)
 };
 
@@ -146,7 +148,8 @@ public:
     enum Item
     {
         ItemSpray = 1348,
-        ItemSprayPaint = 1349
+        ItemSprayPaint = 1349,
+        ItemPatch = 4609
     };
 
     enum Attribute
@@ -206,7 +209,7 @@ private:
 
     // internal slop
     ItemInfo *ItemInfoByName(std::string_view name);
-    uint32_t StickerKitIndexByName(std::string_view name) const;
+    StickerKitInfo *StickerKitInfoByName(std::string_view name);
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
     uint32_t MusicDefinitionIndexByName(std::string_view name) const;
 

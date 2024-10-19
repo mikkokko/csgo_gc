@@ -198,7 +198,7 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
         quality = QualityStrange;
     }
 
-    assert(lootListItem.rarity);
+    assert(lootListItem.raritynew);
 
     item.set_inventory(InventoryUnacknowledged(UnacknowledgedFoundInCrate));
     item.set_def_index(lootListItem.itemInfo->defIndex);
@@ -208,7 +208,7 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
     item.set_flags(0);
     item.set_origin(ItemOriginCrate);
     item.set_in_use(false);
-    item.set_rarity(lootListItem.rarity);
+    item.set_rarity(lootListItem.raritynew);
 
     if (lootListItem.type == LootListItemSticker)
     {
@@ -511,7 +511,18 @@ void ItemSchema::ParseStickerKits(const KeyValue *stickerKitsKey)
         //assert(defIndex);
 
         StickerKitInfo &info = MapAlloc(m_stickerKitInfo, defIndex);
+        info.defIndex = defIndex;
         info.name = stickerKitKey.GetString("name");
+
+        std::string_view rarity = stickerKitKey.GetString("item_rarity");
+        if (rarity.size())
+        {
+            info.rarity = ItemRarityFromString(rarity);
+        }
+        else
+        {
+            info.rarity = 0;
+        }
     }
 }
 
@@ -721,7 +732,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
     item.type = LootListItemTypeFromName(itemName, attributeName);
 
     // until proven otherwise...
-    item.rarity = itemInfo->rarity;
+    item.raritynew = itemInfo->rarity;
     item.quality = itemInfo->quality;
 
     if (item.type == LootListItemNoAttribute)
@@ -732,12 +743,18 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
     else if (item.type == LootListItemSticker || item.type == LootListItemSpray || item.type == LootListItemPatch)
     {
         // the attribute is the sticker name
-        item.attribute.stickerKitIndex = StickerKitIndexByName(attributeName);
-        if (!item.attribute.stickerKitIndex) // mikkotodo 0 can be valid though??? restructure
+        const StickerKitInfo *stickerKitInfo = StickerKitInfoByName(attributeName);
+        if (!stickerKitInfo) // mikkotodo 0 can be valid though??? restructure
         {
             Platform::Print("WARNING: No such sticker kit %s\n", std::string{ attributeName }.c_str());
             return false;
         }
+
+        item.attribute.stickerKitIndex = stickerKitInfo->defIndex;
+
+        // sticker kits affect the item rarity (mikkotodo how do these work, something like PaintedItemRarity???)
+        assert(itemInfo->rarity == 1);
+        item.raritynew = stickerKitInfo->rarity ? stickerKitInfo->rarity : itemInfo->rarity;
     }
     else if (item.type == LootListItemMusicKit)
     {
@@ -763,7 +780,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         item.attribute.paintKitInfo = paintKitInfo;
 
         // paint kits affect the item rarity
-        item.rarity = PaintedItemRarity(itemInfo->rarity, paintKitInfo->rarity);
+        item.raritynew = PaintedItemRarity(itemInfo->rarity, paintKitInfo->rarity);
     }
 
     return true;
@@ -805,19 +822,19 @@ ItemInfo *ItemSchema::ItemInfoByName(std::string_view name)
     return nullptr;
 }
 
-uint32_t ItemSchema::StickerKitIndexByName(std::string_view name) const
+StickerKitInfo *ItemSchema::StickerKitInfoByName(std::string_view name)
 {
-    for (const auto &pair : m_stickerKitInfo)
+    for (auto &pair : m_stickerKitInfo)
     {
         const StickerKitInfo &info = pair.second;
         if (info.name == name)
         {
-            return pair.first;
+            return &pair.second;
         }
     }
 
     assert(false);
-    return 0;
+    return nullptr;
 }
 
 PaintKitInfo *ItemSchema::PaintKitInfoByName(std::string_view name)
