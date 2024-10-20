@@ -21,7 +21,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Run sccache-cache
+    - if: matrix.os != 'windows-latest'
+      name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.6
 
     - if: matrix.os == 'ubuntu-latest'
@@ -52,7 +53,7 @@ jobs:
       name: Build Windows
       run: |
         mkdir ${{ github.workspace }}/release
-        cmake -A Win32 -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DOUTDIR=${{ github.workspace }}/release
+        cmake -A Win32 -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DOUTDIR=${{ github.workspace }}/release
         cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --target csgo srcds csgo_gc
 
     - name: Package
