@@ -50,13 +50,17 @@ Requirements:
 
 The game is 32-bit on Windows so you need to build as 32-bit:
 
-`cmake -A Win32 ..`
+`cmake -A Win32 -B build`
 
 Linux dedicated servers are also 32-bit:
 
-`cmake -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 ..`
+`cmake -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -B build`
 
-For Linux and MacOS clients you don't have to specify any additional options.
+On MacOS, you need to build for x86_64 instead of arm64:
+
+`cmake -DCMAKE_OSX_ARCHITECTURES=x86_64 -DFUNCHOOK_CPU=x86 -B build`
+
+For Linux clients you don't have to specify any additional options.
 
 ## Third party dependencies
 - [Crypto++](https://github.com/weidai11/cryptopp) ([Boost Software License](https://github.com/weidai11/cryptopp/blob/master/License.txt))
