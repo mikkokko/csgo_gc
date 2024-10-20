@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "keyvalue.h"
 
-constexpr auto SubkeyReserveCount = 4;
+constexpr auto SubkeyReserveCount = 8;
 
 class KeyValueParser
 {

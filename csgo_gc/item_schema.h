@@ -9,7 +9,7 @@ struct AttributeInfo
 
 struct ItemInfo
 {
-    uint32_t defIndex; // mikkotodo could remove
+    uint32_t defIndex{};
     std::string name;
     uint32_t rarity{ 1 }; // fallback to 1, which means common (mikkotodo ugly)
     uint32_t quality{ 4 }; // fallback to 4, which means unique (mikkotodo ugly)
@@ -18,23 +18,21 @@ struct ItemInfo
 
 struct PaintKitInfo
 {
-    uint32_t defIndex; // mikkotodo could remove
-    std::string name;
+    uint32_t defIndex{};
     uint32_t rarity{ 0 }; // fallback to 0, which means default (mikkotodo ugly)
-    float minFloat;
-    float maxFloat;
+    float minFloat{ 0.0f };
+    float maxFloat{ 1.0f };
 };
 
 struct StickerKitInfo
 {
-    uint32_t defIndex; // mikkotodo could remove
-    std::string name;
-    uint32_t rarity;
+    uint32_t defIndex{};
+    uint32_t rarity{ 0 };
 };
 
 struct MusicDefinitionInfo
 {
-    std::string name;
+    uint32_t defIndex{};
 };
 
 enum LootListItemType
@@ -53,7 +51,7 @@ enum LootListItemType
 
 struct LootListItem
 {
-    const ItemInfo *itemInfo;
+    const ItemInfo *itemInfo{};
     LootListItemType type;
 
     // depends on the item type
@@ -64,7 +62,7 @@ struct LootListItem
         uint32_t musicDefinitionIndex;
     } attribute;
 
-    uint32_t raritynew; // might differ from iteminfo's
+    uint32_t rarity; // might differ from iteminfo's
     uint32_t quality; // might differ from iteminfo's (forced stattrak)
 };
 
@@ -211,7 +209,7 @@ private:
     ItemInfo *ItemInfoByName(std::string_view name);
     StickerKitInfo *StickerKitInfoByName(std::string_view name);
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
-    uint32_t MusicDefinitionIndexByName(std::string_view name) const;
+    uint32_t MusicDefinitionIndexByName(std::string_view name);
 
     // case opening
     bool EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak statTrak);
@@ -219,10 +217,11 @@ private:
 
     std::unordered_map<uint32_t, ItemInfo> m_itemInfo;
     std::unordered_map<uint32_t, AttributeInfo> m_attributeInfo;
-    std::unordered_map<uint32_t, StickerKitInfo> m_stickerKitInfo; // mikkotodo string lookup?
-    std::unordered_map<uint32_t, PaintKitInfo> m_paintKitInfo; // mikkotodo string lookup?
-    std::unordered_map<uint32_t, MusicDefinitionInfo> m_musicDefinitionInfo; // mikkotodo string lookup?
 
+    std::unordered_map<std::string, StickerKitInfo> m_stickerKitInfo;
+    std::unordered_map<std::string, PaintKitInfo> m_paintKitInfo;
+    std::unordered_map<std::string, MusicDefinitionInfo> m_musicDefinitionInfo;
     std::unordered_map<std::string, LootList> m_lootLists;
+
     std::unordered_map<uint32_t, const LootList &> m_revolvingLootLists;
 };

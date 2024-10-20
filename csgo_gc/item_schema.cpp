@@ -198,7 +198,7 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
         quality = QualityStrange;
     }
 
-    assert(lootListItem.raritynew);
+    assert(lootListItem.rarity);
 
     item.set_inventory(InventoryUnacknowledged(UnacknowledgedFoundInCrate));
     item.set_def_index(lootListItem.itemInfo->defIndex);
@@ -208,7 +208,7 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
     item.set_flags(0);
     item.set_origin(ItemOriginCrate);
     item.set_in_use(false);
-    item.set_rarity(lootListItem.raritynew);
+    item.set_rarity(lootListItem.rarity);
 
     if (lootListItem.type == LootListItemSticker)
     {
@@ -371,6 +371,8 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
 
 void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey)
 {
+    m_itemInfo.reserve(itemsKey->SubkeyCount());
+
     for (const KeyValue &itemKey : *itemsKey)
     {
         if (itemKey.Name() == "default")
@@ -490,29 +492,29 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
 
 void ItemSchema::ParseAttributes(const KeyValue *attributesKey)
 {
+    m_attributeInfo.reserve(attributesKey->SubkeyCount());
+    
     for (const KeyValue &attributeKey : *attributesKey)
     {
         uint32_t defIndex = FromString<uint32_t>(attributeKey.Name());
         assert(defIndex);
 
         AttributeInfo &info = MapAlloc(m_attributeInfo, defIndex);
-
         info.storedAsInteger = attributeKey.GetNumber<int>("stored_as_integer") ? true : false;
     }
 }
 
 void ItemSchema::ParseStickerKits(const KeyValue *stickerKitsKey)
 {
+    m_stickerKitInfo.reserve(stickerKitsKey->SubkeyCount());
+
     for (const KeyValue &stickerKitKey : *stickerKitsKey)
     {
         uint32_t defIndex = FromString<uint32_t>(stickerKitKey.Name());
+        std::string_view name = stickerKitKey.GetString("name");
 
-        // there's one with def index 0
-        //assert(defIndex);
-
-        StickerKitInfo &info = MapAlloc(m_stickerKitInfo, defIndex);
+        StickerKitInfo &info = MapAlloc(m_stickerKitInfo, name);
         info.defIndex = defIndex;
-        info.name = stickerKitKey.GetString("name");
 
         std::string_view rarity = stickerKitKey.GetString("item_rarity");
         if (rarity.size())
@@ -528,16 +530,16 @@ void ItemSchema::ParseStickerKits(const KeyValue *stickerKitsKey)
 
 void ItemSchema::ParsePaintKits(const KeyValue *paintKitsKey)
 {
+    m_paintKitInfo.reserve(paintKitsKey->SubkeyCount());
+
     for (const KeyValue &paintKitKey : *paintKitsKey)
     {
         uint32_t defIndex = FromString<uint32_t>(paintKitKey.Name());
+        std::string_view name = paintKitKey.GetString("name");
 
-        // there's one with def index 0
-        //assert(defIndex);
-
-        PaintKitInfo &info = MapAlloc(m_paintKitInfo, defIndex);
+        PaintKitInfo &info = MapAlloc(m_paintKitInfo, name);
         info.defIndex = defIndex;
-        info.name = paintKitKey.GetString("name");
+
         // rarity gets set in ParsePaintKitRarities
         info.minFloat = paintKitKey.GetNumber<float>("wear_remap_min", 0.0f);
         info.maxFloat = paintKitKey.GetNumber<float>("wear_remap_max", 1.0f);
@@ -548,22 +550,11 @@ void ItemSchema::ParsePaintKitRarities(const KeyValue *raritiesKey)
 {
     for (const KeyValue &key : *raritiesKey)
     {
-        PaintKitInfo *paintKitInfo = nullptr;
-        
-        // mikkotodo string lookup...
-        for (auto &pair : m_paintKitInfo)
-        {
-            if (pair.second.name == key.Name())
-            {
-                paintKitInfo = &pair.second;
-                break;
-            }
-        }
-
+        PaintKitInfo *paintKitInfo = PaintKitInfoByName(key.Name());
         if (!paintKitInfo)
         {
             //assert(false);
-            Platform::Print("No such paint kit '%s'!!!\n", std::string{ key.Name() }.c_str());
+            //Platform::Print("No such paint kit '%s'!!!\n", std::string{ key.Name() }.c_str());
             continue;
         }
 
@@ -574,13 +565,17 @@ void ItemSchema::ParsePaintKitRarities(const KeyValue *raritiesKey)
 
 void ItemSchema::ParseMusicDefinitions(const KeyValue *musicDefinitionsKey)
 {
+    m_musicDefinitionInfo.reserve(musicDefinitionsKey->SubkeyCount());
+
     for (const KeyValue &musicDefinitionKey : *musicDefinitionsKey)
     {
         uint32_t defIndex = FromString<uint32_t>(musicDefinitionKey.Name());
+        std::string_view name = musicDefinitionKey.GetString("name");
+
         assert(defIndex);
 
-        MusicDefinitionInfo &info = MapAlloc(m_musicDefinitionInfo, defIndex);
-        info.name = musicDefinitionKey.GetString("name");
+        MusicDefinitionInfo &info = MapAlloc(m_musicDefinitionInfo, name);
+        info.defIndex = defIndex;
     }
 }
 
@@ -635,6 +630,8 @@ static LootListItemType LootListItemTypeFromName(std::string_view name, std::str
 
 void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
 {
+    m_lootLists.reserve(lootListsKey->SubkeyCount());
+
     for (const KeyValue &lootListKey : *lootListsKey)
     {
         LootList &lootList = MapAlloc(m_lootLists, lootListKey.Name());
@@ -732,7 +729,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
     item.type = LootListItemTypeFromName(itemName, attributeName);
 
     // until proven otherwise...
-    item.raritynew = itemInfo->rarity;
+    item.rarity = itemInfo->rarity;
     item.quality = itemInfo->quality;
 
     if (item.type == LootListItemNoAttribute)
@@ -754,7 +751,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
 
         // sticker kits affect the item rarity (mikkotodo how do these work, something like PaintedItemRarity???)
         assert(itemInfo->rarity == 1);
-        item.raritynew = stickerKitInfo->rarity ? stickerKitInfo->rarity : itemInfo->rarity;
+        item.rarity = stickerKitInfo->rarity ? stickerKitInfo->rarity : itemInfo->rarity;
     }
     else if (item.type == LootListItemMusicKit)
     {
@@ -773,6 +770,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         const PaintKitInfo *paintKitInfo = PaintKitInfoByName(attributeName);
         if (!paintKitInfo)
         {
+            assert(false);
             Platform::Print("WARNING: No such paint kit %s\n", std::string{ attributeName }.c_str());
             return false;
         }
@@ -780,7 +778,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         item.attribute.paintKitInfo = paintKitInfo;
 
         // paint kits affect the item rarity
-        item.raritynew = PaintedItemRarity(itemInfo->rarity, paintKitInfo->rarity);
+        item.rarity = PaintedItemRarity(itemInfo->rarity, paintKitInfo->rarity);
     }
 
     return true;
@@ -788,6 +786,8 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
 
 void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
 {
+    m_revolvingLootLists.reserve(revolvingLootListsKey->SubkeyCount());
+
     for (const KeyValue &revolvingLootListKey : *revolvingLootListsKey)
     {
         uint32_t index = FromString<uint32_t>(revolvingLootListKey.Name());
@@ -799,7 +799,7 @@ void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
         auto it = m_lootLists.find(lootListName);
         if (it == m_lootLists.end())
         {
-            Platform::Print("Ignoring revolving loot list %s\n", lootListName.c_str());
+            //Platform::Print("Ignoring revolving loot list %s\n", lootListName.c_str());
             continue;
         }
 
@@ -824,47 +824,38 @@ ItemInfo *ItemSchema::ItemInfoByName(std::string_view name)
 
 StickerKitInfo *ItemSchema::StickerKitInfoByName(std::string_view name)
 {
-    for (auto &pair : m_stickerKitInfo)
+    auto it = m_stickerKitInfo.find(std::string{ name });
+    if (it == m_stickerKitInfo.end())
     {
-        const StickerKitInfo &info = pair.second;
-        if (info.name == name)
-        {
-            return &pair.second;
-        }
+        assert(false);
+        return nullptr;
     }
 
-    assert(false);
-    return nullptr;
+    return &it->second;
 }
 
 PaintKitInfo *ItemSchema::PaintKitInfoByName(std::string_view name)
 {
-    for (auto &pair : m_paintKitInfo)
+    auto it = m_paintKitInfo.find(std::string{ name });
+    if (it == m_paintKitInfo.end())
     {
-        const PaintKitInfo &info = pair.second;
-        if (info.name == name)
-        {
-            return &pair.second;
-        }
+        //assert(false);
+        return nullptr;
     }
 
-    assert(false);
-    return nullptr;
+    return &it->second;
 }
 
-uint32_t ItemSchema::MusicDefinitionIndexByName(std::string_view name) const
+uint32_t ItemSchema::MusicDefinitionIndexByName(std::string_view name)
 {
-    for (const auto &pair : m_musicDefinitionInfo)
+    auto it = m_musicDefinitionInfo.find(std::string{ name });
+    if (it == m_musicDefinitionInfo.end())
     {
-        const MusicDefinitionInfo &info = pair.second;
-        if (info.name == name)
-        {
-            return pair.first;
-        }
+        assert(false);
+        return 0;
     }
 
-    assert(false);
-    return 0;
+    return it->second.defIndex;
 }
 
 void ItemSchema::SetAttributeValueInt(CSOEconItemAttribute &attribute, int value) const
