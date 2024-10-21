@@ -222,7 +222,6 @@ private:
 
     // case opening
     bool EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak statTrak);
-    const LootListItem &SelectItemFromLists(const std::vector<const LootList *> &lists);
 
     std::unordered_map<uint32_t, ItemInfo> m_itemInfo;
     std::unordered_map<uint32_t, AttributeInfo> m_attributeInfo;

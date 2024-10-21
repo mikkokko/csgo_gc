@@ -218,15 +218,15 @@ bool ItemSchema::SetAttributeFloat(CSOEconItemAttribute *attribute, float value)
 
     case AttributeType::Uint32:
     {
-        uint32_t integer = static_cast<uint32_t>(value);
-        attribute->set_value_bytes(&integer, sizeof(integer));
+        uint32_t convert = static_cast<uint32_t>(value);
+        attribute->set_value_bytes(&convert, sizeof(convert));
         break;
     }
 
     case AttributeType::String:
     {
-        std::string string = std::to_string(value);
-        attribute->set_value_bytes(std::move(string));
+        std::string convert = std::to_string(value);
+        attribute->set_value_bytes(std::move(convert));
         break;
     }
 
@@ -252,8 +252,8 @@ bool ItemSchema::SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t va
     {
     case AttributeType::Float:
     {
-        uint32_t integer = static_cast<uint32_t>(value);
-        attribute->set_value_bytes(&integer, sizeof(integer));
+        float convert = static_cast<float>(value);
+        attribute->set_value_bytes(&convert, sizeof(convert));
         break;
     }
 
@@ -265,8 +265,8 @@ bool ItemSchema::SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t va
 
     case AttributeType::String:
     {
-        std::string string = std::to_string(value);
-        attribute->set_value_bytes(std::move(string));
+        std::string convert = std::to_string(value);
+        attribute->set_value_bytes(std::move(convert));
         break;
     }
 
@@ -291,15 +291,15 @@ bool ItemSchema::SetAttributeString(CSOEconItemAttribute *attribute, std::string
     {
     case AttributeType::Float:
     {
-        float number = FromString<float>(value);
-        attribute->set_value_bytes(&number, sizeof(number));
+        float convert = FromString<float>(value);
+        attribute->set_value_bytes(&convert, sizeof(convert));
         break;
     }
 
     case AttributeType::Uint32:
     {
-        uint32_t number = FromString<uint32_t>(value);
-        attribute->set_value_bytes(&number, sizeof(number));
+        uint32_t convert = FromString<uint32_t>(value);
+        attribute->set_value_bytes(&convert, sizeof(convert));
         break;
     }
 
@@ -443,30 +443,22 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
     return true;
 }
 
-const LootListItem &ItemSchema::SelectItemFromLists(const std::vector<const LootList *> &lists)
+// returns true if there are unusuals (stattrak able)
+static bool GetLootListItems(const LootList &lootList, std::vector<const LootListItem *> &items)
 {
-    // mikkotodo implement probabilities
-    size_t listIndex = g_random.RandomIndex(lists.size());
-    const LootList *list = lists[listIndex];
+    bool unusuals = lootList.isUnusual;
 
-    assert(list->items.size() && !list->subLists.size());
-
-    size_t itemIndex = g_random.RandomIndex(list->items.size());
-    return list->items[itemIndex];
-}
-
-static bool ListContainsUnusuals(const LootList &lootList)
-{
-    // ONLY check top level sub lists
     for (const LootList *other : lootList.subLists)
     {
-        if (other->isUnusual)
-        {
-            return true;
-        }
+        unusuals |= GetLootListItems(*other, items);
     }
 
-    return false;
+    for (const LootListItem &item : lootList.items)
+    {
+        items.push_back(&item);
+    }
+
+    return unusuals;
 }
 
 bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item)
@@ -490,29 +482,25 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
     const LootList &lootList = lootListSearch->second;
     assert(lootList.subLists.empty() != lootList.items.empty());
 
+    std::vector<const LootListItem *> lootListItems;
+    lootListItems.reserve(32); // overkill
+    bool containsUnusuals = GetLootListItems(lootList, lootListItems);
+
     // stattrak def
     GenerateStatTrak generateStatTrak = GenerateStatTrak::No;
     if (lootList.willProduceStatTrak)
     {
         generateStatTrak = GenerateStatTrak::Yes;
     }
-    else if (ListContainsUnusuals(lootList))
+    else if (containsUnusuals)
     {
         generateStatTrak = GenerateStatTrak::Maybe;
     }
 
-    if (lootList.subLists.size())
+    if (lootListItems.size())
     {
-        const LootListItem &lootListItem = SelectItemFromLists(lootList.subLists);
-
-        // mikkotodo stattrak randomization
-        return EconItemFromLootListItem(lootListItem, item, generateStatTrak);
-    }
-    else if (lootList.items.size())
-    {
-        size_t index = g_random.RandomIndex(lootList.items.size());
-        const LootListItem &lootListItem = lootList.items[index];
-
+        size_t index = g_random.RandomIndex(lootListItems.size());
+        const LootListItem &lootListItem = *lootListItems[index];
         return EconItemFromLootListItem(lootListItem, item, generateStatTrak);
     }
     else
