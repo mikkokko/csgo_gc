@@ -130,4 +130,29 @@ struct CMsgGCUnlockCrate
     uint64_t crate_id;
 };
 
+// k_EMsgGCNameItem
+struct CMsgGCNameItem
+{
+    uint64_t nametag_id;
+    uint64_t item_id;
+    uint8_t sentinel;
+    char name[1];
+};
+
+// k_EMsgGCNameBaseItem
+struct CMsgGCNameBaseItem
+{
+    uint64_t nametag_id;
+    uint32_t def_index;
+    uint8_t sentinel;
+    char name[1];
+};
+
+// k_EMsgGCRemoveItemName
+struct CMsgGCRemoveItemName
+{
+    uint64_t item_id;
+    uint8_t sentinel;
+};
+
 #pragma pack(pop)

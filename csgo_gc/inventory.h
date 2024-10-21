@@ -45,6 +45,25 @@ public:
 
     bool IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CMsgSOSingleObject &update);
 
+    bool NameItem(uint64_t nameTagId,
+        uint64_t itemId,
+        std::string_view name,
+        CMsgSOSingleObject &update,
+        CMsgSOSingleObject &destroy,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool NameBaseItem(uint64_t nameTagId,
+        uint32_t defIndex,
+        std::string_view name,
+        CMsgSOSingleObject &create,
+        CMsgSOSingleObject &destroy,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool RemoveItemName(uint64_t itemId,
+        CMsgSOSingleObject &update,
+        CMsgSOSingleObject &destroy,
+        CMsgGCItemCustomizationNotification &notification);
+
 private:
     uint32_t AccountId() const;
 

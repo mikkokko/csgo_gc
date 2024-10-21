@@ -161,11 +161,11 @@ void Inventory::ReadItem(const KeyValue &itemKey, CSOEconItem &item) const
         item.set_custom_name(std::string{ name });
     }
 
-    std::string_view desc = itemKey.GetString("custom_desc");
-    if (desc.size())
-    {
-        item.set_custom_desc(std::string{ desc });
-    }
+    //std::string_view desc = itemKey.GetString("custom_desc");
+    //if (desc.size())
+    //{
+    //    item.set_custom_desc(std::string{ desc });
+    //}
 
     item.set_in_use(itemKey.GetNumber<int>("in_use"));
     //item.set_style(itemKey.GetNumber<uint32_t>("style"));
@@ -181,17 +181,7 @@ void Inventory::ReadItem(const KeyValue &itemKey, CSOEconItem &item) const
 
             uint32_t defIndex = FromString<uint32_t>(attributeKey.Name());
             attribute->set_def_index(defIndex);
-
-            if (m_itemSchema.AttributeStoredAsInteger(defIndex))
-            {
-                int value = FromString<int>(attributeKey.String());
-                attribute->set_value_bytes(&value, sizeof(value));
-            }
-            else
-            {
-                float value = FromString<float>(attributeKey.String());
-                attribute->set_value_bytes(&value, sizeof(value));
-            }
+            m_itemSchema.SetAttributeString(attribute, attributeKey.String());
         }
     }
 
@@ -247,7 +237,7 @@ void Inventory::WriteItem(KeyValue &itemKey, const CSOEconItem &item) const
     itemKey.AddNumber("origin", item.origin());
 
     itemKey.AddString("custom_name", item.custom_name());
-    itemKey.AddString("custom_desc", item.custom_desc());
+    //itemKey.AddString("custom_desc", item.custom_desc());
 
     itemKey.AddNumber("in_use", item.in_use());
     //itemKey.AddNumber("style", item.style());
@@ -257,16 +247,9 @@ void Inventory::WriteItem(KeyValue &itemKey, const CSOEconItem &item) const
     KeyValue &attributesKey = itemKey.AddSubkey("attributes");
     for (const CSOEconItemAttribute &attribute : item.attribute())
     {
-        if (m_itemSchema.AttributeStoredAsInteger(attribute.def_index()))
-        {
-            int value = *reinterpret_cast<const int *>(attribute.value_bytes().data());
-            attributesKey.AddNumber(std::to_string(attribute.def_index()), value);
-        }
-        else
-        {
-            float value = *reinterpret_cast<const float *>(attribute.value_bytes().data());
-            attributesKey.AddNumber(std::to_string(attribute.def_index()), value);
-        }
+        std::string name = std::to_string(attribute.def_index());
+        std::string value = m_itemSchema.AttributeString(&attribute);
+        attributesKey.AddString(name, value);
     }
 
     KeyValue &equippedStateKey = itemKey.AddSubkey("equipped_state");
@@ -439,7 +422,7 @@ bool Inventory::UseItem(uint64_t itemId,
     // remove this to have unlimited sprays
     CSOEconItemAttribute *attribute = unsealed.add_attribute();
     attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
-    m_itemSchema.SetAttributeValueInt(*attribute, 50);
+    m_itemSchema.SetAttributeUint32(attribute, 50);
 
     // set notification
     notification.add_item_id(unsealed.id());
@@ -550,134 +533,134 @@ void Inventory::ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreview
         switch (defIndex)
         {
         case ItemSchema::AttributeTexturePrefab:
-            block.set_paintindex(m_itemSchema.AttributeValueInt(attribute));
+            block.set_paintindex(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeTextureSeed:
-            block.set_paintseed(m_itemSchema.AttributeValueInt(attribute));
+            block.set_paintseed(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeTextureWear:
         {
-            int wearLevel = ItemWearLevel(m_itemSchema.AttributeValueFloat(attribute));
+            int wearLevel = ItemWearLevel(m_itemSchema.AttributeFloat(&attribute));
             block.set_paintwear(wearLevel);
             break;
         }
 
         case ItemSchema::AttributeKillEater:
-            block.set_killeatervalue(m_itemSchema.AttributeValueInt(attribute));
+            block.set_killeatervalue(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeKillEaterScoreType:
-            block.set_killeaterscoretype(m_itemSchema.AttributeValueInt(attribute));
+            block.set_killeaterscoretype(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeMusicId:
-            block.set_musicindex(m_itemSchema.AttributeValueInt(attribute));
+            block.set_musicindex(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeQuestId:
-            block.set_questid(m_itemSchema.AttributeValueInt(attribute));
+            block.set_questid(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeSprayTintId:
-            stickers[0].set_tint_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[0].set_tint_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerId0:
-            stickers[0].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[0].set_sticker_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerWear0:
-            stickers[0].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[0].set_wear(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerScale0:
-            stickers[0].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[0].set_scale(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerRotation0:
-            stickers[0].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[0].set_rotation(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerId1:
-            stickers[1].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[1].set_sticker_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerWear1:
-            stickers[1].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[1].set_wear(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerScale1:
-            stickers[1].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[1].set_scale(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerRotation1:
-            stickers[1].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[1].set_rotation(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerId2:
-            stickers[2].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[2].set_sticker_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerWear2:
-            stickers[2].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[2].set_wear(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerScale2:
-            stickers[2].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[2].set_scale(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerRotation2:
-            stickers[2].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[2].set_rotation(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerId3:
-            stickers[3].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[3].set_sticker_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerWear3:
-            stickers[3].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[3].set_wear(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerScale3:
-            stickers[3].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[3].set_scale(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerRotation3:
-            stickers[3].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[3].set_rotation(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerId4:
-            stickers[4].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[4].set_sticker_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerWear4:
-            stickers[4].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[4].set_wear(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerScale4:
-            stickers[4].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[4].set_scale(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerRotation4:
-            stickers[4].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[4].set_rotation(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerId5:
-            stickers[5].set_sticker_id(m_itemSchema.AttributeValueInt(attribute));
+            stickers[5].set_sticker_id(m_itemSchema.AttributeUint32(&attribute));
             break;
 
         case ItemSchema::AttributeStickerWear5:
-            stickers[5].set_wear(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[5].set_wear(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerScale5:
-            stickers[5].set_scale(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[5].set_scale(m_itemSchema.AttributeFloat(&attribute));
             break;
 
         case ItemSchema::AttributeStickerRotation5:
-            stickers[5].set_rotation(m_itemSchema.AttributeValueFloat(attribute));
+            stickers[5].set_rotation(m_itemSchema.AttributeFloat(&attribute));
             break;
         }
     }
@@ -782,7 +765,7 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
     {
         if (attribute.def_index() == ItemSchema::AttributeStickerId0)
         {
-            stickerKit = m_itemSchema.AttributeValueInt(attribute);
+            stickerKit = m_itemSchema.AttributeUint32(&attribute);
             break;
         }
     }
@@ -800,14 +783,14 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
     // add the sticker id attribute
     CSOEconItemAttribute *attribute = item->add_attribute();
     attribute->set_def_index(attributeStickerId);
-    m_itemSchema.SetAttributeValueInt(*attribute, stickerKit);
+    m_itemSchema.SetAttributeUint32(attribute, stickerKit);
 
     // add the sticker wear attribute if this is not a patch (mikkotodo revisit...)
     if (sticker->second.def_index() != ItemSchema::ItemPatch)
     {
         attribute = item->add_attribute();
         attribute->set_def_index(attributeStickerWear);
-        m_itemSchema.SetAttributeValueFloat(*attribute, 0);
+        m_itemSchema.SetAttributeFloat(attribute, 0);
     }
 
     update.set_version(InventoryVersion);
@@ -882,7 +865,7 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
     {
         // mikkotodo randomize
         float wearIncrement = 1.0f / 9;
-        wearLevel = m_itemSchema.AttributeValueFloat(*wearAttribute) + wearIncrement;
+        wearLevel = m_itemSchema.AttributeFloat(wearAttribute) + wearIncrement;
     }
 
     // if the wear attribute is not present, remove it outright (patches)
@@ -925,7 +908,7 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
     else
     {
         // just update the wear
-        m_itemSchema.SetAttributeValueFloat(*wearAttribute, wearLevel);
+        m_itemSchema.SetAttributeFloat(wearAttribute, wearLevel);
 
         update.set_version(InventoryVersion);
         update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
@@ -954,8 +937,8 @@ bool Inventory::IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CM
         CSOEconItemAttribute *attribute = item.mutable_attribute(i);
         if (attribute->def_index() == ItemSchema::AttributeKillEater)
         {
-            int value = m_itemSchema.AttributeValueInt(*attribute) + amount;
-            m_itemSchema.SetAttributeValueInt(*attribute, value);
+            int value = m_itemSchema.AttributeUint32(attribute) + amount;
+            m_itemSchema.SetAttributeUint32(attribute, value);
             incremented = true;
             break;
         }
@@ -973,6 +956,123 @@ bool Inventory::IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CM
 
     assert(false);
     return false;
+}
+
+bool Inventory::NameItem(uint64_t nameTagId,
+    uint64_t itemId,
+    std::string_view name,
+    CMsgSOSingleObject &update,
+    CMsgSOSingleObject &destroy,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto it = m_items.find(itemId);
+    if (it == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    it->second.mutable_custom_name()->assign(name);
+
+    update.set_version(InventoryVersion);
+    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    update.mutable_owner_soid()->set_id(m_steamId);
+    update.set_type_id(SOTypeItem);
+    update.set_object_data(it->second.SerializeAsString());
+
+#ifdef DESTORY_USED_ITEMS
+    auto tag = m_items.find(nameTagId);
+    if (tag == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    DestroyItem(tag, destroy);
+#endif
+
+    notification.add_item_id(it->second.id());
+    notification.set_request(k_EGCItemCustomizationNotification_NameItem);
+
+    return true;
+}
+
+bool Inventory::NameBaseItem(uint64_t nameTagId,
+    uint32_t defIndex,
+    std::string_view name,
+    CMsgSOSingleObject &create,
+    CMsgSOSingleObject &destroy,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    // mikkotodo CreateBaseItem and use that for stickers too
+    CSOEconItem &item = CreateItem(0);
+    //item.set_inventory(0);
+    item.set_def_index(defIndex);
+    item.set_quantity(1);
+    item.set_level(1);
+    item.set_quality(ItemSchema::QualityNormal);
+    //item.set_origin(0);
+    item.set_rarity(ItemSchema::RarityDefault);
+
+    item.mutable_custom_name()->assign(name);
+
+    create.set_version(InventoryVersion);
+    create.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    create.mutable_owner_soid()->set_id(m_steamId);
+    create.set_type_id(SOTypeItem);
+    create.set_object_data(item.SerializeAsString());
+
+#ifdef DESTORY_USED_ITEMS
+    auto tag = m_items.find(nameTagId);
+    if (tag == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    DestroyItem(tag, destroy);
+#endif
+
+    notification.add_item_id(item.id()); // mikkotodo def index???
+    notification.set_request(k_EGCItemCustomizationNotification_NameBaseItem);
+
+    return true;
+}
+
+bool Inventory::RemoveItemName(uint64_t itemId,
+    CMsgSOSingleObject &update,
+    CMsgSOSingleObject &destroy,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto it = m_items.find(itemId);
+    if (it == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    if (it->second.rarity() == ItemSchema::RarityDefault)
+    {
+        notification.add_item_id(it->second.def_index() | ItemIdDefaultItemMask);
+        notification.set_request(k_EGCItemCustomizationNotification_RemoveItemName);
+
+        DestroyItem(it, destroy);
+    }
+    else
+    {
+        it->second.mutable_custom_name()->clear();
+
+        notification.add_item_id(it->second.id());
+        notification.set_request(k_EGCItemCustomizationNotification_RemoveItemName);
+
+        update.set_version(InventoryVersion);
+        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+        update.mutable_owner_soid()->set_id(m_steamId);
+        update.set_type_id(SOTypeItem);
+        update.set_object_data(it->second.SerializeAsString());
+    }
+
+    return true;
 }
 
 bool Inventory::UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update)

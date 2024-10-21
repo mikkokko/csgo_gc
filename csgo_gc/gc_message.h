@@ -20,10 +20,16 @@ inline bool ReadGCMessage(T &message, const void *data, uint32_t size)
 }
 
 // this also sucks
-template<typename T>
+template<typename T, bool ExtraData = false>
 const T *ReadGameStructMessage(const void *data, uint32_t size)
 {
-    if (size != sizeof(GameStructMsgHeader) + sizeof(T))
+    if (!ExtraData && size != sizeof(GameStructMsgHeader) + sizeof(T))
+    {
+        assert(false);
+        return nullptr;
+    }
+
+    if (ExtraData && size <= sizeof(GameStructMsgHeader) + sizeof(T))
     {
         assert(false);
         return nullptr;

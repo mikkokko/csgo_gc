@@ -69,9 +69,20 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     {
         switch (type)
         {
-
         case k_EMsgGCUnlockCrate:
             UnlockCrate(data, size);
+            break;
+
+        case k_EMsgGCNameItem:
+            NameItem(data, size);
+            break;
+
+        case k_EMsgGCNameBaseItem:
+            NameBaseItem(data, size);
+            break;
+
+        case k_EMsgGCRemoveItemName:
+            RemoveItemName(data, size);
             break;
 
         default:
@@ -494,8 +505,95 @@ void ClientGC::UnlockCrate(const void *data, uint32_t size)
         m_outgoingMessages.emplace(k_ESOMsg_Create, newItem);
         m_networking.SendMessage(k_ESOMsg_Create, newItem);
 
-        CMsgRequestInventoryRefresh empty; // just an empty message (mikkotodo fix)
-        m_outgoingMessages.emplace(k_EMsgGCUnlockCrateResponse, empty);
+        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+void ClientGC::NameItem(const void *data, uint32_t size)
+{
+    // mikkotodo unsafe!!!! need to rework networking and message handling code asap
+    const CMsgGCNameItem *message = ReadGameStructMessage<CMsgGCNameItem, true>(data, size);
+    if (!message)
+    {
+        Platform::Print("Parsing CMsgGCNameItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject update, destroy;
+    CMsgGCItemCustomizationNotification notification;
+    if (m_inventory.NameItem(message->nametag_id, message->item_id, message->name, update, destroy, notification))
+    {
+        m_outgoingMessages.emplace(k_ESOMsg_Update, update);
+        m_networking.SendMessage(k_ESOMsg_Update, update);
+    
+        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
+        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+    
+        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+void ClientGC::NameBaseItem(const void *data, uint32_t size)
+{
+    // mikkotodo unsafe!!!! need to rework networking and message handling code asap
+    const CMsgGCNameBaseItem *message = ReadGameStructMessage<CMsgGCNameBaseItem, true>(data, size);
+    if (!message)
+    {
+        Platform::Print("Parsing CMsgGCNameBaseItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject create, destroy;
+    CMsgGCItemCustomizationNotification notification;
+    if (m_inventory.NameBaseItem(message->nametag_id, message->def_index, message->name, create, destroy, notification))
+    {
+        m_outgoingMessages.emplace(k_ESOMsg_Create, create);
+        m_networking.SendMessage(k_ESOMsg_Create, create);
+
+        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
+        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+
+        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+void ClientGC::RemoveItemName(const void *data, uint32_t size)
+{
+    // mikkotodo unsafe!!!! need to rework networking and message handling code asap
+    const CMsgGCRemoveItemName *message = ReadGameStructMessage<CMsgGCRemoveItemName>(data, size);
+    if (!message)
+    {
+        Platform::Print("Parsing CMsgGCRemoveItemName failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject update, destroy;
+    CMsgGCItemCustomizationNotification notification;
+    if (m_inventory.RemoveItemName(message->item_id, update, destroy, notification))
+    {
+        if (update.has_type_id())
+        {
+            m_outgoingMessages.emplace(k_ESOMsg_Update, update);
+            m_networking.SendMessage(k_ESOMsg_Update, update);
+        }
+
+        if (destroy.has_type_id())
+        {
+            m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
+            m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+        }
 
         m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
     }

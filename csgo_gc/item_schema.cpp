@@ -109,57 +109,212 @@ ItemSchema::ItemSchema()
     }
 }
 
-bool ItemSchema::AttributeStoredAsInteger(uint32_t defIndex) const
+//AttributeType ItemSchema::AttributeType(uint32_t defIndex) const
+//{
+//    auto it = m_attributeInfo.find(defIndex);
+//    if (it != m_attributeInfo.end())
+//    {
+//        return it->second.type;
+//    }
+//
+//    assert(false);
+//    return AttributeType::Float;
+//}
+
+float ItemSchema::AttributeFloat(const CSOEconItemAttribute *attribute) const
 {
-    auto it = m_attributeInfo.find(defIndex);
-    if (it != m_attributeInfo.end())
-    {
-        return it->second.storedAsInteger;
-    }
-
-    return false;
-}
-
-int ItemSchema::AttributeValueInt(const CSOEconItemAttribute &attribute) const
-{
-    assert(attribute.value_bytes().size() == 4);
-
-    auto it = m_attributeInfo.find(attribute.def_index());
+    auto it = m_attributeInfo.find(attribute->def_index());
     if (it == m_attributeInfo.end())
     {
         assert(false);
         return 0;
     }
 
-    if (it->second.storedAsInteger)
+    switch (it->second.type)
     {
-        return *reinterpret_cast<const int *>(attribute.value_bytes().data());
-    }
-    else
-    {
-        return *reinterpret_cast<const float *>(attribute.value_bytes().data());
+    case AttributeType::Float:
+        return *reinterpret_cast<const float *>(attribute->value_bytes().data());
+
+    case AttributeType::Uint32:
+        return *reinterpret_cast<const uint32_t *>(attribute->value_bytes().data());
+
+    case AttributeType::String:
+        return FromString<float>(attribute->value_bytes());
+
+    default:
+        assert(false);
+        return 0;
     }
 }
 
-float ItemSchema::AttributeValueFloat(const CSOEconItemAttribute &attribute) const
+uint32_t ItemSchema::AttributeUint32(const CSOEconItemAttribute *attribute) const
 {
-    assert(attribute.value_bytes().size() == 4);
-
-    auto it = m_attributeInfo.find(attribute.def_index());
+    auto it = m_attributeInfo.find(attribute->def_index());
     if (it == m_attributeInfo.end())
     {
         assert(false);
         return 0;
     }
 
-    if (it->second.storedAsInteger)
+    switch (it->second.type)
     {
-        return *reinterpret_cast<const int *>(attribute.value_bytes().data());
+    case AttributeType::Float:
+        return *reinterpret_cast<const float *>(attribute->value_bytes().data());
+
+    case AttributeType::Uint32:
+        return *reinterpret_cast<const uint32_t *>(attribute->value_bytes().data());
+
+    case AttributeType::String:
+        return FromString<uint32_t>(attribute->value_bytes());
+
+    default:
+        assert(false);
+        return 0;
     }
-    else
+}
+
+std::string ItemSchema::AttributeString(const CSOEconItemAttribute *attribute) const
+{
+    auto it = m_attributeInfo.find(attribute->def_index());
+    if (it == m_attributeInfo.end())
     {
-        return *reinterpret_cast<const float *>(attribute.value_bytes().data());
+        assert(false);
+        return {};
     }
+
+    switch (it->second.type)
+    {
+    case AttributeType::Float:
+        return std::to_string(*reinterpret_cast<const float *>(attribute->value_bytes().data()));
+
+    case AttributeType::Uint32:
+        return std::to_string(*reinterpret_cast<const uint32_t *>(attribute->value_bytes().data()));
+
+    case AttributeType::String:
+        return attribute->value_bytes();
+
+    default:
+        assert(false);
+        return {};
+    }
+}
+
+bool ItemSchema::SetAttributeFloat(CSOEconItemAttribute *attribute, float value) const
+{
+    auto it = m_attributeInfo.find(attribute->def_index());
+    if (it == m_attributeInfo.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    switch (it->second.type)
+    {
+    case AttributeType::Float:
+    {
+        attribute->set_value_bytes(&value, sizeof(value));
+        break;
+    }
+
+    case AttributeType::Uint32:
+    {
+        uint32_t integer = static_cast<uint32_t>(value);
+        attribute->set_value_bytes(&integer, sizeof(integer));
+        break;
+    }
+
+    case AttributeType::String:
+    {
+        std::string string = std::to_string(value);
+        attribute->set_value_bytes(std::move(string));
+        break;
+    }
+
+    default:
+        assert(false);
+        return false;
+    }
+
+    return true;
+}
+
+
+bool ItemSchema::SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const
+{
+    auto it = m_attributeInfo.find(attribute->def_index());
+    if (it == m_attributeInfo.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    switch (it->second.type)
+    {
+    case AttributeType::Float:
+    {
+        uint32_t integer = static_cast<uint32_t>(value);
+        attribute->set_value_bytes(&integer, sizeof(integer));
+        break;
+    }
+
+    case AttributeType::Uint32:
+    {
+        attribute->set_value_bytes(&value, sizeof(value));
+        break;
+    }
+
+    case AttributeType::String:
+    {
+        std::string string = std::to_string(value);
+        attribute->set_value_bytes(std::move(string));
+        break;
+    }
+
+    default:
+        assert(false);
+        return false;
+    }
+
+    return true;
+}
+
+bool ItemSchema::SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const
+{
+    auto it = m_attributeInfo.find(attribute->def_index());
+    if (it == m_attributeInfo.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    switch (it->second.type)
+    {
+    case AttributeType::Float:
+    {
+        float number = FromString<float>(value);
+        attribute->set_value_bytes(&number, sizeof(number));
+        break;
+    }
+
+    case AttributeType::Uint32:
+    {
+        uint32_t number = FromString<uint32_t>(value);
+        attribute->set_value_bytes(&number, sizeof(number));
+        break;
+    }
+
+    case AttributeType::String:
+    {
+        attribute->set_value_bytes(value.data(), value.size());
+        break;
+    }
+
+    default:
+        assert(false);
+        return false;
+    }
+
+    return true;
 }
 
 bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak generateStatTrak)
@@ -215,32 +370,32 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
         // mikkotodo anything else?
         CSOEconItemAttribute *attribute = item.add_attribute();
         attribute->set_def_index(AttributeStickerId0);
-        SetAttributeValueInt(*attribute, lootListItem.attribute.stickerKitIndex);
+        SetAttributeUint32(attribute, lootListItem.attribute.stickerKitIndex);
     }
     else if (lootListItem.type == LootListItemSpray)
     {
         CSOEconItemAttribute *attribute = item.add_attribute();
         attribute->set_def_index(AttributeStickerId0);
-        SetAttributeValueInt(*attribute, lootListItem.attribute.stickerKitIndex);
+        SetAttributeUint32(attribute, lootListItem.attribute.stickerKitIndex);
 
         // add AttributeSpraysRemaining when it's unsealed (mikkotodo how does the real gc do this)
 
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeSprayTintId);
-        SetAttributeValueInt(*attribute, g_random.Uint32(GraffitiTintMin, GraffitiTintMax));
+        SetAttributeUint32(attribute, g_random.Uint32(GraffitiTintMin, GraffitiTintMax));
     }
     else if (lootListItem.type == LootListItemPatch)
     {
         // mikkotodo anything else?
         CSOEconItemAttribute *attribute = item.add_attribute();
         attribute->set_def_index(AttributeStickerId0);
-        SetAttributeValueInt(*attribute, lootListItem.attribute.stickerKitIndex);
+        SetAttributeUint32(attribute, lootListItem.attribute.stickerKitIndex);
     }
     else if (lootListItem.type == LootListItemMusicKit)
     {
         CSOEconItemAttribute *attribute = item.add_attribute();
         attribute->set_def_index(AttributeMusicId);
-        SetAttributeValueInt(*attribute, lootListItem.attribute.musicDefinitionIndex);
+        SetAttributeUint32(attribute, lootListItem.attribute.musicDefinitionIndex);
     }
     else if (lootListItem.type == LootListItemPaintable)
     {
@@ -248,16 +403,16 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
 
         CSOEconItemAttribute *attribute = item.add_attribute();
         attribute->set_def_index(AttributeTexturePrefab);
-        SetAttributeValueInt(*attribute, paintKitInfo->defIndex);
+        SetAttributeUint32(attribute, paintKitInfo->defIndex);
 
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeTextureSeed);
-        SetAttributeValueInt(*attribute, g_random.Uint32(0, 1000));
+        SetAttributeUint32(attribute, g_random.Uint32(0, 1000));
 
         // mikkotodo how does the float distribution work?
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeTextureWear);
-        SetAttributeValueFloat(*attribute, g_random.Float(paintKitInfo->minFloat, paintKitInfo->maxFloat));
+        SetAttributeFloat(attribute, g_random.Float(paintKitInfo->minFloat, paintKitInfo->maxFloat));
     }
     else if (lootListItem.type == LootListItemNoAttribute)
     {
@@ -274,14 +429,14 @@ bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOE
 
         CSOEconItemAttribute *attribute = item.add_attribute();
         attribute->set_def_index(AttributeKillEater);
-        SetAttributeValueInt(*attribute, 0);
+        SetAttributeUint32(attribute, 0);
 
         // mikkotodo fix magic
         int scoreType = (lootListItem.type == LootListItemMusicKit) ? 1 : 0;
 
         attribute = item.add_attribute();
         attribute->set_def_index(AttributeKillEaterScoreType);
-        SetAttributeValueInt(*attribute, scoreType);
+        SetAttributeUint32(attribute, scoreType);
 
     }
 
@@ -500,7 +655,33 @@ void ItemSchema::ParseAttributes(const KeyValue *attributesKey)
         assert(defIndex);
 
         AttributeInfo &info = MapAlloc(m_attributeInfo, defIndex);
-        info.storedAsInteger = attributeKey.GetNumber<int>("stored_as_integer") ? true : false;
+
+        std::string_view type = attributeKey.GetString("attribute_type");
+        if (type.size())
+        {
+            if (type == "float")
+            {
+                info.type = AttributeType::Float;
+            }
+            else if (type == "uint32")
+            {
+                info.type = AttributeType::Uint32;
+            }
+            else if (type == "string")
+            {
+                info.type = AttributeType::String;
+            }
+            else
+            {
+                // not supported, fall back to float
+                info.type = AttributeType::Float;
+            }
+        }
+        else
+        {
+            bool integer = attributeKey.GetNumber<int>("stored_as_integer");
+            info.type = integer ? AttributeType::Uint32 : AttributeType::Float;
+        }
     }
 }
 
@@ -856,30 +1037,4 @@ uint32_t ItemSchema::MusicDefinitionIndexByName(std::string_view name)
     }
 
     return it->second.defIndex;
-}
-
-void ItemSchema::SetAttributeValueInt(CSOEconItemAttribute &attribute, int value) const
-{
-    if (AttributeStoredAsInteger(attribute.def_index()))
-    {
-        attribute.set_value_bytes(&value, sizeof(value));
-    }
-    else
-    {
-        float valueFloat = static_cast<float>(value);
-        attribute.set_value_bytes(&valueFloat, sizeof(valueFloat));
-    }
-}
-
-void ItemSchema::SetAttributeValueFloat(CSOEconItemAttribute &attribute, float value) const
-{
-    if (AttributeStoredAsInteger(attribute.def_index()))
-    {
-        int valueInt = static_cast<int>(value);
-        attribute.set_value_bytes(&valueInt, sizeof(valueInt));
-    }
-    else
-    {
-        attribute.set_value_bytes(&value, sizeof(value));
-    }
 }

@@ -2,9 +2,16 @@
 
 class KeyValue;
 
+enum class AttributeType
+{
+    Float,
+    Uint32,
+    String
+};
+
 struct AttributeInfo
 {
-    bool storedAsInteger{};
+    AttributeType type{ AttributeType::Float };
 };
 
 struct ItemInfo
@@ -88,13 +95,13 @@ class ItemSchema
 public:
     ItemSchema();
 
-    bool AttributeStoredAsInteger(uint32_t defIndex) const;
+    float AttributeFloat(const CSOEconItemAttribute *attribute) const;
+    uint32_t AttributeUint32(const CSOEconItemAttribute *attribute) const;
+    std::string AttributeString(const CSOEconItemAttribute *attribute) const;
 
-    int AttributeValueInt(const CSOEconItemAttribute &attribute) const;
-    float AttributeValueFloat(const CSOEconItemAttribute &attribute) const;
-
-    void SetAttributeValueInt(CSOEconItemAttribute &attribute, int value) const;
-    void SetAttributeValueFloat(CSOEconItemAttribute &attribute, float value) const;
+    bool SetAttributeFloat(CSOEconItemAttribute *attribute, float value) const;
+    bool SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const;
+    bool SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const;
 
     // case opening
     bool SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item);
@@ -157,6 +164,8 @@ public:
         AttributeTextureWear = 8,
         AttributeKillEater = 80,
         AttributeKillEaterScoreType = 81,
+
+        AttributeCustomName = 111,
 
         // ugh
         AttributeStickerId0 = 113,
