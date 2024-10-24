@@ -87,8 +87,8 @@ std::string_view GCMessageRead::ReadString()
 GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message)
     : m_type{ type | ProtobufMask }
 {
-    // write the protobuf messge hader
-    WriteUint32(type);
+    // write the protobuf message hader
+    WriteUint32(m_type);
     WriteUint32(0);
 
     // append the serialized protobuf message
@@ -106,7 +106,7 @@ GCMessageWrite::GCMessageWrite(uint32_t type)
     // write the non protobuf messge hader
     // mikkotoodo using GameStructMsgHeader is wrong here!!! we should be using the fat one
     // however we're not sending these to the game (yet) so it doesn't matter
-    WriteUint32(type);
+    WriteUint32(m_type);
     WriteUint32(0);
     WriteUint64(0);
     WriteUint16(0);
