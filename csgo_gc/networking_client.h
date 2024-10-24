@@ -1,8 +1,16 @@
 #pragma once
 
-#include <steam/isteamnetworkingmessages.h>
+#include "networking_shared.h"
 
 class ClientGC;
+class GCMessageRead;
+class GCMessageWrite;
+
+struct AuthTicket
+{
+    uint64_t steamId; // gameserver
+    std::vector<uint8_t> buffer;
+};
 
 class NetworkingClient
 {
@@ -11,9 +19,16 @@ public:
 
     void Update();
 
-    void SendMessage(uint32_t type, const google::protobuf::MessageLite &message);
+    void SendMessage(const GCMessageWrite &message);
+
+    // for gameserver validation
+    void SetAuthTicket(uint32_t handle, const void *data, uint32_t size);
+    void ClearAuthTicket(uint32_t handle);
 
 private:
+    // return false if it wasn't handled, in which case we pass it to the gc
+    bool HandleMessage(uint64_t steamId, GCMessageRead &message);
+
     STEAM_CALLBACK(NetworkingClient,
         OnSessionRequest,
         SteamNetworkingMessagesSessionRequest_t,
@@ -26,4 +41,6 @@ private:
 
     ClientGC *const m_clientGC;
     uint64_t m_serverSteamId{};
+
+    std::unordered_map<uint32_t, AuthTicket> m_tickets;
 };

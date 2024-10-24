@@ -21,109 +21,77 @@ ClientGC::~ClientGC()
 
 void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
 {
-    bool protobuf = (type & ProtobufMask);
-    type &= ~ProtobufMask;
-
-    if (protobuf)
+    GCMessageRead messageRead{ type, data, size };
+    if (!messageRead.IsValid())
     {
-        switch (type)
+        assert(false);
+        return;
+    }
+
+    if (messageRead.IsProtobuf())
+    {
+        switch (messageRead.TypeUnmasked())
         {
         case k_EMsgGCClientHello:
-            OnClientHello(data, size);
+            OnClientHello(messageRead);
             break;
 
         case k_EMsgGCAdjustItemEquippedState:
-            AdjustItemEquippedState(data, size);
+            AdjustItemEquippedState(messageRead);
             break;
 
         case k_EMsgGCCStrike15_v2_ClientPlayerDecalSign:
-            ClientPlayerDecalSign(data, size);
+            ClientPlayerDecalSign(messageRead);
             break;
 
         case k_EMsgGCUseItemRequest:
-            UseItemRequest(data, size);
+            UseItemRequest(messageRead);
             break;
 
         case k_EMsgGCCStrike15_v2_ClientRequestJoinServerData:
-            ClientRequestJoinServerData(data, size);
+            ClientRequestJoinServerData(messageRead);
             break;
 
         case k_EMsgGCSetItemPositions:
-            SetItemPositions(data, size);
-            break;
-
-        case k_EMsgGC_IncrementKillCountAttribute:
-            IncrementKillCountAttribute(data, size);
+            SetItemPositions(messageRead);
             break;
 
         case k_EMsgGCApplySticker:
-            ApplySticker(data, size);
+            ApplySticker(messageRead);
             break;
 
         default:
-            Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n", MessageName(type));
+            Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n",
+                MessageName(messageRead.TypeUnmasked()));
             break;
         }
     }
     else
     {
-        switch (type)
+        switch (messageRead.TypeUnmasked())
         {
         case k_EMsgGCUnlockCrate:
-            UnlockCrate(data, size);
+            UnlockCrate(messageRead);
             break;
 
         case k_EMsgGCNameItem:
-            NameItem(data, size);
+            NameItem(messageRead);
             break;
 
         case k_EMsgGCNameBaseItem:
-            NameBaseItem(data, size);
+            NameBaseItem(messageRead);
             break;
 
         case k_EMsgGCRemoveItemName:
-            RemoveItemName(data, size);
+            RemoveItemName(messageRead);
             break;
 
         default:
-            Platform::Print("ClientGC::HandleMessage: unhandled struct message %s\n", MessageName(type));
+            Platform::Print("ClientGC::HandleMessage: unhandled struct message %s\n",
+                MessageName(messageRead.TypeUnmasked()));
             break;
         }
     }
-}
-
-bool ClientGC::HasOutgoingMessages(uint32_t &size)
-{
-    if (m_outgoingMessages.empty())
-    {
-        return false;
-    }
-
-    OutgoingMessage &message = m_outgoingMessages.front();
-    size = message.Size();
-    return true;
-}
-
-bool ClientGC::PopOutgoingMessage(uint32_t &type, void *buffer, uint32_t bufferSize, uint32_t &size)
-{
-    if (m_outgoingMessages.empty())
-    {
-        size = 0;
-        return false;
-    }
-
-    OutgoingMessage &message = m_outgoingMessages.front();
-    type = message.Type();
-    size = message.Size();
-
-    if (bufferSize < message.Size())
-    {
-        return false;
-    }
-
-    memcpy(buffer, message.Data(), message.Size());
-    m_outgoingMessages.pop();
-    return true;
 }
 
 void ClientGC::Update()
@@ -135,12 +103,47 @@ void ClientGC::SendSOCacheToGameSever()
 {
     CMsgSOCacheSubscribed message;
     m_inventory.BuildCacheSubscription(message, m_config.Level(), true);
-    m_networking.SendMessage(k_ESOMsg_CacheSubscribed, message);
+
+    GCMessageWrite messageWrite{ k_ESOMsg_CacheSubscribed, message };
+    m_networking.SendMessage(messageWrite);
 }
 
-void ClientGC::AddOutgoingMessage(const void *data, uint32_t size)
+void ClientGC::HandleNetMessage(GCMessageRead &messageRead)
 {
-    m_outgoingMessages.emplace(data, size);
+    assert(messageRead.IsValid());
+
+    if (messageRead.IsProtobuf())
+    {
+        switch (messageRead.TypeUnmasked())
+        {
+        case k_EMsgGC_IncrementKillCountAttribute:
+            IncrementKillCountAttribute(messageRead);
+            return;
+        }
+    }
+
+    Platform::Print("ClientGC::HandleNetMessage: unhandled protobuf message %s\n",
+        MessageName(messageRead.TypeUnmasked()));
+}
+
+void ClientGC::SetAuthTicket(uint32_t handle, const void *data, uint32_t size)
+{
+    m_networking.SetAuthTicket(handle, data, size);
+}
+
+void ClientGC::ClearAuthTicket(uint32_t handle)
+{
+    m_networking.ClearAuthTicket(handle);
+}
+
+void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type, const google::protobuf::MessageLite &message)
+{
+    const GCMessageWrite &messageWrite = m_outgoingMessages.emplace(type, message);
+
+    if (sendToGameServer)
+    {
+        m_networking.SendMessage(messageWrite);
+    }
 }
 
 constexpr uint32_t MakeAddress(uint32_t v1, uint32_t v2, uint32_t v3, uint32_t v4)
@@ -228,13 +231,13 @@ void ClientGC::SendRankUpdate()
     rank->set_wins(m_config.DangerZoneWins());
     rank->set_rank_type_id(RankTypeDangerZone);
 
-    m_outgoingMessages.emplace(k_EMsgGCCStrike15_v2_ClientGCRankUpdate, message);
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_ClientGCRankUpdate, message);
 }
 
-void ClientGC::OnClientHello(const void *data, uint32_t size)
+void ClientGC::OnClientHello(GCMessageRead &messageRead)
 {
     CMsgClientHello hello;
-    if (!ReadGCMessage(hello, data, size))
+    if (!messageRead.ReadProtobuf(hello))
     {
         Platform::Print("Parsing CMsgClientHello failed, ignoring\n");
         return;
@@ -250,21 +253,21 @@ void ClientGC::OnClientHello(const void *data, uint32_t size)
     CMsgClientWelcome clientWelcome;
     BuildClientWelcome(clientWelcome, csWelcome, mmHello);
 
-    m_outgoingMessages.emplace(k_EMsgGCClientWelcome, clientWelcome);
+    SendMessageToGame(false, k_EMsgGCClientWelcome, clientWelcome);
 
     // the real gc sends this a bit later when it has more info to put on it
     // however we have everything at our fingertips so send it right away
     // mikkotodo is this even needed? k_EMsgGCClientWelcome should have it all already
-    m_outgoingMessages.emplace(k_EMsgGCCStrike15_v2_MatchmakingGC2ClientHello, mmHello);
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_MatchmakingGC2ClientHello, mmHello);
 
     // send all ranks here as well, it's a bit back and forth with real gc
     SendRankUpdate();
 }
 
-void ClientGC::AdjustItemEquippedState(const void *data, uint32_t size)
+void ClientGC::AdjustItemEquippedState(GCMessageRead &messageRead)
 {
     CMsgAdjustItemEquippedState message;
-    if (!ReadGCMessage(message, data, size))
+    if (!messageRead.ReadProtobuf(message))
     {
         Platform::Print("Parsing CMsgAdjustItemEquippedState failed, ignoring\n");
         return;
@@ -278,16 +281,14 @@ void ClientGC::AdjustItemEquippedState(const void *data, uint32_t size)
         return;
     }
 
-    m_outgoingMessages.emplace(k_ESOMsg_UpdateMultiple, update);
-
     // let the gameserver know, too
-    m_networking.SendMessage(k_ESOMsg_UpdateMultiple, update);
+    SendMessageToGame(true, k_ESOMsg_UpdateMultiple, update);
 }
 
-void ClientGC::ClientPlayerDecalSign(const void *data, uint32_t size)
+void ClientGC::ClientPlayerDecalSign(GCMessageRead &messageRead)
 {
     CMsgGCCStrike15_v2_ClientPlayerDecalSign message;
-    if (!ReadGCMessage(message, data, size))
+    if (!messageRead.ReadProtobuf(message))
     {
         Platform::Print("Parsing CMsgGCCStrike15_v2_ClientPlayerDecalSign failed, ignoring\n");
         return;
@@ -299,13 +300,13 @@ void ClientGC::ClientPlayerDecalSign(const void *data, uint32_t size)
         return;
     }
 
-    m_outgoingMessages.emplace(k_EMsgGCCStrike15_v2_ClientPlayerDecalSign, message);
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_ClientPlayerDecalSign, message);
 }
 
-void ClientGC::UseItemRequest(const void *data, uint32_t size)
+void ClientGC::UseItemRequest(GCMessageRead &messageRead)
 {
     CMsgUseItem message;
-    if (!ReadGCMessage(message, data, size))
+    if (!messageRead.ReadProtobuf(message))
     {
         Platform::Print("Parsing CMsgUseItem failed, ignoring\n");
         return;
@@ -317,13 +318,10 @@ void ClientGC::UseItemRequest(const void *data, uint32_t size)
 
     if (m_inventory.UseItem(message.item_id(), destroy, updateMultiple, notification))
     {
-        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
-        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
+        SendMessageToGame(true, k_ESOMsg_UpdateMultiple, updateMultiple);
 
-        m_outgoingMessages.emplace(k_ESOMsg_UpdateMultiple, updateMultiple);
-        m_networking.SendMessage(k_ESOMsg_UpdateMultiple, updateMultiple);
-
-        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
 }
 
@@ -338,10 +336,10 @@ static void AddressString(uint32_t ip, uint32_t port, char *buffer, size_t buffe
         port);
 }
 
-void ClientGC::ClientRequestJoinServerData(const void *data, uint32_t size)
+void ClientGC::ClientRequestJoinServerData(GCMessageRead &messageRead)
 {
     CMsgGCCStrike15_v2_ClientRequestJoinServerData request;
-    if (!ReadGCMessage(request, data, size))
+    if (!messageRead.ReadProtobuf(request))
     {
         Platform::Print("Parsing CMsgGCCStrike15_v2_ClientRequestJoinServerData failed, ignoring\n");
         return;
@@ -357,13 +355,13 @@ void ClientGC::ClientRequestJoinServerData(const void *data, uint32_t size)
     AddressString(request.server_ip(), request.server_port(), addressString, sizeof(addressString));
     response.mutable_res()->set_server_address(addressString);
 
-    m_outgoingMessages.emplace(k_EMsgGCCStrike15_v2_ClientRequestJoinServerData, response);
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_ClientRequestJoinServerData, response);
 }
 
-void ClientGC::SetItemPositions(const void *data, uint32_t size)
+void ClientGC::SetItemPositions(GCMessageRead &messageRead)
 {
     CMsgSetItemPositions message;
-    if (!ReadGCMessage(message, data, size))
+    if (!messageRead.ReadProtobuf(message))
     {
         Platform::Print("Parsing CMsgSetItemPositions failed, ignoring\n");
         return;
@@ -377,11 +375,12 @@ void ClientGC::SetItemPositions(const void *data, uint32_t size)
     {
         for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
         {
-            m_networking.SendMessage(k_EMsgGCItemAcknowledged, acknowledgement);
+            // send these to the server only
+            GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
+            m_networking.SendMessage(messageWrite);
         }
 
-        m_outgoingMessages.emplace(k_ESOMsg_UpdateMultiple, update);
-        m_networking.SendMessage(k_ESOMsg_UpdateMultiple, update);
+        SendMessageToGame(true, k_ESOMsg_UpdateMultiple, update);
     }
     else
     {
@@ -389,10 +388,10 @@ void ClientGC::SetItemPositions(const void *data, uint32_t size)
     }
 }
 
-void ClientGC::IncrementKillCountAttribute(const void *data, uint32_t size)
+void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
 {
     CMsgIncrementKillCountAttribute message;
-    if (!ReadGCMessage(message, data, size))
+    if (!messageRead.ReadProtobuf(message))
     {
         Platform::Print("Parsing CMsgIncrementKillCountAttribute failed, ignoring\n");
         return;
@@ -403,8 +402,7 @@ void ClientGC::IncrementKillCountAttribute(const void *data, uint32_t size)
     CMsgSOSingleObject update;
     if (m_inventory.IncrementKillCountAttribute(message.item_id(), message.amount(), update))
     {
-        m_outgoingMessages.emplace(k_ESOMsg_Update, update);
-        m_networking.SendMessage(k_ESOMsg_Update, update);
+        SendMessageToGame(true, k_ESOMsg_Update, update);
     }
     else
     {
@@ -413,10 +411,10 @@ void ClientGC::IncrementKillCountAttribute(const void *data, uint32_t size)
 }
 
 
-void ClientGC::ApplySticker(const void *data, uint32_t size)
+void ClientGC::ApplySticker(GCMessageRead &messageRead)
 {
     CMsgApplySticker message;
-    if (!ReadGCMessage(message, data, size))
+    if (!messageRead.ReadProtobuf(message))
     {
         Platform::Print("Parsing CMsgApplySticker failed, ignoring\n");
         return;
@@ -435,21 +433,19 @@ void ClientGC::ApplySticker(const void *data, uint32_t size)
             if (destroy.has_type_id())
             {
                 // destroying a default item
-                m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
-                m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+                SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
             }
 
             if (update.has_type_id())
             {
                 // if the item got removed (handled above), nothing gets updated
-                m_outgoingMessages.emplace(k_ESOMsg_Update, update);
-                m_networking.SendMessage(k_ESOMsg_Update, update);
+                SendMessageToGame(true, k_ESOMsg_Update, update);
             }
 
             if (notification.has_request())
             {
                 // might get a k_EGCItemCustomizationNotification_RemoveSticker
-                m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+                SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
             }
         }
         else
@@ -459,13 +455,10 @@ void ClientGC::ApplySticker(const void *data, uint32_t size)
     }
     else if (m_inventory.ApplySticker(message, update, destroy, notification))
     {
-        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
-        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
+        SendMessageToGame(true, k_ESOMsg_Update, update);
 
-        m_outgoingMessages.emplace(k_ESOMsg_Update, update);
-        m_networking.SendMessage(k_ESOMsg_Update, update);
-
-        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else
     {
@@ -473,39 +466,35 @@ void ClientGC::ApplySticker(const void *data, uint32_t size)
     }
 }
 
-void ClientGC::UnlockCrate(const void *data, uint32_t size)
+void ClientGC::UnlockCrate(GCMessageRead &messageRead)
 {
-    const CMsgGCUnlockCrate *message = ReadGameStructMessage<CMsgGCUnlockCrate>(data, size);
-    if (!message)
+    uint64_t keyId = messageRead.ReadUint64();
+    uint64_t crateId = messageRead.ReadUint64();
+    if (!messageRead.IsValid())
     {
         Platform::Print("Parsing CMsgGCUnlockCrate failed, ignoring\n");
         return;
     }
 
-    Platform::Print("CASE OPENING %llu with %llu\n", message->crate_id, message->key_id);
+    Platform::Print("CASE OPENING %llu with %llu\n", crateId, keyId);
 
     CMsgSOSingleObject destroyCrate, destroyKey, newItem;
     CMsgGCItemCustomizationNotification notification;
 
     if (m_inventory.UnlockCrate(
-        message->crate_id,
-        message->key_id,
+        crateId,
+        keyId,
         destroyCrate,
         destroyKey,
         newItem,
         notification))
     {
         // mikkotodo what does the server want to know
-        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroyCrate);
-        m_networking.SendMessage(k_ESOMsg_Destroy, destroyCrate);
-        
-        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroyKey);
-        m_networking.SendMessage(k_ESOMsg_Destroy, destroyKey);
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroyCrate);
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroyKey);
+        SendMessageToGame(true, k_ESOMsg_Create, newItem);
 
-        m_outgoingMessages.emplace(k_ESOMsg_Create, newItem);
-        m_networking.SendMessage(k_ESOMsg_Create, newItem);
-
-        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else
     {
@@ -513,11 +502,14 @@ void ClientGC::UnlockCrate(const void *data, uint32_t size)
     }
 }
 
-void ClientGC::NameItem(const void *data, uint32_t size)
+void ClientGC::NameItem(GCMessageRead &messageRead)
 {
-    // mikkotodo unsafe!!!! need to rework networking and message handling code asap
-    const CMsgGCNameItem *message = ReadGameStructMessage<CMsgGCNameItem, true>(data, size);
-    if (!message)
+    uint64_t nameTagId = messageRead.ReadUint64();
+    uint64_t itemId = messageRead.ReadUint64();
+    messageRead.ReadData(1); // skip the sentinel
+    std::string_view name = messageRead.ReadString();
+
+    if (!messageRead.IsValid())
     {
         Platform::Print("Parsing CMsgGCNameItem failed, ignoring\n");
         return;
@@ -525,15 +517,12 @@ void ClientGC::NameItem(const void *data, uint32_t size)
 
     CMsgSOSingleObject update, destroy;
     CMsgGCItemCustomizationNotification notification;
-    if (m_inventory.NameItem(message->nametag_id, message->item_id, message->name, update, destroy, notification))
+    if (m_inventory.NameItem(nameTagId, itemId, name, update, destroy, notification))
     {
-        m_outgoingMessages.emplace(k_ESOMsg_Update, update);
-        m_networking.SendMessage(k_ESOMsg_Update, update);
+        SendMessageToGame(true, k_ESOMsg_Update, update);
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
     
-        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
-        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
-    
-        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else
     {
@@ -541,11 +530,14 @@ void ClientGC::NameItem(const void *data, uint32_t size)
     }
 }
 
-void ClientGC::NameBaseItem(const void *data, uint32_t size)
+void ClientGC::NameBaseItem(GCMessageRead &messageRead)
 {
-    // mikkotodo unsafe!!!! need to rework networking and message handling code asap
-    const CMsgGCNameBaseItem *message = ReadGameStructMessage<CMsgGCNameBaseItem, true>(data, size);
-    if (!message)
+    uint64_t nameTagId = messageRead.ReadUint64();
+    uint32_t defIndex = messageRead.ReadUint32();
+    messageRead.ReadData(1); // skip the sentinel
+    std::string_view name = messageRead.ReadString();
+
+    if (!messageRead.IsValid())
     {
         Platform::Print("Parsing CMsgGCNameBaseItem failed, ignoring\n");
         return;
@@ -553,15 +545,12 @@ void ClientGC::NameBaseItem(const void *data, uint32_t size)
 
     CMsgSOSingleObject create, destroy;
     CMsgGCItemCustomizationNotification notification;
-    if (m_inventory.NameBaseItem(message->nametag_id, message->def_index, message->name, create, destroy, notification))
+    if (m_inventory.NameBaseItem(nameTagId, defIndex, name, create, destroy, notification))
     {
-        m_outgoingMessages.emplace(k_ESOMsg_Create, create);
-        m_networking.SendMessage(k_ESOMsg_Create, create);
+        SendMessageToGame(true, k_ESOMsg_Create, create);
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
 
-        m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
-        m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
-
-        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else
     {
@@ -569,11 +558,10 @@ void ClientGC::NameBaseItem(const void *data, uint32_t size)
     }
 }
 
-void ClientGC::RemoveItemName(const void *data, uint32_t size)
+void ClientGC::RemoveItemName(GCMessageRead &messageRead)
 {
-    // mikkotodo unsafe!!!! need to rework networking and message handling code asap
-    const CMsgGCRemoveItemName *message = ReadGameStructMessage<CMsgGCRemoveItemName>(data, size);
-    if (!message)
+    uint64_t itemId = messageRead.ReadUint64();
+    if (!messageRead.IsValid())
     {
         Platform::Print("Parsing CMsgGCRemoveItemName failed, ignoring\n");
         return;
@@ -581,21 +569,19 @@ void ClientGC::RemoveItemName(const void *data, uint32_t size)
 
     CMsgSOSingleObject update, destroy;
     CMsgGCItemCustomizationNotification notification;
-    if (m_inventory.RemoveItemName(message->item_id, update, destroy, notification))
+    if (m_inventory.RemoveItemName(itemId, update, destroy, notification))
     {
         if (update.has_type_id())
         {
-            m_outgoingMessages.emplace(k_ESOMsg_Update, update);
-            m_networking.SendMessage(k_ESOMsg_Update, update);
+            SendMessageToGame(true, k_ESOMsg_Update, update);
         }
 
         if (destroy.has_type_id())
         {
-            m_outgoingMessages.emplace(k_ESOMsg_Destroy, destroy);
-            m_networking.SendMessage(k_ESOMsg_Destroy, destroy);
+            SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
         }
 
-        m_outgoingMessages.emplace(k_EMsgGCItemCustomizationNotification, notification);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else
     {
@@ -883,6 +869,15 @@ const char *MessageName(uint32_t type)
         HANDLE_MSG(k_EMsgUpdateSessionIP); // 154;
         HANDLE_MSG(k_EMsgRequestSessionIP); // 155;
         HANDLE_MSG(k_EMsgRequestSessionIPResponse); // 156;
+
+        HANDLE_MSG(k_ESOMsg_Create);
+        HANDLE_MSG(k_ESOMsg_Update);
+        HANDLE_MSG(k_ESOMsg_Destroy);
+        HANDLE_MSG(k_ESOMsg_CacheSubscribed);
+        HANDLE_MSG(k_ESOMsg_CacheUnsubscribed);
+        HANDLE_MSG(k_ESOMsg_UpdateMultiple);
+        HANDLE_MSG(k_ESOMsg_CacheSubscriptionCheck);
+        HANDLE_MSG(k_ESOMsg_CacheSubscriptionRefresh);
     }
 
     assert(false);

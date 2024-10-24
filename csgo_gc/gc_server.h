@@ -1,30 +1,32 @@
 #pragma once
 
-#include "gc_message.h"
+#include "gc_shared.h"
 #include "networking_server.h"
 
-class ServerGC
+class ServerGC final : public SharedGC
 {
 public:
     ServerGC();
     ~ServerGC();
 
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
-    bool HasOutgoingMessages(uint32_t &size);
-    bool PopOutgoingMessage(uint32_t &type, void *buffer, uint32_t bufferSize, uint32_t &size);
 
-    void ClientConnected(uint64_t steamId);
+    void ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize);
     void ClientDisconnected(uint64_t steamId);
 
     void Update();
 
     // called from net code
-    void AddOutgoingMessage(const void *data, uint32_t size);
+    void HandleNetMessage(const void *data, uint32_t size);
 
 private:
-    void OnServerHello(const void *data, uint32_t size);
-    void IncrementKillCountAttribute(const void *data, uint32_t size);
+    void OnServerHello(GCMessageRead &messageRead);
+    void IncrementKillCountAttribute(GCMessageRead &messageRead);
 
-    std::queue<OutgoingMessage> m_outgoingMessages;
+    // don't run networking until we've received the hello and sent the welcome
+    // otherwise we might receive the local client's socache before that and it'll
+    // get wiped after the welcome is received
+    bool m_receivedHello{};
+
     NetworkingServer m_networking;
 };

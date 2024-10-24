@@ -2,82 +2,92 @@
 
 #include "gc_const.h"
 
-// mikkotodo all of this sucks
-
-// mikkotodo error checking...
-template<typename T>
-inline bool ReadGCMessage(T &message, const void *data, uint32_t size)
-{
-    const ProtoMsgHeader *header = reinterpret_cast<const ProtoMsgHeader *>(data);
-
-    // should have been checked before calling
-    assert(header->type & ProtobufMask);
-
-    const void *protoData = reinterpret_cast<const uint8_t *>(data) + sizeof(*header) + header->headerSize;
-    uint32_t protoSize = size - sizeof(*header) - header->headerSize;
-
-    return message.ParseFromArray(protoData, protoSize);
-}
-
-// this also sucks
-template<typename T, bool ExtraData = false>
-const T *ReadGameStructMessage(const void *data, uint32_t size)
-{
-    if (!ExtraData && size != sizeof(GameStructMsgHeader) + sizeof(T))
-    {
-        assert(false);
-        return nullptr;
-    }
-
-    if (ExtraData && size <= sizeof(GameStructMsgHeader) + sizeof(T))
-    {
-        assert(false);
-        return nullptr;
-    }
-
-    const uint8_t *messageData = reinterpret_cast<const uint8_t *>(data);
-    return reinterpret_cast<const T *>(messageData + sizeof(GameStructMsgHeader));
-}
-
-inline void AppendGCMessage(std::vector<uint8_t> &buffer, uint32_t type, const google::protobuf::MessageLite &message)
-{
-    assert(type & ProtobufMask);
-
-    // mikkotodo inefficent
-    size_t currentSize = buffer.size();
-    buffer.resize(currentSize + sizeof(ProtoMsgHeader) + message.ByteSizeLong());
-
-    ProtoMsgHeader *pHeader = reinterpret_cast<ProtoMsgHeader *>(buffer.data() + currentSize);
-    pHeader->type = type;
-    pHeader->headerSize = 0;
-
-    message.SerializeToArray(buffer.data() + currentSize + sizeof(ProtoMsgHeader), message.ByteSizeLong());
-}
-
-// helper class for gc --> game messages
-class OutgoingMessage
+class GCMessageRead
 {
 public:
-    // protobuf message constructor
-    OutgoingMessage(uint32_t type, const google::protobuf::MessageLite &message)
-        : m_type{ type | ProtobufMask }
+    GCMessageRead(uint32_t type, const void *data, uint32_t size);
+
+    const void *ReadData(size_t size);
+    std::string_view ReadString(); // creepy shit
+
+    bool IsValid() const { return !m_error; }
+    bool IsProtobuf() const { return m_type & ProtobufMask; }
+    uint32_t TypeUnmasked() const { return m_type & ~ProtobufMask; }
+
+    template<typename T>
+    bool ReadProtobuf(T &message)
     {
-        AppendGCMessage(m_buffer, m_type, message);
+        // read the remainder as a protobuf message
+        uint32_t size = m_size - m_offset;
+        const void *data = ReadData(size);
+        if (!data)
+        {
+            assert(false);
+            return false;
+        }
+
+        return message.ParseFromArray(data, size);
     }
 
-    // already serialized data constructor
-    OutgoingMessage(const void *data, uint32_t size)
-        : m_type{ *reinterpret_cast<const uint32_t *>(data) } // mikkotodo unsafe
+    // ReadData wrappers
+    template<typename T>
+    T ReadVariable()
     {
-        m_buffer.resize(size);
-        memcpy(m_buffer.data(), data, size);
+        const T *variable = static_cast<const T *>(ReadData(sizeof(T)));
+        if (!variable)
+        {
+            assert(false);
+            return 0;
+        }
+
+        return *variable;
     }
 
-    uint32_t Type() const { return m_type; }
-    const void *Data() const { return m_buffer.data(); }
-    uint32_t Size() const { return static_cast<uint32_t>(m_buffer.size()); }
+    uint16_t ReadUint16() { return ReadVariable<uint16_t>(); }
+    uint32_t ReadUint32() { return ReadVariable<uint32_t>(); }
+    uint64_t ReadUint64() { return ReadVariable<uint64_t>(); }
 
 private:
-    const uint32_t m_type;
+    const uint8_t *const m_data;
+    const uint32_t m_size;
+    uint32_t m_type; // parsed from the message, protobuf mask is kept
+
+    // the state
+    uint32_t m_offset{};
+    bool m_error{};
+};
+
+class GCMessageWrite
+{
+public:
+    // protobuf messages
+    GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message);
+
+    // non protobuf messages, data written with the writer functions
+    GCMessageWrite(uint32_t type);
+
+    // already serialized data that just gets copied over, type parsed from the message
+    GCMessageWrite(const void *data, uint32_t size);
+
+    // temp validation
+    GCMessageWrite(const GCMessageWrite &) = delete;
+    GCMessageWrite(GCMessageWrite &&) = delete;
+    GCMessageWrite &operator=(const GCMessageWrite &) = delete;
+    GCMessageWrite &operator=(GCMessageWrite &&) = delete;
+
+    // non protobuf message writing
+    void WriteData(const void *data, uint32_t size);
+
+    uint32_t TypeMasked() const { return m_type; }
+    const void *Data() const { return m_buffer.data(); }
+    uint32_t Size() const { return m_buffer.size(); }
+
+    // writing helpers
+    void WriteUint16(uint16_t value) { WriteData(&value, sizeof(value)); }
+    void WriteUint32(uint32_t value) { WriteData(&value, sizeof(value)); }
+    void WriteUint64(uint64_t value) { WriteData(&value, sizeof(value)); }
+
+private:
+    uint32_t m_type;
     std::vector<uint8_t> m_buffer;
 };

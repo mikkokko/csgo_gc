@@ -13,6 +13,9 @@
 #undef STEAM_PRIVATE_API // we need these public so we can proxy them
 #define STEAM_PRIVATE_API(...) __VA_ARGS__
 
+// mikkotodo update the sdk...
+struct SteamNetworkingIdentity;
+
 #include <steam/steam_api.h>
 #include <steam/steam_gameserver.h>
 #include <steam/isteamgamecoordinator.h>
@@ -226,31 +229,31 @@ public:
 
     ESteamAPICallFailure GetAPICallFailureReason(SteamAPICall_t hSteamAPICall) override
     {
-        if (hSteamAPICall == CheckSignatureCall)
-        {
-            // not properly handled, shouldn't get here
-            assert(false);
-            return k_ESteamAPICallFailureNone;
-        }
+        // yeah we won't get here
+        //if (hSteamAPICall == CheckSignatureCall)
+        //{
+        //    // not properly handled, shouldn't get here
+        //    assert(false);
+        //    return k_ESteamAPICallFailureNone;
+        //}
 
         return m_original->GetAPICallFailureReason(hSteamAPICall);
     }
 
     bool GetAPICallResult(SteamAPICall_t hSteamAPICall, void *pCallback, int cubCallback, int iCallbackExpected, bool *pbFailed) override
     {
-        if (hSteamAPICall == CheckSignatureCall)
+        if (hSteamAPICall == CheckSignatureCall
+            && cubCallback == sizeof(CheckFileSignature_t)
+            && iCallbackExpected == CheckFileSignature_t::k_iCallback)
         {
             if (pbFailed)
             {
                 *pbFailed = false;
             }
 
-            // assume that the size and callback match
             CheckFileSignature_t result{};
             result.m_eCheckFileSignature = k_ECheckFileSignatureNoSignaturesFoundForThisApp;
             memcpy(pCallback, &result, sizeof(result));
-
-            // clear this
             return true;
         }
 
@@ -528,7 +531,7 @@ public:
         EBeginAuthSessionResult result = m_original->BeginAuthSession(pAuthTicket, cbAuthTicket, steamID);
         if (s_serverGC && result == k_EBeginAuthSessionResultOK)
         {
-            s_serverGC->ClientConnected(steamID.ConvertToUint64());
+            s_serverGC->ClientConnected(steamID.ConvertToUint64(), pAuthTicket, cbAuthTicket);
         }
 
         return result;
@@ -625,6 +628,199 @@ public:
     }
 };
 
+class SteamUserProxy : public ISteamUser
+{
+    ISteamUser *m_original;
+
+public:
+    SteamUserProxy(ISteamUser *original)
+        : m_original{ original }
+    {
+    }
+
+    HSteamUser GetHSteamUser() override
+    {
+        return m_original->GetHSteamUser();
+    }
+
+    bool BLoggedOn() override
+    {
+        return m_original->BLoggedOn();
+    }
+
+    CSteamID GetSteamID() override
+    {
+        return m_original->GetSteamID();
+    }
+
+    int InitiateGameConnection_DEPRECATED(void *pAuthBlob, int cbMaxAuthBlob, CSteamID steamIDGameServer, uint32 unIPServer, uint16 usPortServer, bool bSecure) override
+    {
+        return m_original->InitiateGameConnection_DEPRECATED(pAuthBlob, cbMaxAuthBlob, steamIDGameServer, unIPServer, usPortServer, bSecure);
+    }
+
+    void TerminateGameConnection_DEPRECATED(uint32 unIPServer, uint16 usPortServer) override
+    {
+        m_original->TerminateGameConnection_DEPRECATED(unIPServer, usPortServer);
+    }
+
+    void TrackAppUsageEvent(CGameID gameID, int eAppUsageEvent, const char *pchExtraInfo) override
+    {
+        m_original->TrackAppUsageEvent(gameID, eAppUsageEvent, pchExtraInfo);
+    }
+
+    bool GetUserDataFolder(char *pchBuffer, int cubBuffer) override
+    {
+        return m_original->GetUserDataFolder(pchBuffer, cubBuffer);
+    }
+
+    void StartVoiceRecording() override
+    {
+        m_original->StartVoiceRecording();
+    }
+
+    void StopVoiceRecording() override
+    {
+        m_original->StopVoiceRecording();
+    }
+
+    EVoiceResult GetAvailableVoice(uint32 *pcbCompressed, uint32 *pcbUncompressed_Deprecated, uint32 nUncompressedVoiceDesiredSampleRate_Deprecated) override
+    {
+        return m_original->GetAvailableVoice(pcbCompressed, pcbUncompressed_Deprecated, nUncompressedVoiceDesiredSampleRate_Deprecated);
+    }
+
+    EVoiceResult GetVoice(bool bWantCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, bool bWantUncompressed_Deprecated, void *pUncompressedDestBuffer_Deprecated, uint32 cbUncompressedDestBufferSize_Deprecated, uint32 *nUncompressBytesWritten_Deprecated, uint32 nUncompressedVoiceDesiredSampleRate_Deprecated) override
+    {
+        return m_original->GetVoice(bWantCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten, bWantUncompressed_Deprecated, pUncompressedDestBuffer_Deprecated, cbUncompressedDestBufferSize_Deprecated, nUncompressBytesWritten_Deprecated, nUncompressedVoiceDesiredSampleRate_Deprecated);
+    }
+
+    EVoiceResult DecompressVoice(const void *pCompressed, uint32 cbCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, uint32 nDesiredSampleRate) override
+    {
+        return m_original->DecompressVoice(pCompressed, cbCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten, nDesiredSampleRate);
+    }
+
+    uint32 GetVoiceOptimalSampleRate() override
+    {
+        return m_original->GetVoiceOptimalSampleRate();
+    }
+
+    HAuthTicket GetAuthSessionTicket(void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity) override
+    {
+        HAuthTicket ticket = m_original->GetAuthSessionTicket(pTicket, cbMaxTicket, pcbTicket, pSteamNetworkingIdentity);
+        if (s_clientGC && ticket != k_HAuthTicketInvalid)
+        {
+            s_clientGC->SetAuthTicket(ticket, pTicket, *pcbTicket);
+        }
+
+        return ticket;
+    }
+
+    EBeginAuthSessionResult BeginAuthSession(const void *pAuthTicket, int cbAuthTicket, CSteamID steamID) override
+    {
+        return m_original->BeginAuthSession(pAuthTicket, cbAuthTicket, steamID);
+    }
+
+    void EndAuthSession(CSteamID steamID) override
+    {
+        m_original->EndAuthSession(steamID);
+    }
+
+    void CancelAuthTicket(HAuthTicket hAuthTicket) override
+    {
+        if (s_clientGC)
+        {
+            s_clientGC->ClearAuthTicket(hAuthTicket);
+        }
+
+        m_original->CancelAuthTicket(hAuthTicket);
+    }
+
+    EUserHasLicenseForAppResult UserHasLicenseForApp(CSteamID steamID, AppId_t appID) override
+    {
+        return m_original->UserHasLicenseForApp(steamID, appID);
+    }
+
+    bool BIsBehindNAT() override
+    {
+        return m_original->BIsBehindNAT();
+    }
+
+    void AdvertiseGame(CSteamID steamIDGameServer, uint32 unIPServer, uint16 usPortServer) override
+    {
+        m_original->AdvertiseGame(steamIDGameServer, unIPServer, usPortServer);
+    }
+
+    SteamAPICall_t RequestEncryptedAppTicket(void *pDataToInclude, int cbDataToInclude) override
+    {
+        return m_original->RequestEncryptedAppTicket(pDataToInclude, cbDataToInclude);
+    }
+
+    bool GetEncryptedAppTicket(void *pTicket, int cbMaxTicket, uint32 *pcbTicket) override
+    {
+        return m_original->GetEncryptedAppTicket(pTicket, cbMaxTicket, pcbTicket);
+    }
+
+    int GetGameBadgeLevel(int nSeries, bool bFoil) override
+    {
+        return m_original->GetGameBadgeLevel(nSeries, bFoil);
+    }
+
+    int GetPlayerSteamLevel() override
+    {
+        return m_original->GetPlayerSteamLevel();
+    }
+
+    SteamAPICall_t RequestStoreAuthURL(const char *pchRedirectURL) override
+    {
+        return m_original->RequestStoreAuthURL(pchRedirectURL);
+    }
+
+    bool BIsPhoneVerified() override
+    {
+        return m_original->BIsPhoneVerified();
+    }
+
+    bool BIsTwoFactorEnabled() override
+    {
+        return m_original->BIsTwoFactorEnabled();
+    }
+
+    bool BIsPhoneIdentifying() override
+    {
+        return m_original->BIsPhoneIdentifying();
+    }
+
+    bool BIsPhoneRequiringVerification() override
+    {
+        return m_original->BIsPhoneRequiringVerification();
+    }
+
+    SteamAPICall_t GetMarketEligibility() override
+    {
+        return m_original->GetMarketEligibility();
+    }
+
+    SteamAPICall_t GetDurationControl() override
+    {
+        return m_original->GetDurationControl();
+    }
+
+    bool BSetDurationControlOnlineState(EDurationControlOnlineState eNewState) override
+    {
+        return m_original->BSetDurationControlOnlineState(eNewState);
+    }
+};
+
+template<typename Interface, typename Proxy, typename... Args>
+inline Interface *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&... args)
+{
+    if (!pointer)
+    {
+        pointer = std::make_unique<Proxy>(std::forward<Args>(args)...);
+    }
+
+    return static_cast<Interface *>(pointer.get());
+}
+
 class SteamInterfaceProxy
 {
 public:
@@ -638,42 +834,27 @@ public:
     {
         if (InterfaceMatches(version, STEAMGAMECOORDINATOR_INTERFACE_VERSION))
         {
-            if (!m_steamGameCoordinator)
-            {
-                bool server = (SteamGameServer_GetHSteamPipe() == m_pipe);
-                if (server)
-                {
-                    // don't provide a steamid so the wrapper knows it's for a server
-                    m_steamGameCoordinator = std::make_unique<SteamGameCoordinatorProxy>(0);
-                }
-                else
-                {
-                    // get the client's steam id
-                    uint64_t steamId = SteamUser()->GetSteamID().ConvertToUint64();
-                    m_steamGameCoordinator = std::make_unique<SteamGameCoordinatorProxy>(steamId);
-                }
+            // pass 0 as steamid for servers so the wrapper knows it's for a server
+            uint64_t steamId = 0;
 
+            if (SteamGameServer_GetHSteamPipe() != m_pipe)
+            {
+                steamId = SteamUser()->GetSteamID().ConvertToUint64();
             }
 
-            return static_cast<ISteamGameCoordinator *>(m_steamGameCoordinator.get());
+            return GetOrCreate<ISteamGameCoordinator>(m_steamGameCoordinator, steamId);
         }
         else if (InterfaceMatches(version, STEAMUTILS_INTERFACE_VERSION))
         {
-            if (!m_steamUtils)
-            {
-                m_steamUtils = std::make_unique<SteamUtilsProxy>(static_cast<ISteamUtils *>(original));
-            }
-
-            return static_cast<ISteamUtils *>(m_steamUtils.get());
+            return GetOrCreate<ISteamUtils>(m_steamUtils, static_cast<ISteamUtils *>(original));
         }
         else if (InterfaceMatches(version, STEAMGAMESERVER_INTERFACE_VERSION))
         {
-            if (!m_steamGameServer)
-            {
-                m_steamGameServer = std::make_unique<SteamGameServerProxy>(static_cast<ISteamGameServer *>(original));
-            }
-
-            return static_cast<ISteamGameServer *>(m_steamGameServer.get());
+            return GetOrCreate<ISteamGameServer>(m_steamGameServer, static_cast<ISteamGameServer *>(original));
+        }
+        else if (InterfaceMatches(version, STEAMUSER_INTERFACE_VERSION))
+        {
+            return GetOrCreate<ISteamUser>(m_steamUser, static_cast<ISteamUser *>(original));
         }
 
         return nullptr;
@@ -686,6 +867,7 @@ private:
     std::unique_ptr<SteamGameCoordinatorProxy> m_steamGameCoordinator;
     std::unique_ptr<SteamUtilsProxy> m_steamUtils;
     std::unique_ptr<SteamGameServerProxy> m_steamGameServer;
+    std::unique_ptr<SteamUserProxy> m_steamUser;
 };
 
 class SteamClientProxy : public ISteamClient
@@ -1049,7 +1231,6 @@ public:
             bool serverCallback = static_cast<CallbackAccessor *>(hook.callback)->IsGameServer();
             if (server == serverCallback && hook.id == id)
             {
-                Platform::Print("Running callback, server %d\n", server);
                 hook.callback->Run(param);
             }
         }

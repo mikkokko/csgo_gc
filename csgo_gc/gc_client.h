@@ -1,40 +1,45 @@
 #pragma once
 
 #include "config.h"
-#include "gc_message.h"
+#include "gc_shared.h"
 #include "inventory.h"
 #include "networking_client.h"
 
-class ClientGC
+class ClientGC final : public SharedGC
 {
 public:
     ClientGC(uint64_t steamId);
     ~ClientGC();
 
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
-    bool HasOutgoingMessages(uint32_t &size);
-    bool PopOutgoingMessage(uint32_t &type, void *buffer, uint32_t bufferSize, uint32_t &size);
 
     void Update();
 
     // called from net code
     void SendSOCacheToGameSever();
-    void AddOutgoingMessage(const void *data, uint32_t size);
+    void HandleNetMessage(GCMessageRead &messageRead);
+
+    // passed to net code
+    void SetAuthTicket(uint32_t handle, const void *data, uint32_t size);
+    void ClearAuthTicket(uint32_t handle);
 
 private:
-    void OnClientHello(const void *data, uint32_t size);
-    void AdjustItemEquippedState(const void *data, uint32_t size);
-    void ClientPlayerDecalSign(const void *data, uint32_t size);
-    void UseItemRequest(const void *data, uint32_t size);
-    void ClientRequestJoinServerData(const void *data, uint32_t size);
-    void SetItemPositions(const void *data, uint32_t size);
-    void IncrementKillCountAttribute(const void *data, uint32_t size);
-    void ApplySticker(const void *data, uint32_t size);
+    // send to the local game and the game server we're connected to (if we're connected)
+    void SendMessageToGame(bool sendToGameServer, uint32_t type, const google::protobuf::MessageLite &message);
 
-    void UnlockCrate(const void *data, uint32_t size);
-    void NameItem(const void *data, uint32_t size);
-    void NameBaseItem(const void *data, uint32_t size);
-    void RemoveItemName(const void *data, uint32_t size);
+    void OnClientHello(GCMessageRead &messageRead);
+    void AdjustItemEquippedState(GCMessageRead &messageRead);
+    void ClientPlayerDecalSign(GCMessageRead &messageRead);
+    void UseItemRequest(GCMessageRead &messageRead);
+    void ClientRequestJoinServerData(GCMessageRead &messageRead);
+    void SetItemPositions(GCMessageRead &messageRead);
+    void IncrementKillCountAttribute(GCMessageRead &messageRead);
+    void ApplySticker(GCMessageRead &messageRead);
+
+    void UnlockCrate(GCMessageRead &messageRead);
+    void NameItem(GCMessageRead &messageRead);
+    void NameBaseItem(GCMessageRead &messageRead);
+    void RemoveItemName(GCMessageRead &messageRead);
 
     void BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &message);
     void BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,
@@ -44,7 +49,6 @@ private:
     uint32_t AccountId() const { return m_steamId & 0xffffffff; }
 
     const uint64_t m_steamId;
-    std::queue<OutgoingMessage> m_outgoingMessages;
     NetworkingClient m_networking{ this };
 
     GCConfig m_config;

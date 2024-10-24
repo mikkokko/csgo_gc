@@ -3,7 +3,9 @@ project(csgo_gc)
 add_library(csgo_gc SHARED
     config.cpp
     gc_client.cpp
+    gc_message.cpp
     gc_server.cpp
+    gc_shared.cpp
     graffiti.cpp
     inventory.cpp
     item_schema.cpp

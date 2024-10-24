@@ -1,12 +1,14 @@
 #pragma once
 
-#include <steam/isteamnetworkingmessages.h>
+#include "networking_shared.h"
 
 class ServerGC;
+class GCMessageWrite;
 
 struct ClientInfo
 {
-    bool cacheSubscribed{};
+    // nothing here
+    int unused;
 };
 
 class NetworkingServer
@@ -16,10 +18,10 @@ public:
 
     void Update();
 
-    void ClientConnected(uint64_t steamId);
+    void ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize);
     void ClientDisconnected(uint64_t steamId);
 
-    void SendMessage(uint64_t steamId, uint32_t type, const google::protobuf::MessageLite &message);
+    void SendMessage(uint64_t steamId, const GCMessageWrite &message);
 
 private:
     STEAM_GAMESERVER_CALLBACK(NetworkingServer,
