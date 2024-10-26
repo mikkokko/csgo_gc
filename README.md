@@ -1,7 +1,7 @@
 # csgo_gc
 
 ## What is this?
-In Valve games, the Game Coordinator (GC) is a backend service most notably responsible for matchmaking and inventory management (like loadouts and skins). This project redirects the GC traffic to a custom implementation running locally.
+In Valve games, the Game Coordinator (GC) is a backend service most notably responsible for matchmaking and inventory management (like loadouts and skins). This project redirects the GC traffic to a custom, locally running implementation.
 
 ## Why would you want this?
 While it's still possible to connect CS:GO to CS2's GC by spoofing the version number, this may break in the future if Valve updates the GC protocol. This project aims to restore most GC-related functionality without relying on a centralized server.
@@ -22,7 +22,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 
 ## Planned features
 - Configurable probabilitity distributions for case opening (all uniform currently)
-- Rest of the core features (trade ups, souvenirs...)
+- Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
 - Graphical inventory editor
 - A tool to copy your CS2 inventory over
 
