@@ -16,7 +16,7 @@
 #endif
 
 typedef int(*LauncherMain_t)(int argc, char **argv);
-typedef void (*InstallGC_t)();
+typedef void (*InstallGC_t)(bool dedicated);
 
 static void ErrorMessageBox(const char *format, ...)
 {
@@ -102,7 +102,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    InstallGC();
+#if defined(DEDICATED)
+    InstallGC(true);
+#else
+    InstallGC(false);
+#endif
 
     return LauncherMain(argc, argv);
 }

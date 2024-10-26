@@ -1335,12 +1335,37 @@ static void HookCreate(const char *name, void *target, void *hook, void **bridge
 
 #define INLINE_HOOK(a) HookCreate(#a, reinterpret_cast<void *>(a), reinterpret_cast<void *>(Hk_##a), reinterpret_cast<void **>(&Og_##a));
 
-void SteamHookInstall()
+static bool InitializeSteamAPI(bool dedicated)
+{
+    if (dedicated)
+    {
+        return SteamGameServer_Init(0, 0, STEAMGAMESERVER_QUERY_PORT_SHARED, eServerModeNoAuthentication, "1.38.7.9");
+    }
+    else
+    {
+        return SteamAPI_Init();
+    }
+}
+
+static void ShutdownSteamAPI(bool dedicated)
+{
+    if (dedicated)
+    {
+        SteamGameServer_Shutdown();
+    }
+    else
+    {
+        SteamAPI_Shutdown();
+    }
+}
+
+
+void SteamHookInstall(bool dedicated)
 {
     Platform::EnsureEnvVarSet("SteamAppId", "730");
 
     // this is bit of a clusterfuck
-    if (!SteamAPI_Init())
+    if (!InitializeSteamAPI(dedicated))
     {
         Platform::Error("Steam initialization failed. Please try the following steps:\n"
             "- Ensure that Steam is running.\n"
@@ -1355,7 +1380,7 @@ void SteamHookInstall()
     }
 
     // decrement reference count
-    SteamAPI_Shutdown();
+    ShutdownSteamAPI(dedicated);
 
     // load steamclient
     void *CreateInterface = Platform::SteamClientFactory(steamClientPath);

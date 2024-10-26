@@ -10,8 +10,8 @@
 #error
 #endif
 
-DLL_EXPORT void InstallGC()
+DLL_EXPORT void InstallGC(bool dedicated)
 {
     Platform::Initialize();
-    SteamHookInstall();
+    SteamHookInstall(dedicated);
 }

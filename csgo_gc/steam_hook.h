@@ -1,3 +1,3 @@
 #pragma once
 
-void SteamHookInstall();
+void SteamHookInstall(bool dedicated);
