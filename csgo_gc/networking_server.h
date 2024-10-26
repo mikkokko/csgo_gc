@@ -5,12 +5,6 @@
 class ServerGC;
 class GCMessageWrite;
 
-struct ClientInfo
-{
-    // nothing here
-    int unused;
-};
-
 class NetworkingServer
 {
 public:
@@ -35,5 +29,5 @@ private:
         m_sessionFailed);
 
     ServerGC *const m_serverGC;
-    std::unordered_map<uint64_t, ClientInfo> m_clients;
+    std::unordered_set<uint64_t> m_clients;
 };

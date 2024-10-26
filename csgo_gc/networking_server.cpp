@@ -33,7 +33,7 @@ void NetworkingServer::Update()
 
 void NetworkingServer::ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize)
 {
-    auto result = m_clients.try_emplace(steamId);
+    auto result = m_clients.insert(steamId);
     if (!result.second)
     {
         Platform::Print("got ClientConnected for %llu but they're already on the list! ignoring\n", steamId);

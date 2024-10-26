@@ -9,68 +9,79 @@ enum class AttributeType
     String
 };
 
-struct AttributeInfo
+class AttributeInfo
 {
-    AttributeType type{ AttributeType::Float };
+public:
+    AttributeInfo(const KeyValue &key);
+
+    AttributeType m_type;
 };
 
-struct ItemInfo
+class ItemInfo
 {
-    uint32_t defIndex{};
-    std::string name;
-    uint32_t rarity{ 1 }; // fallback to 1, which means common (mikkotodo ugly)
-    uint32_t quality{ 4 }; // fallback to 4, which means unique (mikkotodo ugly)
-    uint32_t supplyCrateSeries{}; // cases only
+public:
+    ItemInfo(uint32_t defIndex);
+
+    uint32_t m_defIndex;
+    std::string m_name;
+    uint32_t m_rarity;
+    uint32_t m_quality;
+    uint32_t m_supplyCrateSeries; // cases only
 };
 
-struct PaintKitInfo
+class PaintKitInfo
 {
-    uint32_t defIndex{};
-    uint32_t rarity{ 0 }; // fallback to 0, which means default (mikkotodo ugly)
-    float minFloat{ 0.0f };
-    float maxFloat{ 1.0f };
+public:
+    PaintKitInfo(const KeyValue &key);
+
+    uint32_t m_defIndex;
+    uint32_t m_rarity;
+    float m_minFloat;
+    float m_maxFloat;
 };
 
-struct StickerKitInfo
+
+class StickerKitInfo
 {
-    uint32_t defIndex{};
-    uint32_t rarity{ 0 };
+public:
+    StickerKitInfo(const KeyValue &key);
+
+    uint32_t m_defIndex;
+    uint32_t m_rarity;
 };
 
-struct MusicDefinitionInfo
+class MusicDefinitionInfo
 {
-    uint32_t defIndex{};
+public:
+    MusicDefinitionInfo(const KeyValue &key);
+
+    uint32_t m_defIndex;
 };
 
 enum LootListItemType
 {
+    LootListItemNoAttribute,
+    LootListItemPaintable,
     LootListItemSticker,
     LootListItemSpray,
     LootListItemPatch,
     LootListItemMusicKit,
-
-    // fallback
-    LootListItemPaintable,
-
-    // even faller back (bruh)
-    LootListItemNoAttribute
 };
 
 struct LootListItem
 {
     const ItemInfo *itemInfo{};
-    LootListItemType type;
+    LootListItemType type{ LootListItemNoAttribute };
 
-    // depends on the item type
-    union Attribute
-    {
-        const PaintKitInfo *paintKitInfo;
-        uint32_t stickerKitIndex;
-        uint32_t musicDefinitionIndex;
-    } attribute;
+    // these could be sticked into a variant to save a grand total of few bytes
+    const PaintKitInfo *paintKitInfo{};
+    const StickerKitInfo *stickerKitInfo{};
+    const MusicDefinitionInfo *musicDefinitionInfo{};
 
-    uint32_t rarity; // might differ from iteminfo's
-    uint32_t quality; // might differ from iteminfo's (forced stattrak)
+    // might differ from those specified in itemInfo
+    // (based on paint kits, stattrak etc.)
+    uint32_t rarity{};
+    uint32_t quality{};
 };
 
 struct LootList
@@ -218,7 +229,7 @@ private:
     ItemInfo *ItemInfoByName(std::string_view name);
     StickerKitInfo *StickerKitInfoByName(std::string_view name);
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
-    uint32_t MusicDefinitionIndexByName(std::string_view name);
+    MusicDefinitionInfo *MusicDefinitionInfoByName(std::string_view name);
 
     // case opening
     bool EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak statTrak);

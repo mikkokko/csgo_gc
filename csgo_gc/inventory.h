@@ -1,6 +1,7 @@
 #pragma once
 
 #include "item_schema.h"
+#include "gc_const_csgo.h"
 
 class KeyValue;
 
@@ -85,6 +86,31 @@ private:
 
     // move this to the item schema maybe?
     void ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreviewDataBlock &block);
+
+    // helpers for serializing items to CMsgSOMultipleObjects and CMsgSOSingleObject
+    void AddToMultipleObjects(CMsgSOMultipleObjects &message, SOTypeId type, const google::protobuf::MessageLite &object);
+    void ToSingleObject(CMsgSOSingleObject &message, SOTypeId type, const google::protobuf::MessageLite &object);
+
+    // helpers for above..
+    void AddToMultipleObjects(CMsgSOMultipleObjects &message, const CSOEconItem &object)
+    {
+        AddToMultipleObjects(message, SOTypeItem, object);
+    }
+
+    void ToSingleObject(CMsgSOSingleObject &message, const CSOEconItem &object)
+    {
+        ToSingleObject(message, SOTypeItem, object);
+    }
+
+    void AddToMultipleObjects(CMsgSOMultipleObjects &message, const CSOEconDefaultEquippedDefinitionInstanceClient &object)
+    {
+        AddToMultipleObjects(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
+    }
+
+    void ToSingleObject(CMsgSOSingleObject &message, const CSOEconDefaultEquippedDefinitionInstanceClient &object)
+    {
+        ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
+    }
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;

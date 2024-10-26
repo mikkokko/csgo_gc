@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "inventory.h"
 #include "gc_const.h"
-#include "gc_const_csgo.h"
 #include "keyvalue.h"
 #include "random.h"
 
@@ -48,6 +47,40 @@ Inventory::Inventory(uint64_t steamId)
 Inventory::~Inventory()
 {
     WriteToFile();
+}
+
+void Inventory::AddToMultipleObjects(CMsgSOMultipleObjects &message, SOTypeId type, const google::protobuf::MessageLite &object)
+{
+    if (!message.has_version())
+    {
+        assert(!message.has_owner_soid());
+        message.set_version(InventoryVersion);
+        message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+        message.mutable_owner_soid()->set_id(m_steamId);
+    }
+    else
+    {
+        assert(message.has_owner_soid());
+    }
+
+    CMsgSOMultipleObjects_SingleObject *single = message.add_objects_modified();
+    single->set_type_id(type);
+    single->set_object_data(object.SerializeAsString());
+}
+
+void Inventory::ToSingleObject(CMsgSOSingleObject &message, SOTypeId type, const google::protobuf::MessageLite &object)
+{
+    assert(!message.has_owner_soid());
+    assert(!message.has_version());
+    assert(!message.has_type_id());
+    assert(!message.has_object_data());
+
+    message.set_version(InventoryVersion);
+    message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    message.mutable_owner_soid()->set_id(m_steamId);
+
+    message.set_type_id(type);
+    message.set_object_data(object.SerializeAsString());
 }
 
 uint32_t Inventory::AccountId() const
@@ -261,6 +294,10 @@ void Inventory::WriteItem(KeyValue &itemKey, const CSOEconItem &item) const
 
 void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level, bool server)
 {
+    message.set_version(InventoryVersion);
+    message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
+    message.mutable_owner_soid()->set_id(m_steamId);
+
     {
         CMsgSOCacheSubscribed_SubscribedType *object = message.add_objects();
         object->set_type_id(SOTypeItem);
@@ -296,8 +333,6 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
     }
 
     {
-        // CSOEconDefaultEquippedDefinitionInstanceClient
-
         CMsgSOCacheSubscribed_SubscribedType *object = message.add_objects();
         object->set_type_id(SOTypeDefaultEquippedDefinitionInstanceClient);
 
@@ -306,11 +341,13 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
             object->add_object_data(defaultEquip.SerializeAsString());
         }
     }
-
-    message.set_version(InventoryVersion);
-    message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    message.mutable_owner_soid()->set_id(m_steamId);
 }
+
+#define set_version fuck_you
+#define mutable_owner_soid fuck_you
+#define set_type_id fuck_you<,.µ<
+#define set_object_data fuck_you
+#define add_objects_modified fuck_you
 
 // mikkotodo move
 constexpr uint32_t SlotUneqip = 0xffff;
@@ -320,11 +357,6 @@ constexpr uint64_t ItemIdInvalid = 0;
 // also i think this is the way valve gc does it???? can't remember
 bool Inventory::EquipItem(uint64_t itemId, uint32_t classId, uint32_t slotId, CMsgSOMultipleObjects &update)
 {
-    // setup this... so i dont forget...
-    update.set_version(InventoryVersion); // mikkotodo is this correct
-    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    update.mutable_owner_soid()->set_id(m_steamId);
-
     if (slotId == SlotUneqip)
     {
         // unequipping a specific item from all slots
@@ -356,9 +388,7 @@ bool Inventory::EquipItem(uint64_t itemId, uint32_t classId, uint32_t slotId, CM
         defaultEquip.set_class_id(classId);
         defaultEquip.set_slot_id(slotId);
 
-        CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
-        object->set_type_id(SOTypeDefaultEquippedDefinitionInstanceClient);
-        object->set_object_data(defaultEquip.SerializeAsString());
+        AddToMultipleObjects(update, defaultEquip);
 
         return true;
     }
@@ -383,9 +413,7 @@ bool Inventory::EquipItem(uint64_t itemId, uint32_t classId, uint32_t slotId, CM
         equippedState->set_new_class(classId);
         equippedState->set_new_slot(slotId);
 
-        CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
-        object->set_type_id(SOTypeItem);
-        object->set_object_data(item.SerializeAsString());
+        AddToMultipleObjects(update, item);
 
         return true;
     }
@@ -454,11 +482,7 @@ bool Inventory::UnlockCrate(uint64_t crateId,
 
     CSOEconItem &item = CreateItem(0, &temp);
 
-    newItem.set_version(InventoryVersion);
-    newItem.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    newItem.mutable_owner_soid()->set_id(m_steamId);
-    newItem.set_type_id(SOTypeItem);
-    newItem.set_object_data(item.SerializeAsString());
+    ToSingleObject(newItem, item);
 
     // set notification
     notification.add_item_id(item.id());
@@ -684,10 +708,6 @@ bool Inventory::SetItemPositions(
     std::vector<CMsgItemAcknowledged> &acknowledgements,
     CMsgSOMultipleObjects &update)
 {
-    update.set_version(InventoryVersion);
-    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    update.mutable_owner_soid()->set_id(m_steamId);
-
     for (const CMsgSetItemPositions_ItemPosition &position : message.item_positions())
     {
         auto it = m_items.find(position.item_id());
@@ -706,9 +726,7 @@ bool Inventory::SetItemPositions(
 
         item.set_inventory(position.position());
 
-        CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
-        object->set_type_id(SOTypeItem);
-        object->set_object_data(item.SerializeAsString());
+        AddToMultipleObjects(update, item);
     }
 
     return true;
@@ -793,11 +811,7 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
         m_itemSchema.SetAttributeFloat(attribute, 0);
     }
 
-    update.set_version(InventoryVersion);
-    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    update.mutable_owner_soid()->set_id(m_steamId);
-    update.set_type_id(SOTypeItem);
-    update.set_object_data(item->SerializeAsString());
+    ToSingleObject(update, *item);
 
     // remove the sticker
 #ifdef DESTORY_USED_ITEMS
@@ -898,11 +912,7 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
             // remove the sticker
             RemoveStickerAttributes(item, message.sticker_slot());
 
-            update.set_version(InventoryVersion);
-            update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-            update.mutable_owner_soid()->set_id(m_steamId);
-            update.set_type_id(SOTypeItem);
-            update.set_object_data(item.SerializeAsString());
+            ToSingleObject(update, item);
         }
     }
     else
@@ -910,11 +920,7 @@ bool Inventory::ScrapeSticker(const CMsgApplySticker &message,
         // just update the wear
         m_itemSchema.SetAttributeFloat(wearAttribute, wearLevel);
 
-        update.set_version(InventoryVersion);
-        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-        update.mutable_owner_soid()->set_id(m_steamId);
-        update.set_type_id(SOTypeItem);
-        update.set_object_data(item.SerializeAsString());
+        ToSingleObject(update, item);
     }
 
     return true;
@@ -946,11 +952,7 @@ bool Inventory::IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CM
 
     if (incremented)
     {
-        update.set_version(InventoryVersion);
-        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-        update.mutable_owner_soid()->set_id(m_steamId);
-        update.set_type_id(SOTypeItem);
-        update.set_object_data(item.SerializeAsString());
+        ToSingleObject(update, item);
         return true;
     }
 
@@ -974,11 +976,7 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     it->second.mutable_custom_name()->assign(name);
 
-    update.set_version(InventoryVersion);
-    update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    update.mutable_owner_soid()->set_id(m_steamId);
-    update.set_type_id(SOTypeItem);
-    update.set_object_data(it->second.SerializeAsString());
+    ToSingleObject(update, it->second);
 
 #ifdef DESTORY_USED_ITEMS
     auto tag = m_items.find(nameTagId);
@@ -1016,11 +1014,7 @@ bool Inventory::NameBaseItem(uint64_t nameTagId,
 
     item.mutable_custom_name()->assign(name);
 
-    create.set_version(InventoryVersion);
-    create.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    create.mutable_owner_soid()->set_id(m_steamId);
-    create.set_type_id(SOTypeItem);
-    create.set_object_data(item.SerializeAsString());
+    ToSingleObject(create, item);
 
 #ifdef DESTORY_USED_ITEMS
     auto tag = m_items.find(nameTagId);
@@ -1065,11 +1059,7 @@ bool Inventory::RemoveItemName(uint64_t itemId,
         notification.add_item_id(it->second.id());
         notification.set_request(k_EGCItemCustomizationNotification_RemoveItemName);
 
-        update.set_version(InventoryVersion);
-        update.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-        update.mutable_owner_soid()->set_id(m_steamId);
-        update.set_type_id(SOTypeItem);
-        update.set_object_data(it->second.SerializeAsString());
+        ToSingleObject(update, it->second);
     }
 
     return true;
@@ -1095,9 +1085,7 @@ bool Inventory::UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update)
     CSOEconItem &item = it->second;
     item.clear_equipped_state();
 
-    CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
-    object->set_type_id(SOTypeItem);
-    object->set_object_data(item.SerializeAsString());
+    AddToMultipleObjects(update, item);
 
     return true;
 }
@@ -1129,9 +1117,7 @@ void Inventory::UnequipItem(uint32_t classId, uint32_t slotId, CMsgSOMultipleObj
 
         if (modified)
         {
-            CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
-            object->set_type_id(SOTypeItem);
-            object->set_object_data(item.SerializeAsString());
+            AddToMultipleObjects(update, item);
         }
     }
 
@@ -1143,11 +1129,11 @@ void Inventory::UnequipItem(uint32_t classId, uint32_t slotId, CMsgSOMultipleObj
             Platform::Print("Unequip %u class %d slot %d\n", it->item_definition(), classId, slotId);
 
             // mikkotodo is this correct???
+            // mikkotodo rpobably not correct.. i gess we don't even have to do this
+            // because the new equip overrides the old one
+            // but we can't just remove it either because "update" would get fucked
             it->set_item_definition(0);
-
-            CMsgSOMultipleObjects_SingleObject *object = update.add_objects_modified();
-            object->set_type_id(SOTypeDefaultEquippedDefinitionInstanceClient);
-            object->set_object_data(it->SerializeAsString());
+            AddToMultipleObjects(update, *it);
 
             it = m_defaultEquips.erase(it);
         }
@@ -1163,11 +1149,7 @@ void Inventory::DestroyItem(ItemMap::iterator iterator, CMsgSOSingleObject &mess
     CSOEconItem item;
     item.set_id(iterator->second.id());
 
-    message.set_version(InventoryVersion);
-    message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
-    message.mutable_owner_soid()->set_id(m_steamId);
-    message.set_type_id(SOTypeItem);
-    message.set_object_data(item.SerializeAsString());
+    ToSingleObject(message, item);
 
     m_items.erase(iterator);
 }
