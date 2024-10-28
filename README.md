@@ -23,6 +23,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 ## Planned features
 - Configurable probabilitity distributions for case opening (all uniform currently)
 - Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
+- In-game store
 - Graphical inventory editor
 - A tool to copy your CS2 inventory over
 
