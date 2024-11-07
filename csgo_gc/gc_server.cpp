@@ -82,7 +82,28 @@ void ServerGC::Update()
     m_networking.Update();
 }
 
-void ServerGC::HandleNetMessage(const void *data, uint32_t size)
+template<typename T>
+static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamId)
+{
+    T message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("ValidateMessageOwnerSOID %llu: parsing failed\n", steamId);
+        return false;
+    }
+
+    if (message.owner_soid().type() != SoIdTypeSteamId
+        || message.owner_soid().id() != steamId)
+    {
+        Platform::Print("ValidateMessageOwnerSOID %llu: steam id mismatch (message has %llu)\n",
+            steamId, message.owner_soid().id());
+        return false;
+    }
+
+    return true;
+}
+
+void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
     GCMessageRead validate{ 0, data, size };
     if (!validate.IsValid())
@@ -94,27 +115,39 @@ void ServerGC::HandleNetMessage(const void *data, uint32_t size)
     if (!validate.IsProtobuf())
     {
         // all the allowed messages are protobuf based
+        Platform::Print("ServerGC: ignoring non protobuf message %u from %llu\n",
+            validate.TypeUnmasked(), steamId);
         return;
     }
 
-    // mikkotodo validate the message contents...
-    // currently you can modify the inventories of other clients
+    // validate the type and contents
+    bool isValid = false;
+
     switch (validate.TypeUnmasked())
     {
     case k_ESOMsg_Create:
     case k_ESOMsg_Update:
     case k_ESOMsg_Destroy:
+        isValid = ValidateMessageOwnerSOID<CMsgSOSingleObject>(validate, steamId);
+        break;
+
     case k_ESOMsg_CacheSubscribed:
+        isValid = ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(validate, steamId);
+        break;
+
     case k_ESOMsg_UpdateMultiple:
+        isValid = ValidateMessageOwnerSOID<CMsgSOMultipleObjects>(validate, steamId);
         break;
 
     case k_EMsgGCItemAcknowledged:
-        // for the case opening message
+        isValid = true;
         break;
+    }
 
-    default:
-        Platform::Print("ServerGC::HandleNetMessage: ignoring message %u\n",
-            validate.TypeUnmasked());
+    if (!isValid)
+    {
+        Platform::Print("ServerGC: ignoring net message %u from %llu\n",
+            validate.TypeUnmasked(), steamId);
         return;
     }
 

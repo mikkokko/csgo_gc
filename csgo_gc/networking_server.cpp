@@ -21,11 +21,11 @@ void NetworkingServer::Update()
         if (it == m_clients.end())
         {
             Platform::Print("NetworkingServer: ignored message from %llu (no session)\n", steamId);
-            message->Release();
-            continue;
         }
-
-        m_serverGC->HandleNetMessage(message->GetData(), message->GetSize());
+        else
+        {
+            m_serverGC->HandleNetMessage(steamId, message->GetData(), message->GetSize());
+        }
 
         message->Release();
     }

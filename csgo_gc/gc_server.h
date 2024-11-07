@@ -17,7 +17,7 @@ public:
     void Update();
 
     // called from net code
-    void HandleNetMessage(const void *data, uint32_t size);
+    void HandleNetMessage(uint64_t steamId, const void *data, uint32_t size);
 
 private:
     void OnServerHello(GCMessageRead &messageRead);
