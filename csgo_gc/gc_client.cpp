@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "gc_client.h"
 #include "graffiti.h"
+#include "keyvalue.h"
 
 const char *MessageName(uint32_t type);
 
@@ -58,6 +59,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
 
         case k_EMsgGCApplySticker:
             ApplySticker(messageRead);
+            break;
+
+        case k_EMsgGCStoreGetUserData:
+            StoreGetUserData(messageRead);
             break;
 
         default:
@@ -179,7 +184,7 @@ void ClientGC::BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHell
 
     // bullshit
     message.mutable_global_stats()->set_required_appid_version(13857);
-    message.mutable_global_stats()->set_pricesheet_version(1680057676);
+    message.mutable_global_stats()->set_pricesheet_version(1680057676); // mikkotodo revisit
     message.mutable_global_stats()->set_twitch_streams_version(2);
     message.mutable_global_stats()->set_active_tournament_eventid(20);
     message.mutable_global_stats()->set_active_survey_id(0);
@@ -410,7 +415,6 @@ void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     }
 }
 
-
 void ClientGC::ApplySticker(GCMessageRead &messageRead)
 {
     CMsgApplySticker message;
@@ -464,6 +468,34 @@ void ClientGC::ApplySticker(GCMessageRead &messageRead)
     {
         assert(false);
     }
+}
+
+void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
+{
+    CMsgStoreGetUserData message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgStoreGetUserData failed, ignoring\n");
+        return;
+    }
+
+    KeyValue priceSheet{ "price_sheet" };
+    if (!priceSheet.ParseFromFile("csgo_gc/price_sheet.txt"))
+    {
+        return;
+    }
+
+    std::string binaryString;
+    binaryString.reserve(1 << 17);
+    priceSheet.BinaryWriteToString(binaryString);
+
+    // fuck you idiot
+    CMsgStoreGetUserDataResponse response;
+    response.set_result(1);
+    response.set_price_sheet_version(1729); // what
+    *response.mutable_price_sheet() = std::move(binaryString);
+
+    SendMessageToGame(false, k_EMsgGCStoreGetUserDataResponse, response);
 }
 
 void ClientGC::UnlockCrate(GCMessageRead &messageRead)

@@ -35,6 +35,8 @@ public:
     bool ParseFromFile(const char *path);
     bool WriteToFile(const char *path);
 
+    void BinaryWriteToString(std::string &buffer);
+
     std::string_view Name() const { return m_name; }
     size_t SubkeyCount() const { return m_subkeys.size(); }
     std::string_view String() const { return m_string; }

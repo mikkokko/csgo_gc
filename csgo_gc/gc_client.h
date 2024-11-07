@@ -35,6 +35,7 @@ private:
     void SetItemPositions(GCMessageRead &messageRead);
     void IncrementKillCountAttribute(GCMessageRead &messageRead);
     void ApplySticker(GCMessageRead &messageRead);
+    void StoreGetUserData(GCMessageRead &messageRead);
 
     void UnlockCrate(GCMessageRead &messageRead);
     void NameItem(GCMessageRead &messageRead);

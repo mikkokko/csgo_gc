@@ -3,6 +3,23 @@
 
 constexpr auto SubkeyReserveCount = 8;
 
+// for writing binary keyvalues
+enum class BinaryCommand : uint8_t
+{
+    Subkey,
+    String,
+    Int,
+    Float,
+    Ptr,
+    Wstring,
+    Color,
+    Uint64,
+    CompiledIntByte,
+    CompiledInt0,
+    CompiledInt1,
+    Terminate
+};
+
 class KeyValueParser
 {
 public:
@@ -152,6 +169,43 @@ bool KeyValue::WriteToFile(const char *path)
 
     fclose(f);
     return true;
+}
+
+static void BinaryWriteCommand(std::string &buffer, BinaryCommand cmd)
+{
+    buffer.append(1, static_cast<char>(cmd));
+}
+
+static void BinaryWriteString(std::string &buffer, std::string_view string)
+{
+    buffer.append(string);
+    buffer.append(1, '\0');
+}
+
+void KeyValue::BinaryWriteToString(std::string &buffer)
+{
+    for (KeyValue &subkey : m_subkeys)
+    {
+        if (subkey.m_string.empty() && subkey.m_subkeys.empty())
+        {
+            continue;
+        }
+
+        if (subkey.m_string.size())
+        {
+            BinaryWriteCommand(buffer, BinaryCommand::String);
+            BinaryWriteString(buffer, subkey.m_name);
+            BinaryWriteString(buffer, subkey.m_string);
+        }
+        else
+        {
+            BinaryWriteCommand(buffer, BinaryCommand::Subkey);
+            BinaryWriteString(buffer, subkey.m_name);
+            subkey.BinaryWriteToString(buffer);
+        }
+    }
+
+    BinaryWriteCommand(buffer, BinaryCommand::Terminate);
 }
 
 bool KeyValue::Parse(KeyValueParser &parser)

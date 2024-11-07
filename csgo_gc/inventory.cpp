@@ -343,12 +343,6 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
     }
 }
 
-#define set_version fuck_you
-#define mutable_owner_soid fuck_you
-#define set_type_id fuck_you<,.µ<
-#define set_object_data fuck_you
-#define add_objects_modified fuck_you
-
 // mikkotodo move
 constexpr uint32_t SlotUneqip = 0xffff;
 constexpr uint64_t ItemIdInvalid = 0;
