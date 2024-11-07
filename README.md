@@ -16,12 +16,12 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Name tags
 - Works without full Steam API emulation
 - Full Windows, Linux and MacOS support
-- Funtional lobbies
+- Functional lobbies
 - Dedicated server support
 - Networking using Steam's P2P interface
 
 ## Planned features
-- Configurable probabilitity distributions for case opening (all uniform currently)
+- Configurable probability distributions for case opening (all uniform currently)
 - Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
 - In-game store
 - Graphical inventory editor
