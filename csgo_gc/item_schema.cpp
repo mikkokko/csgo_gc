@@ -880,9 +880,7 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool parentIsUnusu
         std::string_view listName = lootListKey.Name();
 
         // check if this list should be treated as unusual
-        bool isUnusual = parentIsUnusual &&
-            (listName.length() >= 8 &&
-                listName.compare(listName.length() - 8, 8, "_unusual") == 0);
+        bool isUnusual = parentIsUnusual && (listName.find("unusual") != std::string_view::npos);
 
         auto emplace = m_lootLists.emplace(std::piecewise_construct,
             std::forward_as_tuple(lootListKey.Name()),
