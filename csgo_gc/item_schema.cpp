@@ -603,6 +603,14 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
         }
     }
 
+    // check for industrial grade items (for souvenir packages)
+    bool hasIndustrialItems = false;
+    if (itemsByRarity.count(RarityCommon) > 0 && !itemsByRarity[RarityCommon].empty())
+    {
+        hasIndustrialItems = true;
+        Platform::Print("[GC] Found consumer grade items (%zu)\n", itemsByRarity[RarityCommon].size());
+    }
+
     // check for golds
     if (!lootList.isUnusual && containsUnusuals)
     {
@@ -640,8 +648,9 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
                 bool result = EconItemFromLootListItem(*items[index], item, generateStatTrak);
 
                 // set quality to 9 if souvenir package
-                if (result && itemSearch->second.m_tournamentEventId != 0)
+                if (result && itemSearch->second.m_tournamentEventId != 0 && hasIndustrialItems)
                 {
+                    Platform::Print("[GC] Setting quality to Tournament\n");
                     item.set_quality(QualityTournament);
                 }
 
@@ -887,7 +896,7 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool parentIsUnusu
             std::forward_as_tuple());
 
         LootList &lootList = emplace.first->second;
-        lootList.isUnusual = isUnusual;  // only set unusual if parent is unusual AND name ends with _unusual
+        lootList.isUnusual = isUnusual;  // only set unusual if parent is unusual AND name contains "unusual"
 
         for (const KeyValue &entryKey : lootListKey)
         {
