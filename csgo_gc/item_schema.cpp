@@ -68,6 +68,7 @@ ItemInfo::ItemInfo(uint32_t defIndex)
     , m_rarity{ ItemSchema::RarityCommon }
     , m_quality{ ItemSchema::QualityUnique }
     , m_supplyCrateSeries{ 0 }
+    , m_tournamentEventId{ 0 }
 {
     // RecursiveParseItem parses the rest
 }
@@ -555,7 +556,13 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
     lootListItems.reserve(32); // overkill
     bool containsUnusuals = GetLootListItems(lootList, lootListItems);
 
-    // stattrak def
+    if (!lootListItems.size())
+    {
+        assert(false);
+        return false;
+    }
+
+    // handle stattrak
     GenerateStatTrak generateStatTrak = GenerateStatTrak::No;
     if (lootList.willProduceStatTrak)
     {
@@ -566,19 +573,94 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
         generateStatTrak = GenerateStatTrak::Maybe;
     }
 
-    if (lootListItems.size())
+    // group items by rarity and map rarities to base weights
+    std::unordered_map<uint32_t, std::vector<const LootListItem*>> itemsByRarity;
+    std::unordered_map<uint32_t, uint32_t> rarityWeights;
+    uint32_t totalWeight = 0;
+
+    // rarity weight map
+    const std::unordered_map<uint32_t, uint32_t> baseWeights = {
+        {RarityDefault, 15625},    // Consumer (Gray)
+        {RarityCommon, 3125},      // Industrial (Light Blue)
+        {RarityUncommon, 625},     // Mil-Spec (Blue)
+        {RarityRare, 125},         // Restricted (Purple)
+        {RarityMythical, 25},      // Classified (Pink)
+        {RarityLegendary, 5}       // Covert (Red)
+    };
+
+    // group items by rarity and calculate total weight
+    for (const auto* lootItem : lootListItems)
     {
-        size_t index = g_random.RandomIndex(lootListItems.size());
-        const LootListItem &lootListItem = *lootListItems[index];
-        return EconItemFromLootListItem(lootListItem, item, generateStatTrak);
-    }
-    else
-    {
-        assert(false);
-        return false;
+        if (lootItem->quality != QualityUnusual)
+        {
+            // if we find an item of this rarity, add its base weight to total
+            if (itemsByRarity[lootItem->rarity].empty() && baseWeights.count(lootItem->rarity))
+            {
+                rarityWeights[lootItem->rarity] = baseWeights.at(lootItem->rarity);
+                totalWeight += baseWeights.at(lootItem->rarity);
+            }
+            itemsByRarity[lootItem->rarity].push_back(lootItem);
+        }
     }
 
-    return true;
+    // check for industrial grade items (for souvenir packages)
+    bool hasIndustrialItems = false;
+    if (itemsByRarity.count(RarityCommon) > 0 && !itemsByRarity[RarityCommon].empty())
+    {
+        hasIndustrialItems = true;
+        Platform::Print("[GC] Found consumer grade items (%zu)\n", itemsByRarity[RarityCommon].size());
+    }
+
+    // check for golds
+    if (!lootList.isUnusual && containsUnusuals)
+    {
+        std::vector<const LootListItem*> unusualItems;
+        if (g_random.Uint32(0, totalWeight + 2) < 2) // 2 weight
+        {
+            for (const auto* lootItem : lootListItems)
+            {
+                if (lootItem->quality == QualityUnusual)
+                {
+                    unusualItems.push_back(lootItem);
+                }
+            }
+
+            if (!unusualItems.empty())
+            {
+                size_t index = g_random.RandomIndex(unusualItems.size());
+                return EconItemFromLootListItem(*unusualItems[index], item, generateStatTrak);
+            }
+        }
+    }
+
+    uint32_t roll = g_random.Uint32(0, totalWeight);
+    uint32_t currentWeight = 0;
+
+    for (const auto& [rarity, items] : itemsByRarity)
+    {
+        if (rarityWeights.count(rarity))
+        {
+            currentWeight += rarityWeights[rarity];
+            if (roll < currentWeight)
+            {
+                // random item from this rarity
+                size_t index = g_random.RandomIndex(items.size());
+                bool result = EconItemFromLootListItem(*items[index], item, generateStatTrak);
+
+                // set quality to 9 if souvenir package
+                if (result && itemSearch->second.m_tournamentEventId != 0 && hasIndustrialItems)
+                {
+                    Platform::Print("[GC] Setting quality to Tournament\n");
+                    item.set_quality(QualityTournament);
+                }
+
+                return result;
+            }
+        }
+    }
+
+    assert(false);
+    return false;
 }
 
 void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey)
@@ -669,6 +751,12 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
         if (supplyCrateSeries)
         {
             info.m_supplyCrateSeries = supplyCrateSeries->GetNumber<uint32_t>("value");
+        }
+
+        const KeyValue* tournamentEventId = attributes->GetSubkey("tournament event id");
+        if (tournamentEventId)
+        {
+            info.m_tournamentEventId = tournamentEventId->GetNumber<uint32_t>("value");
         }
     }
 }
@@ -792,18 +880,23 @@ static LootListItemType LootListItemTypeFromName(std::string_view name, std::str
     return LootListItemPaintable;
 }
 
-void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
+void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool parentIsUnusual)
 {
     m_lootLists.reserve(lootListsKey->SubkeyCount());
 
     for (const KeyValue &lootListKey : *lootListsKey)
     {
+        std::string_view listName = lootListKey.Name();
+
+        // check if this list should be treated as unusual
+        bool isUnusual = parentIsUnusual && (listName.find("unusual") != std::string_view::npos);
+
         auto emplace = m_lootLists.emplace(std::piecewise_construct,
             std::forward_as_tuple(lootListKey.Name()),
             std::forward_as_tuple());
 
         LootList &lootList = emplace.first->second;
-        lootList.isUnusual = unusual;
+        lootList.isUnusual = isUnusual;  // only set unusual if parent is unusual AND name contains "unusual"
 
         for (const KeyValue &entryKey : lootListKey)
         {
@@ -841,7 +934,7 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
             LootListItem item;
             if (ParseLootListItem(item, entryName))
             {
-                if (unusual)
+                if (isUnusual)
                 {
                     // override the quality here...
                     item.quality = QualityUnusual;
