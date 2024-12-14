@@ -27,6 +27,7 @@ public:
     uint32_t m_rarity;
     uint32_t m_quality;
     uint32_t m_supplyCrateSeries; // cases only
+    uint32_t m_tournamentEventId; // souvenirs only
 };
 
 class PaintKitInfo
