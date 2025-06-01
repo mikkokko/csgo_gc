@@ -1187,6 +1187,16 @@ public:
     {
         return m_nCallbackFlags & CCallbackBase::k_ECallbackFlagsGameServer;
     }
+
+    void SetRegistered()
+    {
+        m_nCallbackFlags |= CCallbackBase::k_ECallbackFlagsRegistered;
+    }
+
+    void UnsetRegistered()
+    {
+        m_nCallbackFlags &= ~CCallbackBase::k_ECallbackFlagsRegistered;
+    }
 };
 
 class CallbackHooks
@@ -1203,16 +1213,15 @@ public:
         CallbackHook callbackHook{ id, callback };
         m_hooks.push_back(callbackHook);
 
+        static_cast<CallbackAccessor *>(callback)->SetRegistered();
         return true;
     }
 
     // returns true if callback was spoofed
     bool UnregisterCallback(CCallbackBase *callback)
     {
-        if (!ShouldHookCallback(callback->GetICallback()))
-        {
-            return false;
-        }
+        // mikkotodo FIX!!! why does GetICallback return 0 here?
+        // we used to call ShouldHookCallback here but can't because of this
 
         auto remove = [callback](const CallbackHook &hook)
         {
@@ -1221,6 +1230,7 @@ public:
 
         m_hooks.erase(std::remove_if(m_hooks.begin(), m_hooks.end(), remove), m_hooks.end());
 
+        static_cast<CallbackAccessor *>(callback)->UnsetRegistered();
         return true;
     }
 
