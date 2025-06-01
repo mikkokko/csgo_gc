@@ -1,11 +1,10 @@
 #include "stdafx.h"
 #include "inventory.h"
+#include "case_opening.h"
+#include "config.h"
 #include "gc_const.h"
 #include "keyvalue.h"
 #include "random.h"
-
-// keys, cases, stickers...
-//#define DESTORY_USED_ITEMS
 
 constexpr const char *InventoryFilePath = "csgo_gc/inventory.txt";
 
@@ -38,8 +37,9 @@ inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paint
     return false;
 }
 
-Inventory::Inventory(uint64_t steamId)
+Inventory::Inventory(uint64_t steamId, const GCConfig &config)
     : m_steamId{ steamId }
+    , m_config{ config }
 {
     ReadFromFile();
 }
@@ -467,8 +467,11 @@ bool Inventory::UnlockCrate(uint64_t crateId,
         return false;
     }
 
+    // CASE OPENING
+    CaseOpening caseOpening{ m_itemSchema, m_config, m_random };
+
     CSOEconItem temp;
-    if (!m_itemSchema.SelectItemFromCrate(crate->second, temp))
+    if (!caseOpening.SelectItemFromCrate(crate->second, temp))
     {
         assert(false);
         return false;
@@ -483,16 +486,17 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     notification.set_request(k_EGCItemCustomizationNotification_UnlockCrate);
 
     // remove the crate
-#ifdef DESTORY_USED_ITEMS
-    DestroyItem(crate, destroyCrate);
-    
-    // remove the key if one was used (yes, we don't validate keys...)
-    auto key = m_items.find(keyId);
-    if (key != m_items.end())
+    if (m_config.DestroyUsedItems())
     {
-        DestroyItem(key, destroyKey);
+        DestroyItem(crate, destroyCrate);
+
+        // remove the key if one was used (yes, we don't validate keys...)
+        auto key = m_items.find(keyId);
+        if (key != m_items.end())
+        {
+            DestroyItem(key, destroyKey);
+        }
     }
-#endif
 
     return true;
 }
@@ -808,9 +812,10 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
     ToSingleObject(update, *item);
 
     // remove the sticker
-#ifdef DESTORY_USED_ITEMS
-    DestroyItem(sticker, destroy);
-#endif
+    if (m_config.DestroyUsedItems())
+    {
+        DestroyItem(sticker, destroy);
+    }
 
     // notification, if any
     notification.add_item_id(item->id());
@@ -972,16 +977,17 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     ToSingleObject(update, it->second);
 
-#ifdef DESTORY_USED_ITEMS
-    auto tag = m_items.find(nameTagId);
-    if (tag == m_items.end())
+    if (m_config.DestroyUsedItems())
     {
-        assert(false);
-        return false;
-    }
+        auto tag = m_items.find(nameTagId);
+        if (tag == m_items.end())
+        {
+            assert(false);
+            return false;
+        }
 
-    DestroyItem(tag, destroy);
-#endif
+        DestroyItem(tag, destroy);
+    }
 
     notification.add_item_id(it->second.id());
     notification.set_request(k_EGCItemCustomizationNotification_NameItem);
@@ -1010,16 +1016,17 @@ bool Inventory::NameBaseItem(uint64_t nameTagId,
 
     ToSingleObject(create, item);
 
-#ifdef DESTORY_USED_ITEMS
-    auto tag = m_items.find(nameTagId);
-    if (tag == m_items.end())
+    if (m_config.DestroyUsedItems())
     {
-        assert(false);
-        return false;
-    }
+        auto tag = m_items.find(nameTagId);
+        if (tag == m_items.end())
+        {
+            assert(false);
+            return false;
+        }
 
-    DestroyItem(tag, destroy);
-#endif
+        DestroyItem(tag, destroy);
+    }
 
     notification.add_item_id(item.id()); // mikkotodo def index???
     notification.set_request(k_EGCItemCustomizationNotification_NameBaseItem);

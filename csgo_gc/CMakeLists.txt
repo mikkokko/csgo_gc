@@ -1,6 +1,7 @@
 project(csgo_gc)
 
 add_library(csgo_gc SHARED
+    case_opening.cpp
     config.cpp
     gc_client.cpp
     gc_message.cpp
@@ -13,7 +14,6 @@ add_library(csgo_gc SHARED
     main.cpp
     networking_client.cpp
     networking_server.cpp
-    random.cpp
     steam_hook.cpp)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")

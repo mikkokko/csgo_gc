@@ -12,7 +12,7 @@ enum class AttributeType
 class AttributeInfo
 {
 public:
-    AttributeInfo(const KeyValue &key);
+    explicit AttributeInfo(const KeyValue &key);
 
     AttributeType m_type;
 };
@@ -20,7 +20,7 @@ public:
 class ItemInfo
 {
 public:
-    ItemInfo(uint32_t defIndex);
+    explicit ItemInfo(uint32_t defIndex);
 
     uint32_t m_defIndex;
     std::string m_name;
@@ -32,7 +32,7 @@ public:
 class PaintKitInfo
 {
 public:
-    PaintKitInfo(const KeyValue &key);
+    explicit PaintKitInfo(const KeyValue &key);
 
     uint32_t m_defIndex;
     uint32_t m_rarity;
@@ -44,7 +44,7 @@ public:
 class StickerKitInfo
 {
 public:
-    StickerKitInfo(const KeyValue &key);
+    explicit StickerKitInfo(const KeyValue &key);
 
     uint32_t m_defIndex;
     uint32_t m_rarity;
@@ -70,6 +70,9 @@ enum LootListItemType
 
 struct LootListItem
 {
+    // for case opening: returns RarityUnusual for items of unusual quality
+    uint32_t CaseRarity() const;
+
     const ItemInfo *itemInfo{};
     LootListItemType type{ LootListItemNoAttribute };
 
@@ -93,14 +96,6 @@ struct LootList
     bool isUnusual{};
 };
 
-// mikkotodo unfuck
-enum class GenerateStatTrak
-{
-    No,
-    Yes,
-    Maybe
-};
-
 class ItemSchema
 {
 public:
@@ -114,8 +109,8 @@ public:
     bool SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const;
     bool SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const;
 
-    // case opening
-    bool SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item);
+    // for case opening
+    const LootList *GetCrateLootList(const CSOEconItem &crate) const;
 
 public:
     // these could be parsed from the item schema but reduce code complexity by hardcoding them
@@ -230,9 +225,6 @@ private:
     StickerKitInfo *StickerKitInfoByName(std::string_view name);
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
     MusicDefinitionInfo *MusicDefinitionInfoByName(std::string_view name);
-
-    // case opening
-    bool EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak statTrak);
 
     std::unordered_map<uint32_t, ItemInfo> m_itemInfo;
     std::unordered_map<uint32_t, AttributeInfo> m_attributeInfo;

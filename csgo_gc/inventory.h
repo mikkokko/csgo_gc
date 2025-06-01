@@ -1,8 +1,10 @@
 #pragma once
 
-#include "item_schema.h"
 #include "gc_const_csgo.h"
+#include "item_schema.h"
+#include "random.h"
 
+class GCConfig;
 class KeyValue;
 
 using ItemMap = std::unordered_map<uint64_t, CSOEconItem>;
@@ -10,7 +12,7 @@ using ItemMap = std::unordered_map<uint64_t, CSOEconItem>;
 class Inventory
 {
 public:
-    Inventory(uint64_t steamId);
+    Inventory(uint64_t steamId, const GCConfig &config);
     ~Inventory();
 
     void BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level, bool server);
@@ -113,7 +115,9 @@ private:
     }
 
     const uint64_t m_steamId;
+    const GCConfig &m_config;
     ItemSchema m_itemSchema;
+    Random m_random;
     uint32_t m_lastHighItemId{};
     ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;

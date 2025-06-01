@@ -15,3 +15,18 @@
 "cmd_leader"	"888"
 "player_level"	"39"
 "player_cur_xp"	"4999"
+
+// these are the same weights valve uses
+"rarity_weights"
+{
+	"1"	"10000000"
+	"2"	"2000000"
+	"3"	"400000"
+	"4"	"80000"
+	"5"	"16000"
+	"6"	"3200"
+	"99"	"1280"
+}
+
+// remove keys, cases, stickers, etc. after they've been used
+"destroy_used_items"	"1"

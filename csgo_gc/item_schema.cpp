@@ -1,8 +1,8 @@
 #include "stdafx.h"
 #include "item_schema.h"
+#include "config.h"
 #include "keyvalue.h"
 #include "gc_const_csgo.h" // mikkotodo remove?
-#include "random.h"
 
 // ideally this would get parsed from the item schema...
 static uint32_t ItemRarityFromString(std::string_view name)
@@ -97,6 +97,16 @@ MusicDefinitionInfo::MusicDefinitionInfo(const KeyValue &key)
     assert(m_defIndex);
 }
 
+uint32_t LootListItem::CaseRarity() const
+{
+    if (quality == ItemSchema::QualityUnusual)
+    {
+        return ItemSchema::RarityUnusual;
+    }
+
+    return rarity;
+}
+
 ItemSchema::ItemSchema()
 {
     KeyValue itemSchema{ "root" };
@@ -177,18 +187,6 @@ ItemSchema::ItemSchema()
         ParseRevolvingLootLists(revolvingLootListsKey);
     }
 }
-
-//AttributeType ItemSchema::AttributeType(uint32_t defIndex) const
-//{
-//    auto it = m_attributeInfo.find(defIndex);
-//    if (it != m_attributeInfo.end())
-//    {
-//        return it->second.type;
-//    }
-//
-//    assert(false);
-//    return AttributeType::Float;
-//}
 
 float ItemSchema::AttributeFloat(const CSOEconItemAttribute *attribute) const
 {
@@ -386,157 +384,13 @@ bool ItemSchema::SetAttributeString(CSOEconItemAttribute *attribute, std::string
     return true;
 }
 
-bool ItemSchema::EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, GenerateStatTrak generateStatTrak)
-{
-    bool statTrak;
-
-    switch (generateStatTrak)
-    {
-    case GenerateStatTrak::Yes:
-        statTrak = true;
-        break;
-
-    case GenerateStatTrak::Maybe:
-        statTrak = (g_random.Uint32(1, 10) == 1);
-        break;
-
-  default:
-        statTrak = false;
-        break;
-    }
-
-    // NOTE: unusual stattraks only valid below id 1000
-    if (statTrak
-        && lootListItem.quality == QualityUnusual
-        && lootListItem.itemInfo->m_defIndex >= 1000)
-    {
-        statTrak = false;
-    }
-
-    // stattrak affects quality
-    uint32_t quality = lootListItem.quality;
-
-    // but unusual overrides strange
-    if (statTrak && lootListItem.quality != QualityUnusual)
-    {
-        quality = QualityStrange;
-    }
-
-    assert(lootListItem.rarity);
-
-    item.set_inventory(InventoryUnacknowledged(UnacknowledgedFoundInCrate));
-    item.set_def_index(lootListItem.itemInfo->m_defIndex);
-    item.set_quantity(1);
-    item.set_level(1); // mikkotodo parse from item
-    item.set_quality(quality);
-    item.set_flags(0);
-    item.set_origin(ItemOriginCrate);
-    item.set_in_use(false);
-    item.set_rarity(lootListItem.rarity);
-
-    if (lootListItem.type == LootListItemSticker)
-    {
-        // mikkotodo anything else?
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(AttributeStickerId0);
-        SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
-    }
-    else if (lootListItem.type == LootListItemSpray)
-    {
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(AttributeStickerId0);
-        SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
-
-        // add AttributeSpraysRemaining when it's unsealed (mikkotodo how does the real gc do this)
-
-        attribute = item.add_attribute();
-        attribute->set_def_index(AttributeSprayTintId);
-        SetAttributeUint32(attribute, g_random.Uint32(GraffitiTintMin, GraffitiTintMax));
-    }
-    else if (lootListItem.type == LootListItemPatch)
-    {
-        // mikkotodo anything else?
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(AttributeStickerId0);
-        SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
-    }
-    else if (lootListItem.type == LootListItemMusicKit)
-    {
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(AttributeMusicId);
-        SetAttributeUint32(attribute, lootListItem.musicDefinitionInfo->m_defIndex);
-    }
-    else if (lootListItem.type == LootListItemPaintable)
-    {
-        const PaintKitInfo *paintKitInfo = lootListItem.paintKitInfo;
-
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(AttributeTexturePrefab);
-        SetAttributeUint32(attribute, paintKitInfo->m_defIndex);
-
-        attribute = item.add_attribute();
-        attribute->set_def_index(AttributeTextureSeed);
-        SetAttributeUint32(attribute, g_random.Uint32(0, 1000));
-
-        // mikkotodo how does the float distribution work?
-        attribute = item.add_attribute();
-        attribute->set_def_index(AttributeTextureWear);
-        SetAttributeFloat(attribute, g_random.Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat));
-    }
-    else if (lootListItem.type == LootListItemNoAttribute)
-    {
-        // nothing
-    }
-    else
-    {
-        assert(false);
-    }
-
-    if (statTrak)
-    {
-        assert((lootListItem.type == LootListItemMusicKit) || (lootListItem.type == LootListItemPaintable));
-
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(AttributeKillEater);
-        SetAttributeUint32(attribute, 0);
-
-        // mikkotodo fix magic
-        int scoreType = (lootListItem.type == LootListItemMusicKit) ? 1 : 0;
-
-        attribute = item.add_attribute();
-        attribute->set_def_index(AttributeKillEaterScoreType);
-        SetAttributeUint32(attribute, scoreType);
-
-    }
-
-    return true;
-}
-
-// returns true if there are unusuals (stattrak able)
-static bool GetLootListItems(const LootList &lootList, std::vector<const LootListItem *> &items)
-{
-    bool unusuals = lootList.isUnusual;
-
-    for (const LootList *other : lootList.subLists)
-    {
-        unusuals |= GetLootListItems(*other, items);
-    }
-
-    for (const LootListItem &item : lootList.items)
-    {
-        items.push_back(&item);
-    }
-
-    return unusuals;
-}
-
-bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item)
+const LootList *ItemSchema::GetCrateLootList(const CSOEconItem &crate) const
 {
     auto itemSearch = m_itemInfo.find(crate.def_index());
     if (itemSearch == m_itemInfo.end())
     {
         assert(false);
-        return false;
+        return nullptr;
     }
 
     assert(itemSearch->second.m_supplyCrateSeries);
@@ -545,40 +399,10 @@ bool ItemSchema::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item
     if (lootListSearch == m_revolvingLootLists.end())
     {
         assert(false);
-        return false;
+        return nullptr;
     }
 
-    const LootList &lootList = lootListSearch->second;
-    assert(lootList.subLists.empty() != lootList.items.empty());
-
-    std::vector<const LootListItem *> lootListItems;
-    lootListItems.reserve(32); // overkill
-    bool containsUnusuals = GetLootListItems(lootList, lootListItems);
-
-    // stattrak def
-    GenerateStatTrak generateStatTrak = GenerateStatTrak::No;
-    if (lootList.willProduceStatTrak)
-    {
-        generateStatTrak = GenerateStatTrak::Yes;
-    }
-    else if (containsUnusuals)
-    {
-        generateStatTrak = GenerateStatTrak::Maybe;
-    }
-
-    if (lootListItems.size())
-    {
-        size_t index = g_random.RandomIndex(lootListItems.size());
-        const LootListItem &lootListItem = *lootListItems[index];
-        return EconItemFromLootListItem(lootListItem, item, generateStatTrak);
-    }
-    else
-    {
-        assert(false);
-        return false;
-    }
-
-    return true;
+    return &lootListSearch->second;
 }
 
 void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey)

@@ -7,7 +7,7 @@ const char *MessageName(uint32_t type);
 
 ClientGC::ClientGC(uint64_t steamId)
     : m_steamId{ steamId }
-    , m_inventory{ steamId }
+    , m_inventory{ steamId, m_config }
 {
     Platform::Print("ClientGC spawned for user %llu\n", steamId);
 
