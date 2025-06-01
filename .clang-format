@@ -1,0 +1,9 @@
+---
+BasedOnStyle: WebKit
+AlignEscapedNewlines: DontAlign
+BreakBeforeBraces: Allman
+CommentPragmas: '^[^ ]'
+PointerAlignment: Right
+SortIncludes: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeCpp11BracedList: false
