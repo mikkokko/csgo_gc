@@ -43,10 +43,8 @@ else()
     add_compile_options(-fpic -fvisibility=hidden)
 
     if (NOT APPLE)
-        add_link_options(-Wl,--no-undefined)
+        add_link_options(-Wl,--no-undefined -z noexecstack)
     endif()
-
-	add_link_options(-z noexecstack)
 endif()
 
 add_subdirectory(csgo_gc)
