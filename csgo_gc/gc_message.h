@@ -13,6 +13,7 @@ public:
     bool IsValid() const { return !m_error; }
     bool IsProtobuf() const { return m_type & ProtobufMask; }
     uint32_t TypeUnmasked() const { return m_type & ~ProtobufMask; }
+    uint64_t JobId() const { return m_jobId; }
 
     template<typename T>
     bool ReadProtobuf(T &message)
@@ -51,6 +52,7 @@ private:
     const uint8_t *const m_data;
     const uint32_t m_size;
     uint32_t m_type; // parsed from the message, protobuf mask is kept
+    uint64_t m_jobId{ JobIdInvalid };
 
     // the state
     uint32_t m_offset{};
@@ -61,7 +63,7 @@ class GCMessageWrite
 {
 public:
     // protobuf messages
-    GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message);
+    GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
     // non protobuf messages, data written with the writer functions
     GCMessageWrite(uint32_t type);

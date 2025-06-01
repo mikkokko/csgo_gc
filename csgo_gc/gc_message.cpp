@@ -22,7 +22,31 @@ GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
     {
         // reading a ProtoMsgHeader
         uint32_t headerSize = ReadUint32();
-        ReadData(headerSize);
+        if (headerSize)
+        {
+            CMsgProtoBufHeader header;
+            const void *headerData = ReadData(headerSize);
+            if (!header.ParseFromArray(headerData, headerSize))
+            {
+                assert(false);
+                m_error = true;
+                return;
+            }
+
+            assert(header.client_steam_id() == 0);
+            assert(header.client_session_id() == 0);
+            assert(header.source_app_id() == 0);
+            assert(header.job_id_source() != JobIdInvalid);
+            assert(header.job_id_target() == JobIdInvalid);
+            assert(header.target_job_name() == "");
+            assert(header.eresult() == 2);
+            assert(header.error_message() == "");
+            assert(header.ip() == 0);
+            assert(header.gc_msg_src() == 0);
+            assert(header.gc_dir_index_source() == 0);
+
+            m_jobId = header.job_id_source();
+        }
     }
     else
     {
@@ -84,20 +108,41 @@ std::string_view GCMessageRead::ReadString()
     return {};
 }
 
-GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message)
+// mikkotodo useful elswhere as well???
+static void AppendProtobuf(std::vector<uint8_t> &buffer, const google::protobuf::MessageLite &message)
+{
+    size_t protobufOffset = buffer.size();
+    size_t protobufSize = message.ByteSizeLong();
+    buffer.resize(buffer.size() + protobufSize);
+
+    [[maybe_unused]] bool result = message.SerializeToArray(buffer.data() + protobufOffset, protobufSize);
+    assert(result);
+}
+
+GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message, uint64_t jobId)
     : m_type{ type | ProtobufMask }
 {
     // write the protobuf message hader
     WriteUint32(m_type);
-    WriteUint32(0);
+
+    if (jobId != JobIdInvalid)
+    {
+        // response to a job
+        CMsgProtoBufHeader header;
+        header.set_job_id_target(jobId);
+
+        // write the header size and the data
+        WriteUint32(header.ByteSizeLong());
+        AppendProtobuf(m_buffer, header);
+    }
+    else
+    {
+        // no need for a CMsgProtoBufHeader
+        WriteUint32(0);
+    }
 
     // append the serialized protobuf message
-    size_t protobufOffset = m_buffer.size();
-    size_t protobufSize = message.ByteSizeLong();
-    m_buffer.resize(m_buffer.size() + protobufSize);
-
-    [[maybe_unused]] bool result = message.SerializeToArray(m_buffer.data() + protobufOffset, protobufSize);
-    assert(result);
+    AppendProtobuf(m_buffer, message);
 }
 
 GCMessageWrite::GCMessageWrite(uint32_t type)
