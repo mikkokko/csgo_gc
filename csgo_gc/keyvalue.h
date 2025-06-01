@@ -30,7 +30,7 @@ inline float FromString(std::string_view string)
 class KeyValue
 {
 public:
-    KeyValue(std::string_view name);
+    explicit KeyValue(std::string_view name);
 
     bool ParseFromFile(const char *path);
     bool WriteToFile(const char *path);

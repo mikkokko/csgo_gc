@@ -121,10 +121,9 @@ void NetworkingClient::SendMessage(const GCMessageWrite &message)
 void NetworkingClient::SetAuthTicket(uint32_t handle, const void *data, uint32_t size)
 {
     AuthTicket &ticket = m_tickets[handle];
-
     ticket.steamId = 0;
-    ticket.buffer.resize(size);
-    memcpy(ticket.buffer.data(), data, size);
+    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
+    ticket.buffer.assign(bytes, bytes + size);
 }
 
 void NetworkingClient::ClearAuthTicket(uint32_t handle)

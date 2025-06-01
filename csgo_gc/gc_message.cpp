@@ -124,8 +124,8 @@ GCMessageWrite::GCMessageWrite(const void *data, uint32_t size)
         assert(false);
     }
 
-    m_buffer.resize(size);
-    memcpy(m_buffer.data(), data, m_buffer.size());
+    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
+    m_buffer.assign(bytes, bytes + size);
 }
 
 void GCMessageWrite::WriteData(const void *data, uint32_t size)

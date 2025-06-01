@@ -17,7 +17,7 @@ ServerGC::ServerGC()
 
 ServerGC::~ServerGC()
 {
-    Platform::Print("ServerGC destoryed\n");
+    Platform::Print("ServerGC destroyed\n");
 }
 
 void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)

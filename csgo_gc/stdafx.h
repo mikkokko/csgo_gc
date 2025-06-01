@@ -18,9 +18,5 @@
 #include "gcsdk_gcmessages.pb.h"
 #include "gcsystemmsgs.pb.h"
 
-// debug session
-// mikkotodo wtf is the comment above and why is this here
-namespace Platform
-{
-void Print(const char *format, ...);
-}
+// used in many files for logging
+#include "platform.h"

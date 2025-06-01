@@ -18,6 +18,9 @@ public:
     void SendMessage(uint64_t steamId, const GCMessageWrite &message);
 
 private:
+    ServerGC *const m_serverGC;
+    std::unordered_set<uint64_t> m_clients;
+
     STEAM_GAMESERVER_CALLBACK(NetworkingServer,
         OnSessionRequest,
         SteamNetworkingMessagesSessionRequest_t,
@@ -27,7 +30,4 @@ private:
         OnSessionFailed,
         SteamNetworkingMessagesSessionFailed_t,
         m_sessionFailed);
-
-    ServerGC *const m_serverGC;
-    std::unordered_set<uint64_t> m_clients;
 };

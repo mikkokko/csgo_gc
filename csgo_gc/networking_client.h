@@ -8,7 +8,7 @@ class GCMessageWrite;
 
 struct AuthTicket
 {
-    uint64_t steamId; // gameserver
+    uint64_t steamId{}; // gameserver
     std::vector<uint8_t> buffer;
 };
 
@@ -29,6 +29,11 @@ private:
     // return false if it wasn't handled, in which case we pass it to the gc
     bool HandleMessage(uint64_t steamId, GCMessageRead &message);
 
+    ClientGC *const m_clientGC;
+    uint64_t m_serverSteamId{};
+
+    std::unordered_map<uint32_t, AuthTicket> m_tickets;
+
     STEAM_CALLBACK(NetworkingClient,
         OnSessionRequest,
         SteamNetworkingMessagesSessionRequest_t,
@@ -38,9 +43,4 @@ private:
         OnSessionFailed,
         SteamNetworkingMessagesSessionFailed_t,
         m_sessionFailed);
-
-    ClientGC *const m_clientGC;
-    uint64_t m_serverSteamId{};
-
-    std::unordered_map<uint32_t, AuthTicket> m_tickets;
 };

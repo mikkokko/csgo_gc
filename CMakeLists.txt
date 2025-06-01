@@ -45,6 +45,8 @@ else()
     if (NOT APPLE)
         add_link_options(-Wl,--no-undefined)
     endif()
+
+	add_link_options(-z noexecstack)
 endif()
 
 add_subdirectory(csgo_gc)
