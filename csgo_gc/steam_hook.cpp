@@ -26,7 +26,7 @@ static ClientGC *s_clientGC;
 static ServerGC *s_serverGC;
 
 template<size_t N>
-inline bool InterfaceMatches(const char *name, const char(&compare)[N])
+inline bool InterfaceMatches(const char *name, const char (&compare)[N])
 {
     size_t length = strlen(name);
     if (length != (N - 1))
@@ -811,7 +811,7 @@ public:
 };
 
 template<typename Interface, typename Proxy, typename... Args>
-inline Interface *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&... args)
+inline Interface *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
 {
     if (!pointer)
     {
@@ -954,7 +954,7 @@ public:
     }
 
     // temp macro
-#define PROXY_INTERFACE(func, user, pipe, version, ...) ProxyInterface(m_original->func(user, pipe, version), user, pipe, version, ## __VA_ARGS__)
+#define PROXY_INTERFACE(func, user, pipe, version, ...) ProxyInterface(m_original->func(user, pipe, version), user, pipe, version, ##__VA_ARGS__)
 
     ISteamUser *GetISteamUser(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
     {
@@ -1091,12 +1091,12 @@ public:
         return PROXY_INTERFACE(GetISteamHTMLSurface, hSteamuser, hSteamPipe, pchVersion);
     }
 
-    void DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess(void(*func)()) override
+    void DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess(void (*func)()) override
     {
         m_original->DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess(func);
     }
 
-    void DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess(void(*func)()) override
+    void DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess(void (*func)()) override
     {
         m_original->DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess(func);
     }
@@ -1214,7 +1214,8 @@ public:
             return false;
         }
 
-        auto remove = [callback](const CallbackHook &hook) {
+        auto remove = [callback](const CallbackHook &hook)
+        {
             return (hook.callback == callback);
         };
 
@@ -1367,9 +1368,9 @@ void SteamHookInstall(bool dedicated)
     if (!InitializeSteamAPI(dedicated))
     {
         Platform::Error("Steam initialization failed. Please try the following steps:\n"
-            "- Ensure that Steam is running.\n"
-            "- Restart Steam and try again.\n"
-            "- Verify that you have launched CS:GO or CS2 through Steam at least once.");
+                        "- Ensure that Steam is running.\n"
+                        "- Restart Steam and try again.\n"
+                        "- Verify that you have launched CS:GO or CS2 through Steam at least once.");
     }
 
     uint8_t steamClientPath[4096]; // NOTE: text encoding stored depends on the platform (wchar_t on windows)

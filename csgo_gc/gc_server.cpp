@@ -188,7 +188,7 @@ void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     }
 
     // just forward it to the killer
-    GCMessageWrite messageWrite{ k_EMsgGC_IncrementKillCountAttribute , message };
+    GCMessageWrite messageWrite{ k_EMsgGC_IncrementKillCountAttribute, message };
     CSteamID killerId{ message.killer_account_id(), k_EUniversePublic, k_EAccountTypeIndividual };
     m_networking.SendMessage(killerId.ConvertToUint64(), messageWrite);
 }

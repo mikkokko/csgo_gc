@@ -40,7 +40,6 @@ public:
     float m_maxFloat;
 };
 
-
 class StickerKitInfo
 {
 public:
@@ -205,7 +204,6 @@ public:
         AttributeSpraysRemaining = 232,
         AttributeSprayTintId = 233,
     };
-
 
 private:
     void ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey);

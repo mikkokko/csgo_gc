@@ -100,7 +100,7 @@ CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
         highItemId = m_lastHighItemId;
     }
 
-    for (; ; highItemId++)
+    for (;; highItemId++)
     {
         uint64_t itemId = ComposeItemId(AccountId(), highItemId);
         if ((itemId & ItemIdDefaultItemMask) == ItemIdDefaultItemMask)
@@ -399,7 +399,7 @@ bool Inventory::EquipItem(uint64_t itemId, uint32_t classId, uint32_t slotId, CM
         UnequipItem(classId, slotId, update);
 
         Platform::Print("EquipItem %llu class %d slot %d\n", itemId, classId,
-                        slotId);
+            slotId);
 
         CSOEconItem &item = it->second;
 
@@ -831,7 +831,7 @@ static void RemoveStickerAttributes(CSOEconItem &item, uint32_t slot)
     uint32_t attributeStickerId = ItemSchema::AttributeStickerId0 + (slot * 4);
     uint32_t attributeStickerWear = ItemSchema::AttributeStickerWear0 + (slot * 4);
 
-    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end(); )
+    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end();)
     {
         if (attrib->def_index() == attributeStickerId
             || attrib->def_index() == attributeStickerWear)

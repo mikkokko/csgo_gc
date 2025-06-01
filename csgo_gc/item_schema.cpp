@@ -7,8 +7,7 @@
 // ideally this would get parsed from the item schema...
 static uint32_t ItemRarityFromString(std::string_view name)
 {
-    const std::pair<std::string_view, uint32_t> rarityNames[] =
-    {
+    const std::pair<std::string_view, uint32_t> rarityNames[] = {
         { "default", ItemSchema::RarityDefault },
         { "common", ItemSchema::RarityCommon },
         { "uncommon", ItemSchema::RarityUncommon },
@@ -305,7 +304,6 @@ bool ItemSchema::SetAttributeFloat(CSOEconItemAttribute *attribute, float value)
     return true;
 }
 
-
 bool ItemSchema::SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const
 {
     auto it = m_attributeInfo.find(attribute->def_index());
@@ -427,8 +425,7 @@ void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey
 // ideally this would get parsed from the item schema...
 static uint32_t ItemQualityFromString(std::string_view name)
 {
-    const std::pair<std::string_view, uint32_t> qualityNames[] =
-    {
+    const std::pair<std::string_view, uint32_t> qualityNames[] = {
         { "normal", ItemSchema::QualityNormal },
         { "genuine", ItemSchema::QualityGenuine },
         { "vintage", ItemSchema::QualityVintage },
@@ -500,7 +497,7 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
 void ItemSchema::ParseAttributes(const KeyValue *attributesKey)
 {
     m_attributeInfo.reserve(attributesKey->SubkeyCount());
-    
+
     for (const KeyValue &attributeKey : *attributesKey)
     {
         uint32_t defIndex = FromString<uint32_t>(attributeKey.Name());
@@ -597,8 +594,7 @@ static LootListItemType LootListItemTypeFromName(std::string_view name, std::str
         return LootListItemNoAttribute;
     }
 
-    const std::pair<std::string_view, LootListItemType> mapNames[] =
-    {
+    const std::pair<std::string_view, LootListItemType> mapNames[] = {
         { "sticker", LootListItemSticker },
         { "spray", LootListItemSpray },
         { "patch", LootListItemPatch },

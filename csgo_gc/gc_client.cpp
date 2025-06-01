@@ -199,7 +199,7 @@ void ClientGC::BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHell
 }
 
 void ClientGC::BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,
-                                  const CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &matchmakingHello)
+    const CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &matchmakingHello)
 {
     // mikkotodo remove dox
     message.set_version(0); // this is accurate
@@ -514,12 +514,12 @@ void ClientGC::UnlockCrate(GCMessageRead &messageRead)
     CMsgGCItemCustomizationNotification notification;
 
     if (m_inventory.UnlockCrate(
-        crateId,
-        keyId,
-        destroyCrate,
-        destroyKey,
-        newItem,
-        notification))
+            crateId,
+            keyId,
+            destroyCrate,
+            destroyKey,
+            newItem,
+            notification))
     {
         // mikkotodo what does the server want to know
         SendMessageToGame(true, k_ESOMsg_Destroy, destroyCrate);
@@ -553,7 +553,7 @@ void ClientGC::NameItem(GCMessageRead &messageRead)
     {
         SendMessageToGame(true, k_ESOMsg_Update, update);
         SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-    
+
         SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else

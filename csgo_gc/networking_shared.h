@@ -5,7 +5,7 @@
 constexpr int NetMessageSendFlags = k_nSteamNetworkingSend_Reliable;
 constexpr int NetMessageChannel = 7;
 
-// NOTE: these are used as gc message types! 
+// NOTE: these are used as gc message types!
 // if they overlap with the game's gc messages, we're doomed
 enum ENetworkMsg : uint32_t
 {

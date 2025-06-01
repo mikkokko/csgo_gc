@@ -15,7 +15,7 @@
 #define SYMBOL_NAME "LauncherMain"
 #endif
 
-typedef int(*LauncherMain_t)(int argc, char **argv);
+typedef int (*LauncherMain_t)(int argc, char **argv);
 typedef void (*InstallGC_t)(bool dedicated);
 
 static void ErrorMessageBox(const char *format, ...)
@@ -94,7 +94,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    modulePath = "csgo_gc/" GC_LIB_DIR "/" "csgo_gc" GC_LIB_EXTENSION;
+    modulePath = "csgo_gc/" GC_LIB_DIR "/"
+                 "csgo_gc" GC_LIB_EXTENSION;
     InstallGC_t InstallGC = (InstallGC_t)LoadModuleAndFindSymbol(modulePath, "InstallGC");
     if (!InstallGC)
     {

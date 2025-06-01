@@ -6,7 +6,6 @@ namespace Platform
 // called right after we load into the process
 void Initialize();
 
-
 // print a debugging message to the in game console or something
 void Print(const char *format, ...);
 

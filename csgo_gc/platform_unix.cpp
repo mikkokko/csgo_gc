@@ -176,7 +176,8 @@ static bool GetModuleInfo(std::string_view moduleName, ModuleInfo &info)
     info.fullPath.assign("/"); // so that client won't return results for steamclient for example
     info.fullPath.append(moduleName);
 
-    auto callback = [](dl_phdr_info *info, size_t, void *data) {
+    auto callback = [](dl_phdr_info *info, size_t, void *data)
+    {
         ModuleInfo *moduleInfo = static_cast<ModuleInfo *>(data);
 
         if (strstr(info->dlpi_name, moduleInfo->fullPath.c_str()))
@@ -188,7 +189,7 @@ static bool GetModuleInfo(std::string_view moduleName, ModuleInfo &info)
         }
 
         return 0;
-        };
+    };
 
     return dl_iterate_phdr(callback, &info) ? true : false;
 }

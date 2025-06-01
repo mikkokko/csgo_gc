@@ -40,11 +40,11 @@ DLL_EXPORT int RuntimeCheck(int, int)
 #if defined(DEDICATED)
 #define LAUNCHER_LIB "dedicated"
 #define SYMBOL_NAME "DedicatedMain"
-typedef int(*LauncherMain_t)(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd);
+typedef int (*LauncherMain_t)(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd);
 #else
 #define LAUNCHER_LIB "launcher"
 #define SYMBOL_NAME "LauncherMain"
-typedef int(*LauncherMain_t)(bool bSecure, HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd);
+typedef int (*LauncherMain_t)(bool bSecure, HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd);
 #endif
 
 typedef void (*InstallGC_t)(bool dedicated);
@@ -71,8 +71,8 @@ static const wchar_t *LastErrorString()
 
     int result = FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM
-        | FORMAT_MESSAGE_IGNORE_INSERTS
-        | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+            | FORMAT_MESSAGE_IGNORE_INSERTS
+            | FORMAT_MESSAGE_MAX_WIDTH_MASK,
         nullptr,
         error,
         0,
@@ -154,7 +154,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    _snwprintf_s(modulePath, std::size(modulePath), L"%ls\\csgo_gc\\" GC_LIB_DIR "\\" "csgo_gc" GC_LIB_EXTENSION, baseDir);
+    _snwprintf_s(modulePath, std::size(modulePath), L"%ls\\csgo_gc\\" GC_LIB_DIR "\\"
+                                                    "csgo_gc" GC_LIB_EXTENSION,
+        baseDir);
     InstallGC_t InstallGC = (InstallGC_t)LoadModuleAndFindSymbol(modulePath, "InstallGC");
     if (!InstallGC)
     {
