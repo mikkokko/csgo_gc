@@ -17,6 +17,7 @@
 #include "engine_gcmessages.pb.h"
 #include "gcsdk_gcmessages.pb.h"
 #include "gcsystemmsgs.pb.h"
+#include "steammessages.pb.h"
 
 // used in many files for logging
 #include "platform.h"
