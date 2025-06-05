@@ -31,10 +31,44 @@ void NetworkingServer::Update()
     }
 }
 
+// helper for SteamNetworkingMessages::SendMessageToUser that attempts to do some kind of error handling
+static void SendMessageToUser(uint64_t steamId, const GCMessageWrite &message)
+{
+    SteamNetworkingIdentity identity;
+    identity.SetSteamID64(steamId);
+
+    EResult result = SteamGameServerNetworkingMessages()->SendMessageToUser(
+        identity,
+        message.Data(),
+        message.Size(),
+        NetMessageSendFlags,
+        NetMessageChannel);
+
+    if (result != k_EResultOK)
+    {
+        Platform::Print("SendMessageToUser failed for %llu: %d, closing session and trying again\n", steamId, result);
+
+        SteamGameServerNetworkingMessages()->CloseChannelWithUser(identity, NetMessageChannel);
+
+        result = SteamGameServerNetworkingMessages()->SendMessageToUser(
+            identity,
+            message.Data(),
+            message.Size(),
+            NetMessageSendFlags,
+            NetMessageChannel);
+
+        if (result != k_EResultOK)
+        {
+            // not much we can do in this situation i guess
+            Platform::Print("SendMessageToUser failed for %llu\n", steamId);
+        }
+    }
+}
+
 void NetworkingServer::ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize)
 {
-    auto result = m_clients.insert(steamId);
-    if (!result.second)
+    auto [it, added] = m_clients.insert(steamId);
+    if (!added)
     {
         Platform::Print("got ClientConnected for %llu but they're already on the list! ignoring\n", steamId);
         return;
@@ -42,21 +76,13 @@ void NetworkingServer::ClientConnected(uint64_t steamId, const void *ticket, uin
 
     // send a message, if the client has csgo_gc installed they will
     // reply with their so cache and we'll add them to our list
-    SteamNetworkingIdentity identity;
-    identity.SetSteamID64(steamId);
-
     GCMessageWrite messageWrite{ k_EMsgNetworkConnect };
     messageWrite.WriteUint32(ticketSize);
     messageWrite.WriteData(ticket, ticketSize);
 
-    [[maybe_unused]] EResult sendResult = SteamGameServerNetworkingMessages()->SendMessageToUser(
-        identity,
-        messageWrite.Data(),
-        messageWrite.Size(),
-        NetMessageSendFlags,
-        NetMessageChannel);
-
-    assert(sendResult == k_EResultOK);
+    // FIXME: this gets sent when the client is connecting to the server, it's not uncommon for
+    // the connection to time out, in which case the player's socache never gets to the server
+    SendMessageToUser(steamId, messageWrite);
 }
 
 void NetworkingServer::ClientDisconnected(uint64_t steamId)
@@ -84,18 +110,7 @@ void NetworkingServer::SendMessage(uint64_t steamId, const GCMessageWrite &messa
         return;
     }
 
-    // mikkotodo check return
-    SteamNetworkingIdentity identity;
-    identity.SetSteamID64(steamId);
-
-    [[maybe_unused]] EResult result = SteamGameServerNetworkingMessages()->SendMessageToUser(
-        identity,
-        message.Data(),
-        message.Size(),
-        NetMessageSendFlags,
-        NetMessageChannel);
-
-    assert(result == k_EResultOK);
+    SendMessageToUser(steamId, message);
 }
 
 void NetworkingServer::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t *param)
