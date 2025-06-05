@@ -1220,18 +1220,29 @@ public:
     // returns true if callback was spoofed
     bool UnregisterCallback(CCallbackBase *callback)
     {
-        // mikkotodo FIX!!! why does GetICallback return 0 here?
-        // we used to call ShouldHookCallback here but can't because of this
+        bool unregistered = false;
 
-        auto remove = [callback](const CallbackHook &hook)
+        // iterate over all hooks, just in case...
+        for (auto it = m_hooks.begin(); it != m_hooks.end();)
         {
-            return (hook.callback == callback);
-        };
+            if (it->callback == callback)
+            {
+                unregistered = true;
+                it = m_hooks.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
 
-        m_hooks.erase(std::remove_if(m_hooks.begin(), m_hooks.end(), remove), m_hooks.end());
+        if (unregistered)
+        {
+            static_cast<CallbackAccessor *>(callback)->UnsetRegistered();
+            return true;
+        }
 
-        static_cast<CallbackAccessor *>(callback)->UnsetRegistered();
-        return true;
+        return false;
     }
 
     // runs callbacks matching id immediately
