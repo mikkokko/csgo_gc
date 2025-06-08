@@ -396,7 +396,17 @@ public:
         // never run secure!!!
         unFlags &= ~k_unServerFlagSecure;
 
-        return m_original->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString);
+        // make sure we're up to date
+        pchVersionString = "1.99.9.9";
+
+        if ( m_original->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString))
+        {
+            // add the csgo_gc gametag (note that SetGameTags is hooked)
+            SetGameTags("");
+            return true;
+        }
+
+        return false;
     }
 
     void SetProduct(const char *pszProduct) override
@@ -451,9 +461,7 @@ public:
 
     bool WasRestartRequested() override
     {
-        // mikko: quiet the "your server is out of date please update and restart" spew
-        //return m_original->WasRestartRequested();
-        return false;
+        return m_original->WasRestartRequested();
     }
 
     void SetMaxPlayerCount(int cPlayersMax) override
@@ -503,7 +511,18 @@ public:
 
     void SetGameTags(const char *pchGameTags) override
     {
-        m_original->SetGameTags(pchGameTags);
+        std::string tags = pchGameTags;
+
+        if (tags.size())
+        {
+            tags.append(",csgo_gc");
+        }
+        else
+        {
+            tags.append("csgo_gc");
+        }
+
+        m_original->SetGameTags(tags.c_str());
     }
 
     void SetGameData(const char *pchGameData) override
@@ -810,6 +829,136 @@ public:
     }
 };
 
+class SteamMatchmakingServersProxy : public ISteamMatchmakingServers
+{
+    ISteamMatchmakingServers *m_original;
+
+public:
+    SteamMatchmakingServersProxy(ISteamMatchmakingServers *original)
+        : m_original{ original }
+    {
+    }
+
+    static MatchMakingKeyValuePair_t *ModifyFilters(MatchMakingKeyValuePair_t *pchFilters, uint32 nFilters, std::vector<MatchMakingKeyValuePair_t> &buffer)
+    {
+        buffer.reserve(nFilters + 1);
+        buffer.assign(pchFilters, pchFilters + nFilters);
+        buffer.push_back({ "gametagsand", "csgo_gc" });
+        return buffer.data();
+    }
+
+    HServerListRequest RequestInternetServerList(AppId_t iApp,
+        MatchMakingKeyValuePair_t **ppchFilters,
+        uint32 nFilters,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    {
+        std::vector<MatchMakingKeyValuePair_t> buffer;
+        MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
+        return m_original->RequestInternetServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+    }
+
+    HServerListRequest RequestLANServerList(AppId_t iApp,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    {
+        return m_original->RequestLANServerList(iApp, pRequestServersResponse);
+    }
+
+    HServerListRequest RequestFriendsServerList(AppId_t iApp,
+        MatchMakingKeyValuePair_t **ppchFilters,
+        uint32 nFilters,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    {
+        std::vector<MatchMakingKeyValuePair_t> buffer;
+        MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
+        return m_original->RequestFriendsServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+    }
+
+    HServerListRequest RequestFavoritesServerList(AppId_t iApp,
+        MatchMakingKeyValuePair_t **ppchFilters,
+        uint32 nFilters,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    {
+        std::vector<MatchMakingKeyValuePair_t> buffer;
+        MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
+        return m_original->RequestFavoritesServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+    }
+
+    HServerListRequest RequestHistoryServerList(AppId_t iApp,
+        MatchMakingKeyValuePair_t **ppchFilters,
+        uint32 nFilters,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    {
+        std::vector<MatchMakingKeyValuePair_t> buffer;
+        MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
+        return m_original->RequestHistoryServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+    }
+
+    HServerListRequest RequestSpectatorServerList(AppId_t iApp,
+        MatchMakingKeyValuePair_t **ppchFilters,
+        uint32 nFilters,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    {
+        std::vector<MatchMakingKeyValuePair_t> buffer;
+        MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
+        return m_original->RequestSpectatorServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+    }
+
+    void ReleaseRequest(HServerListRequest hServerListRequest) override
+    {
+        m_original->ReleaseRequest(hServerListRequest);
+    }
+
+    gameserveritem_t *GetServerDetails(HServerListRequest hRequest, int iServer) override
+    {
+        return m_original->GetServerDetails(hRequest, iServer);
+    }
+
+    void CancelQuery(HServerListRequest hRequest) override
+    {
+        m_original->CancelQuery(hRequest);
+    }
+
+    void RefreshQuery(HServerListRequest hRequest) override
+    {
+        m_original->RefreshQuery(hRequest);
+    }
+
+    bool IsRefreshing(HServerListRequest hRequest) override
+    {
+        return m_original->IsRefreshing(hRequest);
+    }
+
+    int GetServerCount(HServerListRequest hRequest) override
+    {
+        return m_original->GetServerCount(hRequest);
+    }
+
+    void RefreshServer(HServerListRequest hRequest, int iServer) override
+    {
+        m_original->RefreshServer(hRequest, iServer);
+    }
+
+    HServerQuery PingServer(uint32 unIP, uint16 usPort, ISteamMatchmakingPingResponse *pRequestServersResponse) override
+    {
+        return m_original->PingServer(unIP, usPort, pRequestServersResponse);
+    }
+
+    HServerQuery PlayerDetails(uint32 unIP, uint16 usPort, ISteamMatchmakingPlayersResponse *pRequestServersResponse) override
+    {
+        return m_original->PlayerDetails(unIP, usPort, pRequestServersResponse);
+    }
+
+    HServerQuery ServerRules(uint32 unIP, uint16 usPort, ISteamMatchmakingRulesResponse *pRequestServersResponse) override
+    {
+        return m_original->ServerRules(unIP, usPort, pRequestServersResponse);
+    }
+
+    void CancelServerQuery(HServerQuery hServerQuery) override
+    {
+        m_original->CancelServerQuery(hServerQuery);
+    }
+};
+
 template<typename Interface, typename Proxy, typename... Args>
 inline Interface *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
 {
@@ -856,6 +1005,10 @@ public:
         {
             return GetOrCreate<ISteamUser>(m_steamUser, static_cast<ISteamUser *>(original));
         }
+        else if (InterfaceMatches(version, STEAMMATCHMAKINGSERVERS_INTERFACE_VERSION))
+        {
+            return GetOrCreate<ISteamMatchmakingServers>(m_steamMatchmakingServers, static_cast<ISteamMatchmakingServers *>(original));
+        }
 
         return nullptr;
     }
@@ -868,6 +1021,7 @@ private:
     std::unique_ptr<SteamUtilsProxy> m_steamUtils;
     std::unique_ptr<SteamGameServerProxy> m_steamGameServer;
     std::unique_ptr<SteamUserProxy> m_steamUser;
+    std::unique_ptr<SteamMatchmakingServersProxy> m_steamMatchmakingServers;
 };
 
 class SteamClientProxy : public ISteamClient
