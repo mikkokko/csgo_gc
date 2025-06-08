@@ -88,7 +88,7 @@ uint32_t Inventory::AccountId() const
     return m_steamId & 0xffffffff;
 }
 
-CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
+CSOEconItem &Inventory::AllocateItem(uint32_t highItemId)
 {
     // Players fuck up their inventory files constantly and end up with item id collisions...
     // This doesn't return until the item id is unique for this session, try with the provided
@@ -111,8 +111,8 @@ CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
             continue;
         }
 
-        auto result = m_items.try_emplace(itemId);
-        if (!result.second)
+        auto [it, inserted] = m_items.try_emplace(itemId);
+        if (!inserted)
         {
             // item id collision
             assert(false);
@@ -125,18 +125,36 @@ CSOEconItem &Inventory::CreateItem(uint32_t highItemId, CSOEconItem *copyFrom)
         }
 
         // ok
-        CSOEconItem &item = result.first->second;
-
-        if (copyFrom)
-        {
-            item = *copyFrom;
-        }
+        CSOEconItem &item = it->second;
 
         item.set_id(itemId);
         item.set_account_id(AccountId());
 
         return item;
     }
+}
+
+CSOEconItem &Inventory::CreateItem(const CSOEconItem &copyFrom)
+{
+    CSOEconItem &item = AllocateItem(0);
+
+    // shitty but what can you do
+    uint64_t itemId = item.id();
+    uint32_t accountId = item.account_id();
+
+    item = copyFrom;
+
+    item.set_id(itemId);
+    item.set_account_id(accountId);
+
+    return item;
+}
+
+CSOEconItem &Inventory::CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType)
+{
+    CSOEconItem &item = AllocateItem(0);
+    m_itemSchema.CreateItem(defIndex, origin, unacknowledgedType, item);
+    return item;
 }
 
 void Inventory::ReadFromFile()
@@ -155,7 +173,7 @@ void Inventory::ReadFromFile()
         for (const KeyValue &itemKey : *itemsKey)
         {
             uint32_t highItemId = FromString<uint32_t>(itemKey.Name());
-            CSOEconItem &item = CreateItem(highItemId);
+            CSOEconItem &item = AllocateItem(highItemId);
             ReadItem(itemKey, item);
         }
     }
@@ -432,7 +450,7 @@ bool Inventory::UseItem(uint64_t itemId,
     }
 
     // create an unsealed spray based on the sealed one
-    CSOEconItem &unsealed = CreateItem(0, &it->second);
+    CSOEconItem &unsealed = CreateItem(it->second);
     unsealed.set_def_index(ItemSchema::ItemSprayPaint);
 
     // remove the sealed spray from our inventory
@@ -477,7 +495,7 @@ bool Inventory::UnlockCrate(uint64_t crateId,
         return false;
     }
 
-    CSOEconItem &item = CreateItem(0, &temp);
+    CSOEconItem &item = CreateItem(temp);
 
     ToSingleObject(newItem, item);
 
@@ -750,15 +768,7 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
 
     if (message.baseitem_defidx())
     {
-        // mikkotodo don't hardcode these... also some of these fields are wrong...
-        item = &CreateItem(0);
-        //item->set_inventory(0);
-        item->set_def_index(message.baseitem_defidx());
-        item->set_quantity(1);
-        item->set_level(1);
-        item->set_quality(ItemSchema::QualityNormal);
-        //item->set_origin(0);
-        item->set_rarity(ItemSchema::RarityDefault);
+        item = &CreateItem(message.baseitem_defidx(), ItemOriginBaseItem, UnacknowledgedInvalid);
     }
     else
     {
@@ -1002,15 +1012,7 @@ bool Inventory::NameBaseItem(uint64_t nameTagId,
     CMsgSOSingleObject &destroy,
     CMsgGCItemCustomizationNotification &notification)
 {
-    // mikkotodo CreateBaseItem and use that for stickers too
-    CSOEconItem &item = CreateItem(0);
-    //item.set_inventory(0);
-    item.set_def_index(defIndex);
-    item.set_quantity(1);
-    item.set_level(1);
-    item.set_quality(ItemSchema::QualityNormal);
-    //item.set_origin(0);
-    item.set_rarity(ItemSchema::RarityDefault);
+    CSOEconItem &item = CreateItem(defIndex, ItemOriginBaseItem, UnacknowledgedInvalid);
 
     item.mutable_custom_name()->assign(name);
 

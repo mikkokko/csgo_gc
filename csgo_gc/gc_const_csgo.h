@@ -77,7 +77,8 @@ enum SOTypeId : uint32_t
 // CSOEconItem origin
 enum ItemOrigin
 {
-    ItemOriginCrate = 8
+    ItemOriginCrate = 8,
+    ItemOriginBaseItem = 22,
 };
 
 enum ElevatedState : uint32_t
@@ -89,17 +90,18 @@ enum ElevatedState : uint32_t
 // dumped from client.dll strings, most of these aren't used by us
 enum UnacknowledgedType
 {
-    UnacknowledgedFound = 1,
+    UnacknowledgedInvalid,
+    UnacknowledgedDropped,
     UnacknowledgedCrafted,
     UnacknowledgedTraded,
-    UnacknowledgedUnused1,
+    UnacknowledgedPurchased,
     UnacknowledgedFoundInCrate,
     UnacknowledgedGifted,
-    UnacknowledgedUnused2,
-    UnacknowledgedUnused3,
+    UnacknowledgedSupport,
+    UnacknowledgedPromotion,
     UnacknowledgedEarned,
     UnacknowledgedRefunded,
-    UnacknowledgedGiftWrapped,
+    UnacknowledgedGiftWwrapped,
     UnacknowledgedForeign,
     UnacknowledgedCollectionReward,
     UnacknowledgedPreviewItem,

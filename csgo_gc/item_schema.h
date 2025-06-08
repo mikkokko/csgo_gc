@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gc_const_csgo.h"
+
 class KeyValue;
 
 enum class AttributeType
@@ -26,6 +28,7 @@ public:
     std::string m_name;
     uint32_t m_rarity;
     uint32_t m_quality;
+    uint32_t m_level;
     uint32_t m_supplyCrateSeries; // cases only
 };
 
@@ -110,6 +113,9 @@ public:
 
     // for case opening
     const LootList *GetCrateLootList(const CSOEconItem &crate) const;
+
+    // item creation: id and account id not set, needs to be done by the caller
+    bool CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const;
 
 public:
     // these could be parsed from the item schema but reduce code complexity by hardcoding them

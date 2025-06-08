@@ -2,7 +2,6 @@
 #include "item_schema.h"
 #include "config.h"
 #include "keyvalue.h"
-#include "gc_const_csgo.h" // mikkotodo remove?
 
 // ideally this would get parsed from the item schema...
 static uint32_t ItemRarityFromString(std::string_view name)
@@ -65,7 +64,8 @@ AttributeInfo::AttributeInfo(const KeyValue &key)
 ItemInfo::ItemInfo(uint32_t defIndex)
     : m_defIndex{ defIndex }
     , m_rarity{ ItemSchema::RarityCommon }
-    , m_quality{ ItemSchema::QualityUnique }
+    , m_quality{ ItemSchema::QualityNormal }
+    , m_level{ 1 }
     , m_supplyCrateSeries{ 0 }
 {
     // RecursiveParseItem parses the rest
@@ -73,7 +73,7 @@ ItemInfo::ItemInfo(uint32_t defIndex)
 
 PaintKitInfo::PaintKitInfo(const KeyValue &key)
     : m_defIndex{ FromString<uint32_t>(key.Name()) }
-    , m_rarity{ ItemSchema::RarityCommon } // rarity is not stored here, set it in ParsePaintKitRarities
+    , m_rarity{ ItemSchema::RarityCommon } // rarity is not set here, done in ParsePaintKitRarities
 {
     m_minFloat = key.GetNumber<float>("wear_remap_min", 0.0f);
     m_maxFloat = key.GetNumber<float>("wear_remap_max", 1.0f);
@@ -403,6 +403,30 @@ const LootList *ItemSchema::GetCrateLootList(const CSOEconItem &crate) const
     return &lootListSearch->second;
 }
 
+bool ItemSchema::CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const
+{
+    auto itemSearch = m_itemInfo.find(defIndex);
+    if (itemSearch == m_itemInfo.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    const ItemInfo &itemInfo = itemSearch->second;
+
+    econItem.set_inventory(InventoryUnacknowledged(unacknowledgedType));
+    econItem.set_def_index(defIndex);
+    econItem.set_quantity(1);
+    econItem.set_level(itemInfo.m_level);
+    econItem.set_quality(itemInfo.m_quality);
+    econItem.set_flags(0);
+    econItem.set_origin(origin);
+    econItem.set_in_use(false);
+    econItem.set_rarity(itemInfo.m_rarity);
+
+    return true;
+}
+
 void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey)
 {
     m_itemInfo.reserve(itemsKey->SubkeyCount());
@@ -481,6 +505,14 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
     if (rarity.size())
     {
         info.m_rarity = ItemRarityFromString(rarity);
+    }
+
+    uint32_t minLevel = itemKey.GetNumber<uint32_t>("min_ilevel", 0);
+    uint32_t maxLevel = itemKey.GetNumber<uint32_t>("max_ilevel", 0);
+    if (minLevel && maxLevel)
+    {
+        assert(minLevel == maxLevel);
+        info.m_level = minLevel;
     }
 
     const KeyValue *attributes = itemKey.GetSubkey("attributes");

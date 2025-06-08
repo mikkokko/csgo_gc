@@ -167,27 +167,27 @@ bool CaseOpening::ShouldMakeStatTrak(const LootListItem &item, const LootList &l
 
 bool CaseOpening::EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, bool statTrak)
 {
-    // stattrak affects quality
-    uint32_t quality = lootListItem.quality;
-
-    // but unusual overrides strange
-    if (statTrak && lootListItem.quality != ItemSchema::QualityUnusual)
+    if (!m_itemSchema.CreateItem(lootListItem.itemInfo->m_defIndex, ItemOriginCrate, UnacknowledgedFoundInCrate, item))
     {
-        quality = ItemSchema::QualityStrange;
+        assert(false);
+        return false;
     }
 
-    // uh, is RarityCommon possible even?
-    assert(lootListItem.rarity >= ItemSchema::RarityCommon && lootListItem.rarity <= ItemSchema::RarityImmortal);
+    // quality override, stattrak makes it strange if it's not an unusual
+    if (statTrak && lootListItem.quality != ItemSchema::QualityUnusual)
+    {
+        item.set_quality(ItemSchema::QualityStrange);
+    }
+    else
+    {
+        item.set_quality(lootListItem.quality);
+    }
 
-    item.set_inventory(InventoryUnacknowledged(UnacknowledgedFoundInCrate));
-    item.set_def_index(lootListItem.itemInfo->m_defIndex);
-    item.set_quantity(1);
-    item.set_level(1); // mikkotodo parse from item
-    item.set_quality(quality);
-    item.set_flags(0);
-    item.set_origin(ItemOriginCrate);
-    item.set_in_use(false);
+    // rarity override
+    assert(lootListItem.rarity >= ItemSchema::RarityCommon && lootListItem.rarity <= ItemSchema::RarityImmortal);
     item.set_rarity(lootListItem.rarity);
+
+    // setup type specficic attributes
 
     if (lootListItem.type == LootListItemSticker)
     {

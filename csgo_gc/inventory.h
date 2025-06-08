@@ -70,9 +70,13 @@ public:
 private:
     uint32_t AccountId() const;
 
-    // sets id and account_id fields
+    // allocates an empty item, sets id and account_id fields
     // pass zero as highItemId to generate a new one
-    CSOEconItem &CreateItem(uint32_t highItemId, CSOEconItem *copyFrom = nullptr);
+    CSOEconItem &AllocateItem(uint32_t highItemId);
+
+    // create a new item of a specific type
+    CSOEconItem &CreateItem(const CSOEconItem &copyFrom);
+    CSOEconItem &CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType);
 
     void ReadFromFile();
     void ReadItem(const KeyValue &itemKey, CSOEconItem &item) const;
