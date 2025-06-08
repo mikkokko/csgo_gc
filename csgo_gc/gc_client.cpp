@@ -5,8 +5,9 @@
 
 const char *MessageName(uint32_t type);
 
-ClientGC::ClientGC(uint64_t steamId)
+ClientGC::ClientGC(uint64_t steamId, ISteamNetworkingMessages *networkingMessages)
     : m_steamId{ steamId }
+    , m_networking{ this, networkingMessages }
     , m_inventory{ steamId, m_config }
 {
     Platform::Print("ClientGC spawned for user %llu\n", steamId);

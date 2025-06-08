@@ -62,12 +62,12 @@ public:
         if (m_server)
         {
             assert(!s_serverGC);
-            s_serverGC = new ServerGC;
+            s_serverGC = new ServerGC{ SteamGameServerNetworkingMessages() };
         }
         else
         {
             assert(!s_clientGC);
-            s_clientGC = new ClientGC{ steamId };
+            s_clientGC = new ClientGC{ steamId, SteamNetworkingMessages() };
         }
     }
 

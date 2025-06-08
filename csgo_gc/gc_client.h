@@ -8,7 +8,7 @@
 class ClientGC final : public SharedGC
 {
 public:
-    ClientGC(uint64_t steamId);
+    ClientGC(uint64_t steamId, ISteamNetworkingMessages *networkingMessages);
     ~ClientGC();
 
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
@@ -50,7 +50,7 @@ private:
     uint32_t AccountId() const { return m_steamId & 0xffffffff; }
 
     const uint64_t m_steamId;
-    NetworkingClient m_networking{ this };
+    NetworkingClient m_networking;
 
     GCConfig m_config;
     Inventory m_inventory;

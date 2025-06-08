@@ -2,8 +2,9 @@
 #include "networking_client.h"
 #include "gc_client.h"
 
-NetworkingClient::NetworkingClient(ClientGC *clientGC)
+NetworkingClient::NetworkingClient(ClientGC *clientGC, ISteamNetworkingMessages *networkingMessages)
     : m_clientGC{ clientGC }
+    , m_networkingMessages{ networkingMessages }
     , m_sessionRequest{ this, &NetworkingClient::OnSessionRequest }
     , m_sessionFailed{ this, &NetworkingClient::OnSessionFailed }
 {
@@ -12,7 +13,7 @@ NetworkingClient::NetworkingClient(ClientGC *clientGC)
 void NetworkingClient::Update()
 {
     SteamNetworkingMessage_t *message;
-    while (SteamNetworkingMessages()->ReceiveMessagesOnChannel(NetMessageChannel, &message, 1))
+    while (m_networkingMessages->ReceiveMessagesOnChannel(NetMessageChannel, &message, 1))
     {
         uint64_t steamId = message->m_identityPeer.GetSteamID64();
 
@@ -108,7 +109,7 @@ void NetworkingClient::SendMessage(const GCMessageWrite &message)
     SteamNetworkingIdentity identity;
     identity.SetSteamID64(m_serverSteamId);
 
-    [[maybe_unused]] EResult result = SteamNetworkingMessages()->SendMessageToUser(
+    [[maybe_unused]] EResult result = m_networkingMessages->SendMessageToUser(
         identity,
         message.Data(),
         message.Size(),
@@ -143,7 +144,7 @@ void NetworkingClient::ClearAuthTicket(uint32_t handle)
         // we had a session so close the connection
         SteamNetworkingIdentity identity;
         identity.SetSteamID64(it->second.steamId);
-        SteamNetworkingMessages()->CloseChannelWithUser(identity, NetMessageChannel);
+        m_networkingMessages->CloseChannelWithUser(identity, NetMessageChannel);
 
         // was this our current gameserver? if it was, clear it
         if (it->second.steamId == m_serverSteamId)
@@ -165,7 +166,7 @@ void NetworkingClient::OnSessionRequest([[maybe_unused]] SteamNetworkingMessages
     }
 
     // accept the connection, we should receive the k_EMsgNetworkConnect message
-    SteamNetworkingMessages()->AcceptSessionWithUser(param->m_identityRemote);
+    m_networkingMessages->AcceptSessionWithUser(param->m_identityRemote);
 }
 
 void NetworkingClient::OnSessionFailed(SteamNetworkingMessagesSessionFailed_t *param)

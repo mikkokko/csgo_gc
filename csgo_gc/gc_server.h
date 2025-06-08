@@ -6,7 +6,7 @@
 class ServerGC final : public SharedGC
 {
 public:
-    ServerGC();
+    ServerGC(ISteamNetworkingMessages *networkingMessages);
     ~ServerGC();
 
     void HandleMessage(uint32_t type, const void *data, uint32_t size);

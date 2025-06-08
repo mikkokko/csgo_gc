@@ -6,8 +6,8 @@
 
 const char *MessageName(uint32_t type);
 
-ServerGC::ServerGC()
-    : m_networking{ this }
+ServerGC::ServerGC(ISteamNetworkingMessages *networkingMessages)
+    : m_networking{ this, networkingMessages }
 {
     Platform::Print("ServerGC spawned\n");
 

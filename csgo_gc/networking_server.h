@@ -8,7 +8,7 @@ class GCMessageWrite;
 class NetworkingServer
 {
 public:
-    NetworkingServer(ServerGC *serverGC);
+    NetworkingServer(ServerGC *serverGC, ISteamNetworkingMessages *networkingMessages);
 
     void Update();
 
@@ -19,6 +19,7 @@ public:
 
 private:
     ServerGC *const m_serverGC;
+    ISteamNetworkingMessages *const m_networkingMessages;
     std::unordered_set<uint64_t> m_clients;
 
     STEAM_GAMESERVER_CALLBACK(NetworkingServer,

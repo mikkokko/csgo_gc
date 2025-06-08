@@ -15,7 +15,7 @@ struct AuthTicket
 class NetworkingClient
 {
 public:
-    NetworkingClient(ClientGC *clientGC);
+    NetworkingClient(ClientGC *clientGC, ISteamNetworkingMessages *networkingMessages);
 
     void Update();
 
@@ -26,10 +26,11 @@ public:
     void ClearAuthTicket(uint32_t handle);
 
 private:
-    // return false if it wasn't handled, in which case we pass it to the gc
+    // return false if it wasn't handled, in which case we pass it to m_clientGC
     bool HandleMessage(uint64_t steamId, GCMessageRead &message);
 
     ClientGC *const m_clientGC;
+    ISteamNetworkingMessages *const m_networkingMessages;
     uint64_t m_serverSteamId{};
 
     std::unordered_map<uint32_t, AuthTicket> m_tickets;
