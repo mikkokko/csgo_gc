@@ -1,35 +1,33 @@
 #include "stdafx.h"
 #include "networking_server.h"
-#include "gc_server.h"
+#include "gc_message.h"
 
-NetworkingServer::NetworkingServer(ServerGC *serverGC, ISteamNetworkingMessages *networkingMessages)
-    : m_serverGC{ serverGC }
-    , m_networkingMessages{ networkingMessages }
+NetworkingServer::NetworkingServer(ISteamNetworkingMessages *networkingMessages)
+    : m_networkingMessages{ networkingMessages }
     , m_sessionRequest{ this, &NetworkingServer::OnSessionRequest }
     , m_sessionFailed{ this, &NetworkingServer::OnSessionFailed }
 {
 }
 
-void NetworkingServer::Update()
+bool NetworkingServer::ReceiveMessage(SteamNetworkingMessage_t *&message)
 {
-    SteamNetworkingMessage_t *message;
-    while (m_networkingMessages->ReceiveMessagesOnChannel(NetMessageChannel, &message, 1))
+    if (!m_networkingMessages->ReceiveMessagesOnChannel(NetMessageChannel, &message, 1))
     {
-        uint64_t steamId = message->m_identityPeer.GetSteamID64();
-
-        // see if we have a session
-        auto it = m_clients.find(steamId);
-        if (it == m_clients.end())
-        {
-            Platform::Print("NetworkingServer: ignored message from %llu (no session)\n", steamId);
-        }
-        else
-        {
-            m_serverGC->HandleNetMessage(steamId, message->GetData(), message->GetSize());
-        }
-
-        message->Release();
+        return false;
     }
+
+    uint64_t steamId = message->m_identityPeer.GetSteamID64();
+
+    // see if we have a session
+    auto it = m_clients.find(steamId);
+    if (it == m_clients.end())
+    {
+        Platform::Print("NetworkingServer: ignored message from %llu (no session)\n", steamId);
+        message->Release();
+        return false;
+    }
+
+    return true;
 }
 
 // helper for SteamNetworkingMessages::SendMessageToUser that attempts to do some kind of error handling

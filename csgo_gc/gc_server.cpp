@@ -7,7 +7,7 @@
 const char *MessageName(uint32_t type);
 
 ServerGC::ServerGC(ISteamNetworkingMessages *networkingMessages)
-    : m_networking{ this, networkingMessages }
+    : m_networking{ networkingMessages }
 {
     Platform::Print("ServerGC spawned\n");
 
@@ -79,7 +79,12 @@ void ServerGC::Update()
         return;
     }
 
-    m_networking.Update();
+    SteamNetworkingMessage_t *message;
+    while (m_networking.ReceiveMessage(message))
+    {
+        HandleNetMessage(message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
+        message->Release();
+    }
 }
 
 template<typename T>

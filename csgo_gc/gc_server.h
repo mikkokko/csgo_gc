@@ -16,7 +16,7 @@ public:
 
     void Update();
 
-    // called from net code
+    // used to be called by the net code, still called directly by the tests so keep it public
     void HandleNetMessage(uint64_t steamId, const void *data, uint32_t size);
 
 private:

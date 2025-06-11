@@ -2,15 +2,15 @@
 
 #include "networking_shared.h"
 
-class ServerGC;
 class GCMessageWrite;
 
 class NetworkingServer
 {
 public:
-    NetworkingServer(ServerGC *serverGC, ISteamNetworkingMessages *networkingMessages);
+    NetworkingServer(ISteamNetworkingMessages *networkingMessages);
 
-    void Update();
+    // caller need to call message->Release() because fuck you
+    bool ReceiveMessage(SteamNetworkingMessage_t *&message);
 
     void ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize);
     void ClientDisconnected(uint64_t steamId);
@@ -18,7 +18,6 @@ public:
     void SendMessage(uint64_t steamId, const GCMessageWrite &message);
 
 private:
-    ServerGC *const m_serverGC;
     ISteamNetworkingMessages *const m_networkingMessages;
     std::unordered_set<uint64_t> m_clients;
 
