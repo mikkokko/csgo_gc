@@ -401,8 +401,8 @@ public:
 
         if ( m_original->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString))
         {
-            // add the csgo_gc gametag (note that SetGameTags is hooked)
-            SetGameTags("");
+            // add the csgo_gc gametag
+            m_original->SetGameTags("csgo_gc");
             return true;
         }
 
@@ -973,9 +973,8 @@ inline Interface *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
 class SteamInterfaceProxy
 {
 public:
-    SteamInterfaceProxy(HSteamPipe pipe, HSteamUser user)
+    SteamInterfaceProxy(HSteamPipe pipe)
         : m_pipe{ pipe }
-        , m_user{ user }
     {
     }
 
@@ -1015,7 +1014,6 @@ public:
 
 private:
     const HSteamPipe m_pipe;
-    const HSteamUser m_user;
 
     std::unique_ptr<SteamGameCoordinatorProxy> m_steamGameCoordinator;
     std::unique_ptr<SteamUtilsProxy> m_steamUtils;
@@ -1039,7 +1037,7 @@ class SteamClientProxy : public ISteamClient
         assert(pipe);
         assert(user || allowNoUser);
 
-        auto result = m_proxies.try_emplace(ProxyKey(pipe, user), pipe, user);
+        auto result = m_proxies.try_emplace(ProxyKey(pipe, user), pipe);
         return result.first->second;
     }
 
