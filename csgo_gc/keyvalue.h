@@ -27,6 +27,12 @@ inline float FromString(std::string_view string)
 }
 #endif
 
+template<>
+inline bool FromString(std::string_view string)
+{
+    return FromString<int>(string) ? true : false;
+}
+
 class KeyValue
 {
 public:
@@ -64,7 +70,14 @@ public:
             return fallback;
         }
 
-        return FromString<T>(subkey->m_string);
+        if constexpr (std::is_enum<T>::value)
+        {
+            return static_cast<T>(FromString<typename std::underlying_type<T>::type>(subkey->m_string));
+        }
+        else
+        {
+            return FromString<T>(subkey->m_string);
+        }
     }
 
     template<typename T>

@@ -7,6 +7,7 @@
 #include <queue>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
