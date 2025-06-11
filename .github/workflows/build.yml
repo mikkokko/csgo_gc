@@ -60,9 +60,15 @@ jobs:
       shell: bash
       run: |
         cp $GITHUB_WORKSPACE/README.md $GITHUB_WORKSPACE/release/
-        cp $GITHUB_WORKSPACE/LICENSE $GITHUB_WORKSPACE/release/
+        mkdir $GITHUB_WORKSPACE/release/licenses
+        cp $GITHUB_WORKSPACE/LICENSE $GITHUB_WORKSPACE/release/licenses/LICENSE-csgo_gc.txt
+        cp $GITHUB_WORKSPACE/build/_deps/cryptopp-cmake-build/cryptopp/License.txt $GITHUB_WORKSPACE/release/licenses/LICENSE-crypto++.txt
+        cp $GITHUB_WORKSPACE/build/_deps/distorm-src/COPYING $GITHUB_WORKSPACE/release/licenses/LICENSE-distorm.txt
+        cp $GITHUB_WORKSPACE/build/_deps/funchook-src/LICENSE $GITHUB_WORKSPACE/release/licenses/LICENSE-funchook.txt
+        cp $GITHUB_WORKSPACE/build/_deps/protobuf-src/LICENSE $GITHUB_WORKSPACE/release/licenses/LICENSE-protobuf.txt
         cp $GITHUB_WORKSPACE/examples/config.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/inventory.txt $GITHUB_WORKSPACE/release/csgo_gc/
+        cp $GITHUB_WORKSPACE/examples/price_sheet.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/unusual_loot_lists.txt $GITHUB_WORKSPACE/release/csgo_gc/
 
     - name: Upload
