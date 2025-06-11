@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gc_const_csgo.h"
+#include "item_schema.h" // rarity constants
 
 struct RarityWeight
 {
@@ -48,5 +49,14 @@ private:
     int m_level{ 0 };
     int m_xp{ 0 };
 
-    std::vector<RarityWeight> m_rarityWeights;
+    // default to valve weights
+    std::vector<RarityWeight> m_rarityWeights{
+        { ItemSchema::RarityCommon, 10000000 },
+        { ItemSchema::RarityUncommon, 2000000 },
+        { ItemSchema::RarityRare, 400000 },
+        { ItemSchema::RarityMythical, 80000 },
+        { ItemSchema::RarityLegendary, 16000 },
+        { ItemSchema::RarityAncient, 3200 },
+        { ItemSchema::RarityUnusual, 1280 },
+    };
 };
