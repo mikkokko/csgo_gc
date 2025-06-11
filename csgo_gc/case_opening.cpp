@@ -35,7 +35,7 @@ static bool RarityUpper(uint32_t a, const LootListItem *b) { return a < b->CaseR
 
 bool CaseOpening::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &item)
 {
-    const LootList *lootList = m_itemSchema.GetCrateLootList(crate);
+    const LootList *lootList = m_itemSchema.GetCrateLootList(crate.def_index());
     if (!lootList)
     {
         assert(false);

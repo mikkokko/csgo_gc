@@ -382,9 +382,9 @@ bool ItemSchema::SetAttributeString(CSOEconItemAttribute *attribute, std::string
     return true;
 }
 
-const LootList *ItemSchema::GetCrateLootList(const CSOEconItem &crate) const
+const LootList *ItemSchema::GetCrateLootList(uint32_t crateDefIndex) const
 {
-    auto itemSearch = m_itemInfo.find(crate.def_index());
+    auto itemSearch = m_itemInfo.find(crateDefIndex);
     if (itemSearch == m_itemInfo.end())
     {
         assert(false);

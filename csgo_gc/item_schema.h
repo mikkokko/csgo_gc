@@ -112,7 +112,7 @@ public:
     bool SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const;
 
     // for case opening
-    const LootList *GetCrateLootList(const CSOEconItem &crate) const;
+    const LootList *GetCrateLootList(uint32_t crateDefIndex) const;
 
     // item creation: id and account id not set, needs to be done by the caller
     bool CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const;
