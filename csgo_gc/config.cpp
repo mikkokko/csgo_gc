@@ -64,8 +64,3 @@ float GCConfig::GetRarityWeight(uint32_t rarity) const
 
     return 0;
 }
-
-bool GCConfig::DestroyUsedItems() const
-{
-    return m_destroyUsedItems;
-}

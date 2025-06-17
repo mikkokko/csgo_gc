@@ -18,6 +18,8 @@ public:
     template<typename T>
     bool ReadProtobuf(T &message)
     {
+        assert(IsProtobuf());
+
         // read the remainder as a protobuf message
         uint32_t size = m_size - m_offset;
         const void *data = ReadData(size);

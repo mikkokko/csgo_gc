@@ -157,7 +157,7 @@ void NetworkingClient::ClearAuthTicket(uint32_t handle)
     m_tickets.erase(it);
 }
 
-void NetworkingClient::OnSessionRequest([[maybe_unused]] SteamNetworkingMessagesSessionRequest_t *param)
+void NetworkingClient::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t *param)
 {
     if (!param->m_identityRemote.GetSteamID().BGameServerAccount())
     {

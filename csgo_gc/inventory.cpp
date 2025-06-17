@@ -1068,6 +1068,16 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     return true;
 }
 
+uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update)
+{
+    CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
+
+    CMsgSOSingleObject &single = update.emplace_back();
+    ToSingleObject(single, item);
+
+    return item.id();
+}
+
 bool Inventory::UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update)
 {
     uint32_t defIndex, paintKitIndex;

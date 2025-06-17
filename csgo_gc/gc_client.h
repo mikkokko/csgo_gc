@@ -5,6 +5,14 @@
 #include "inventory.h"
 #include "networking_client.h"
 
+struct MicroTxnAuthorizationResponse_t;
+
+struct Transaction
+{
+    uint64_t id;
+    std::vector<uint64_t> itemIds;
+};
+
 class ClientGC final : public SharedGC
 {
 public:
@@ -14,6 +22,9 @@ public:
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
 
     void Update();
+
+    // purchases
+    bool GetMicroTransactionResponse(MicroTxnAuthorizationResponse_t &response);
 
     // called from net code
     void SendSOCacheToGameSever();
@@ -25,7 +36,8 @@ public:
 
 private:
     // send to the local game and the game server we're connected to (if we're connected)
-    void SendMessageToGame(bool sendToGameServer, uint32_t type, const google::protobuf::MessageLite &message);
+    void SendMessageToGame(bool sendToGameServer, uint32_t type,
+        const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
     void OnClientHello(GCMessageRead &messageRead);
     void AdjustItemEquippedState(GCMessageRead &messageRead);
@@ -36,6 +48,8 @@ private:
     void IncrementKillCountAttribute(GCMessageRead &messageRead);
     void ApplySticker(GCMessageRead &messageRead);
     void StoreGetUserData(GCMessageRead &messageRead);
+    void StorePurchaseInit(GCMessageRead &messageRead);
+    void StorePurchaseFinalize(GCMessageRead &messageRead);
 
     void UnlockCrate(GCMessageRead &messageRead);
     void NameItem(GCMessageRead &messageRead);
@@ -54,4 +68,7 @@ private:
 
     GCConfig m_config;
     Inventory m_inventory;
+
+    // microtransactions, we only have one going at a time
+    Transaction m_transaction{};
 };

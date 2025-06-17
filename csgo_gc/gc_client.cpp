@@ -2,6 +2,7 @@
 #include "gc_client.h"
 #include "graffiti.h"
 #include "keyvalue.h"
+#include "steam/isteamuser.h" // MicroTxnAuthorizationResponse_t
 
 const char *MessageName(uint32_t type);
 
@@ -66,6 +67,14 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             StoreGetUserData(messageRead);
             break;
 
+        case k_EMsgGCStorePurchaseInit:
+            StorePurchaseInit(messageRead);
+            break;
+
+        case k_EMsgGCStorePurchaseFinalize:
+            StorePurchaseFinalize(messageRead);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n",
                 MessageName(messageRead.TypeUnmasked()));
@@ -105,6 +114,18 @@ void ClientGC::Update()
     m_networking.Update();
 }
 
+bool ClientGC::GetMicroTransactionResponse(MicroTxnAuthorizationResponse_t &response)
+{
+    if (m_transaction.id)
+    {
+        // only m_bAuthorized gets read
+        response.m_bAuthorized = 1;
+        return true;
+    }
+
+    return false;
+}
+
 void ClientGC::SendSOCacheToGameSever()
 {
     CMsgSOCacheSubscribed message;
@@ -142,9 +163,10 @@ void ClientGC::ClearAuthTicket(uint32_t handle)
     m_networking.ClearAuthTicket(handle);
 }
 
-void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type, const google::protobuf::MessageLite &message)
+void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
+    const google::protobuf::MessageLite &message, uint64_t jobId)
 {
-    const GCMessageWrite &messageWrite = m_outgoingMessages.emplace(type, message);
+    const GCMessageWrite &messageWrite = m_outgoingMessages.emplace(type, message, jobId);
 
     if (sendToGameServer)
     {
@@ -497,6 +519,76 @@ void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
     *response.mutable_price_sheet() = std::move(binaryString);
 
     SendMessageToGame(false, k_EMsgGCStoreGetUserDataResponse, response);
+}
+
+void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
+{
+    CMsgGCStorePurchaseInit message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgGCStorePurchaseInit failed, ignoring\n");
+        return;
+    }
+
+    assert(!m_transaction.id);
+    m_transaction.id = Random{}.Integer<uint64_t>(); // doesn't matter
+    m_transaction.itemIds.reserve(message.line_items_size()); // rough approx
+
+    // inventory update response
+    std::vector<CMsgSOSingleObject> inventoryUpdate;
+
+    for (const auto &item : message.line_items())
+    {
+        for (uint32_t i = 0; i < item.quantity(); i++)
+        {
+            uint64_t itemId = m_inventory.PurchaseItem(item.item_def_id(), inventoryUpdate);
+            if (!itemId)
+            {
+                assert(false);
+            }
+            else
+            {
+                m_transaction.itemIds.push_back(itemId);
+            }
+        }
+    }
+
+    char url[128]; // url doesn't matter, but it needs to be set
+    snprintf(url, sizeof(url), "https://checkout.steampowered.com/checkout/approvetxn/%llu/?returnurl=steam", m_transaction.id);
+
+    CMsgGCStorePurchaseInitResponse response;
+    response.set_result(1);  // success
+    response.set_txn_id(m_transaction.id);
+    response.set_url(url);
+    *response.mutable_item_ids() = { m_transaction.itemIds.begin(), m_transaction.itemIds.end() };
+
+    SendMessageToGame(false, k_EMsgGCStorePurchaseInitResponse, response, messageRead.JobId());
+
+    // FIXME: why would the server care???
+    for (auto &newItem : inventoryUpdate)
+    {
+        SendMessageToGame(true, k_ESOMsg_Create, newItem);
+    }
+}
+
+void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
+{
+    CMsgGCStorePurchaseFinalize message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgGCStorePurchaseFinalize failed, ignoring\n");
+        return;
+    }
+
+    assert(m_transaction.id);
+
+    CMsgGCStorePurchaseFinalizeResponse response;
+    response.set_result(1); // success
+    *response.mutable_item_ids() = { m_transaction.itemIds.begin(), m_transaction.itemIds.end() };
+    SendMessageToGame(false, k_EMsgGCStorePurchaseFinalizeResponse, response, messageRead.JobId());
+
+    // done with this one
+    m_transaction.id = 0;
 }
 
 void ClientGC::UnlockCrate(GCMessageRead &messageRead)

@@ -21,7 +21,7 @@ public:
     DangerZoneRankId DangerZoneRank() const { return m_dangerZoneRank; }
     int DangerZoneWins() const { return m_dangerZoneWins; }
 
-    bool DestroyUsedItems() const;
+    bool DestroyUsedItems() const { return m_destroyUsedItems; }
 
     bool VacBanned() const { return m_vacBanned; }
     int CommendedFriendly() const { return m_commendedFriendly; }

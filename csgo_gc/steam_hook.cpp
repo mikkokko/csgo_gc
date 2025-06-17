@@ -1325,6 +1325,7 @@ static bool ShouldHookCallback(int id)
     {
     case GCMessageAvailable_t::k_iCallback:
     case GCMessageFailed_t::k_iCallback:
+    case MicroTxnAuthorizationResponse_t::k_iCallback:
         return true;
 
     default:
@@ -1454,6 +1455,12 @@ static void Hk_SteamAPI_RunCallbacks()
             GCMessageAvailable_t param{};
             param.m_nMessageSize = messageSize;
             s_callbackHooks.RunCallback(false, GCMessageAvailable_t::k_iCallback, &param);
+        }
+
+        MicroTxnAuthorizationResponse_t response;
+        if (s_clientGC->GetMicroTransactionResponse(response))
+        {
+            s_callbackHooks.RunCallback(false, MicroTxnAuthorizationResponse_t::k_iCallback, &response);
         }
 
         // do networking stuff

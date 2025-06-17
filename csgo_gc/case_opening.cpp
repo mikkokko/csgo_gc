@@ -64,7 +64,7 @@ bool CaseOpening::SelectItemFromCrate(const CSOEconItem &crate, CSOEconItem &ite
     }
 
     bool statTrak = ShouldMakeStatTrak(*lootListItem, *lootList, containsUnusuals);
-    return EconItemFromLootListItem(*lootListItem, item, statTrak);
+    return m_itemSchema.CreateItemFromLootListItem(m_random, *lootListItem, statTrak, ItemOriginCrate, UnacknowledgedFoundInCrate, item);
 }
 
 // get a range of loot list items with a specific rarity from a vector sorted by rarity
@@ -163,105 +163,4 @@ bool CaseOpening::ShouldMakeStatTrak(const LootListItem &item, const LootList &l
 
     // roll the dice
     return (m_random.Integer(1, 10) == 1);
-}
-
-bool CaseOpening::EconItemFromLootListItem(const LootListItem &lootListItem, CSOEconItem &item, bool statTrak)
-{
-    if (!m_itemSchema.CreateItem(lootListItem.itemInfo->m_defIndex, ItemOriginCrate, UnacknowledgedFoundInCrate, item))
-    {
-        assert(false);
-        return false;
-    }
-
-    // quality override, stattrak makes it strange if it's not an unusual
-    if (statTrak && lootListItem.quality != ItemSchema::QualityUnusual)
-    {
-        item.set_quality(ItemSchema::QualityStrange);
-    }
-    else
-    {
-        item.set_quality(lootListItem.quality);
-    }
-
-    // rarity override
-    assert(lootListItem.rarity >= ItemSchema::RarityCommon && lootListItem.rarity <= ItemSchema::RarityImmortal);
-    item.set_rarity(lootListItem.rarity);
-
-    // setup type specficic attributes
-
-    if (lootListItem.type == LootListItemSticker)
-    {
-        // mikkotodo anything else?
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeStickerId0);
-        m_itemSchema.SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
-    }
-    else if (lootListItem.type == LootListItemSpray)
-    {
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeStickerId0);
-        m_itemSchema.SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
-
-        // add AttributeSpraysRemaining when it's unsealed (mikkotodo how does the real gc do this)
-
-        attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeSprayTintId);
-        m_itemSchema.SetAttributeUint32(attribute, m_random.Integer<uint32_t>(ItemSchema::GraffitiTintMin, ItemSchema::GraffitiTintMax));
-    }
-    else if (lootListItem.type == LootListItemPatch)
-    {
-        // mikkotodo anything else?
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeStickerId0);
-        m_itemSchema.SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
-    }
-    else if (lootListItem.type == LootListItemMusicKit)
-    {
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeMusicId);
-        m_itemSchema.SetAttributeUint32(attribute, lootListItem.musicDefinitionInfo->m_defIndex);
-    }
-    else if (lootListItem.type == LootListItemPaintable)
-    {
-        const PaintKitInfo *paintKitInfo = lootListItem.paintKitInfo;
-
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeTexturePrefab);
-        m_itemSchema.SetAttributeUint32(attribute, paintKitInfo->m_defIndex);
-
-        attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeTextureSeed);
-        m_itemSchema.SetAttributeUint32(attribute, m_random.Integer<uint32_t>(0, 1000));
-
-        // mikkotodo how does the float distribution work?
-        attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeTextureWear);
-        m_itemSchema.SetAttributeFloat(attribute, m_random.Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat));
-    }
-    else if (lootListItem.type == LootListItemNoAttribute)
-    {
-        // nothing
-    }
-    else
-    {
-        assert(false);
-    }
-
-    if (statTrak)
-    {
-        assert((lootListItem.type == LootListItemMusicKit) || (lootListItem.type == LootListItemPaintable));
-
-        CSOEconItemAttribute *attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeKillEater);
-        m_itemSchema.SetAttributeUint32(attribute, 0);
-
-        // mikkotodo fix magic
-        int scoreType = (lootListItem.type == LootListItemMusicKit) ? 1 : 0;
-
-        attribute = item.add_attribute();
-        attribute->set_def_index(ItemSchema::AttributeKillEaterScoreType);
-        m_itemSchema.SetAttributeUint32(attribute, scoreType);
-    }
-
-    return true;
 }

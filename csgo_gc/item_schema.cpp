@@ -2,6 +2,7 @@
 #include "item_schema.h"
 #include "config.h"
 #include "keyvalue.h"
+#include "random.h"
 
 // ideally this would get parsed from the item schema...
 static uint32_t ItemRarityFromString(std::string_view name)
@@ -67,6 +68,8 @@ ItemInfo::ItemInfo(uint32_t defIndex)
     , m_quality{ ItemSchema::QualityNormal }
     , m_level{ 1 }
     , m_supplyCrateSeries{ 0 }
+    , m_isCoupon{ false }
+    , m_willProduceStatTrak{ false }
 {
     // RecursiveParseItem parses the rest
 }
@@ -403,6 +406,112 @@ const LootList *ItemSchema::GetCrateLootList(uint32_t crateDefIndex) const
     return &lootListSearch->second;
 }
 
+bool ItemSchema::CreateItemFromLootListItem(Random &random,
+    const LootListItem &lootListItem,
+    bool statTrak,
+    ItemOrigin origin,
+    UnacknowledgedType unacknowledgedType,
+    CSOEconItem &item) const
+{
+    if (!CreateItem(lootListItem.itemInfo->m_defIndex, origin, unacknowledgedType, item))
+    {
+        assert(false);
+        return false;
+    }
+
+    // quality override, stattrak makes it strange if it's not an unusual
+    if (statTrak && lootListItem.quality != ItemSchema::QualityUnusual)
+    {
+        item.set_quality(ItemSchema::QualityStrange);
+    }
+    else
+    {
+        item.set_quality(lootListItem.quality);
+    }
+
+    // rarity override
+    assert(lootListItem.rarity >= ItemSchema::RarityCommon && lootListItem.rarity <= ItemSchema::RarityImmortal);
+    item.set_rarity(lootListItem.rarity);
+
+    // setup type specficic attributes
+
+    if (lootListItem.type == LootListItemSticker)
+    {
+        // mikkotodo anything else?
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeStickerId0);
+        SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
+    }
+    else if (lootListItem.type == LootListItemSpray)
+    {
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeStickerId0);
+        SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
+
+        // add AttributeSpraysRemaining when it's unsealed (mikkotodo how does the real gc do this)
+
+        attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeSprayTintId);
+        SetAttributeUint32(attribute, random.Integer<uint32_t>(ItemSchema::GraffitiTintMin, ItemSchema::GraffitiTintMax));
+    }
+    else if (lootListItem.type == LootListItemPatch)
+    {
+        // mikkotodo anything else?
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeStickerId0);
+        SetAttributeUint32(attribute, lootListItem.stickerKitInfo->m_defIndex);
+    }
+    else if (lootListItem.type == LootListItemMusicKit)
+    {
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeMusicId);
+        SetAttributeUint32(attribute, lootListItem.musicDefinitionInfo->m_defIndex);
+    }
+    else if (lootListItem.type == LootListItemPaintable)
+    {
+        const PaintKitInfo *paintKitInfo = lootListItem.paintKitInfo;
+
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeTexturePrefab);
+        SetAttributeUint32(attribute, paintKitInfo->m_defIndex);
+
+        attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeTextureSeed);
+        SetAttributeUint32(attribute, random.Integer<uint32_t>(0, 1000));
+
+        // mikkotodo how does the float distribution work?
+        attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeTextureWear);
+        SetAttributeFloat(attribute, random.Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat));
+    }
+    else if (lootListItem.type == LootListItemNoAttribute)
+    {
+        // nothing
+    }
+    else
+    {
+        assert(false);
+    }
+
+    if (statTrak)
+    {
+        assert((lootListItem.type == LootListItemMusicKit) || (lootListItem.type == LootListItemPaintable));
+
+        CSOEconItemAttribute *attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeKillEater);
+        SetAttributeUint32(attribute, 0);
+
+        // mikkotodo fix magic
+        int scoreType = (lootListItem.type == LootListItemMusicKit) ? 1 : 0;
+
+        attribute = item.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeKillEaterScoreType);
+        SetAttributeUint32(attribute, scoreType);
+    }
+
+    return true;
+}
+
 bool ItemSchema::CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const
 {
     auto itemSearch = m_itemInfo.find(defIndex);
@@ -413,6 +522,31 @@ bool ItemSchema::CreateItem(uint32_t defIndex, ItemOrigin origin, Unacknowledged
     }
 
     const ItemInfo &itemInfo = itemSearch->second;
+
+    // urgh wtf is this crap
+    if (itemInfo.m_isCoupon)
+    {
+        assert(itemInfo.m_lootListName.size());
+        auto lootListSearch = m_lootLists.find(itemInfo.m_lootListName);
+        if (lootListSearch == m_lootLists.end())
+        {
+            assert(false);
+            return false;
+        }
+
+        const LootList &lootList = lootListSearch->second;
+        assert(lootList.subLists.size() == 0 && lootList.items.size() == 1);
+        assert(lootList.willProduceStatTrak == false && lootList.isUnusual == false);
+
+        Random random;
+
+        return CreateItemFromLootListItem(random,
+            lootList.items.front(),
+            itemInfo.m_willProduceStatTrak,
+            origin,
+            unacknowledgedType,
+            econItem);
+    }
 
     econItem.set_inventory(InventoryUnacknowledged(unacknowledgedType));
     econItem.set_def_index(defIndex);
@@ -443,6 +577,24 @@ void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey
         auto emplace = m_itemInfo.try_emplace(defIndex, defIndex);
 
         ParseItemRecursive(emplace.first->second, itemKey, prefabsKey);
+
+        // FIXME: remove, temp slop to make sure we parse correctly
+        auto &itemInfo = emplace.first->second;
+        if (!itemInfo.m_isCoupon)
+        {
+            // FIXME: self opening purchases
+            if (itemInfo.m_lootListName.size())
+            {
+                Platform::Print("Non coupon item associated loot list in %s!!!\n", itemInfo.m_name.c_str());
+            }
+
+            //assert(!itemInfo.m_lootListName.size());
+            assert(!itemInfo.m_willProduceStatTrak);
+        }
+        else
+        {
+            assert(itemInfo.m_lootListName.size());
+        }
     }
 }
 
@@ -482,6 +634,12 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
     std::string_view prefabName = itemKey.GetString("prefab");
     if (prefabName.size() && prefabsKey)
     {
+        if (prefabName == "valve coupon_prefab")
+        {
+            Platform::Print("WARNING: valve coupon_prefab kludge!!!\n");
+            prefabName = "coupon_prefab";
+        }
+
         const KeyValue *prefabKey = prefabsKey->GetSubkey(prefabName);
         if (prefabKey)
         {
@@ -514,6 +672,20 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
         assert(minLevel == maxLevel);
         info.m_level = minLevel;
     }
+
+    std::string_view itemType = itemKey.GetString("item_type");
+    if (itemType.size())
+    {
+        info.m_isCoupon = (itemType == "coupon");
+    }
+
+    std::string_view lootListName = itemKey.GetString("loot_list_name");
+    if (lootListName.size())
+    {
+        info.m_lootListName = lootListName;
+    }
+
+    info.m_willProduceStatTrak = itemKey.GetNumber("will_produce_stattrak", false);
 
     const KeyValue *attributes = itemKey.GetSubkey("attributes");
     if (attributes)

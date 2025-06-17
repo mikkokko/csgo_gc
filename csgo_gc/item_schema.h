@@ -3,6 +3,7 @@
 #include "gc_const_csgo.h"
 
 class KeyValue;
+class Random;
 
 enum class AttributeType
 {
@@ -30,6 +31,11 @@ public:
     uint32_t m_quality;
     uint32_t m_level;
     uint32_t m_supplyCrateSeries; // cases only
+
+    // kludge for coupons so we can buy stuff from the store
+    bool m_isCoupon;
+    std::string m_lootListName;
+    bool m_willProduceStatTrak;
 };
 
 class PaintKitInfo
@@ -113,6 +119,14 @@ public:
 
     // for case opening
     const LootList *GetCrateLootList(uint32_t crateDefIndex) const;
+
+    // for case opening FIXME: do we want to keep this here???
+    bool CreateItemFromLootListItem(Random &random,
+        const LootListItem &lootListItem,
+        bool statTrak,
+        ItemOrigin origin,
+        UnacknowledgedType unacknowledgedType,
+        CSOEconItem &item) const;
 
     // item creation: id and account id not set, needs to be done by the caller
     bool CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const;
