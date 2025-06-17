@@ -16,17 +16,20 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Weapon StatTrak support
 - Stickers and patches
 - Name tags
+- In-game store
 - Works without full Steam API emulation
 - Full Windows, Linux and MacOS support
 - Functional lobbies
 - Dedicated server support
+- Functional server browser (only shows csgo_gc servers)
 - Networking using Steam's P2P interface
 
 ## Planned features
 - Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
-- In-game store
 - Graphical inventory editor
 - A tool to copy your CS2 inventory over
+
+I'm still looking for the **full** CS:GO Item Schema. If you have a relatively recent copy of it and are willing to share it, let me know!
 
 ## Not planned
 - Matchmaking (can't be implemented without a centralized server)
