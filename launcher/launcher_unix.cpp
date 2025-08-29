@@ -48,20 +48,7 @@ static void ErrorMessageBox(const char *format, ...)
 
     CFRelease(messageString);
 #else
-    // display a message box if we can
-    // i don't want to link to sdl2 directly nor do i want it as a build dependency
-    void *libSDL2 = dlopen("libSDL2.so", RTLD_LAZY);
-    if (libSDL2)
-    {
-        using SDL_ShowSimpleMessageBox_t = int (*)(unsigned, const char *, const char *, void *);
-        SDL_ShowSimpleMessageBox_t fuction = reinterpret_cast<SDL_ShowSimpleMessageBox_t>(dlsym(libSDL2, "SDL_ShowSimpleMessageBox"));
-        if (fuction)
-        {
-            fuction(0, "csgo_gc", message, nullptr);
-        }
-
-        dlclose(libSDL2);
-    }
+    fprintf(stderr, "csgo_gc: %s\n", message);
 #endif
 }
 
