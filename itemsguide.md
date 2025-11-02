@@ -43,7 +43,7 @@
 | 3  | Unusual      |              |
 | 4  | Unique       |              |
 | 5  | Community    |              |
-| 6  | Developer    | (Valve Only) |
+| 6  | Developer    | (Valve)      |
 | 7  | Selfmade     |              |
 | 8  | Customized   |              |
 | 9  | Strange      |              |
