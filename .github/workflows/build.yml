@@ -31,7 +31,7 @@ jobs:
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt install --yes --no-install-recommends gcc-multilib g++-multilib
-        
+
     # ugh, should clean this up
     - if: matrix.os == 'ubuntu-latest'
       name: Build Linux
@@ -43,7 +43,7 @@ jobs:
         cmake --build ${{ github.workspace }}/build_ds --config ${{ matrix.build_type }} --target srcds csgo_gc
 
     - if: matrix.os == 'macos-latest'
-      name: Build MacOS
+      name: Build macOS
       run: |
         mkdir ${{ github.workspace }}/release
         cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }} -DCMAKE_OSX_ARCHITECTURES=x86_64 -DFUNCHOOK_CPU=x86 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DOUTDIR=${{ github.workspace }}/release
@@ -71,8 +71,59 @@ jobs:
         cp $GITHUB_WORKSPACE/examples/price_sheet.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/unusual_loot_lists.txt $GITHUB_WORKSPACE/release/csgo_gc/
 
-    - name: Upload
+    - name: Zip artifacts (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        OUTNAME: csgo_gc-${{ matrix.os }}.zip
+      run: |
+        $out = Join-Path $env:GITHUB_WORKSPACE $env:OUTNAME
+        if (Test-Path $out) { Remove-Item $out -Force }
+        # include everything under release
+        Compress-Archive -Path (Join-Path $env:GITHUB_WORKSPACE 'release\*') -DestinationPath $out -Force
+        Get-ChildItem $out
+
+    - name: Zip artifacts (non-Windows)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        OUTNAME="csgo_gc-${{ matrix.os }}.zip"
+        (cd release && zip -r "../${OUTNAME}" .)
+
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: csgo_gc-${{ matrix.os }}
-        path: ${{ github.workspace }}/release
+        name: artifact-${{ matrix.os }}
+        path: ${{ github.workspace }}/csgo_gc-${{ matrix.os }}.zip
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create continuous release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          TAG=continuous
+          files=( $(find artifacts -type f -name "*.zip") )
+
+          # schizo check
+          if [ ${#files[@]} -gt 0 ]; then
+            gh release delete "$TAG" --cleanup-tag --repo "$REPO" --yes || true
+
+            gh release create "$TAG" --repo "$REPO" \
+              --title "Continuous Build" \
+              --notes "$SHA" \
+              --target "$SHA"
+
+            gh release upload "$TAG" --repo "$REPO" "${files[@]}" --clobber
+          fi
