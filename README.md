@@ -1,6 +1,7 @@
 # csgo_gc
 
-⚠️ **Warning:** This project is incomplete and not ready for general use.
+> [!WARNING]
+> This project is incomplete and not ready for general use.
 
 ## What is this?
 In Valve games, the Game Coordinator (GC) is a backend service most notably responsible for matchmaking and inventory management (like loadouts and skins). This project redirects the GC traffic to a custom, in-process implementation.
@@ -35,7 +36,7 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 - Matchmaking (can't be implemented without a centralized server)
 
 ## Installation
-- Download the last version of the game before CS2's release using depotdownloader:
+- Download the last version of the game before CS2's release using [DepotDownloader](https://github.com/SteamRE/DepotDownloader). Other versions might work, but are not tested or supported. Also note that **this is not the same version as the csgo_legacy branch**. Manifest IDs:
 ```
 731 718406683749122620
 732 2224497558453288476
@@ -43,7 +44,7 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 734 3106517550092294329
 740 1512455234357538911
 ```
-- Download the latest artifacts for your platform from the [actions page](https://github.com/mikkokko/csgo_gc/actions)
+- Download the latest release for your platform from the [releases page](https://github.com/mikkokko/csgo_gc/releases/latest)
 - Back up your existing launcher executables as they'll be overwritten (i.e. csgo.exe, srcds.exe, csgo_linux64, etc.)
 - Extract the contents of the downloaded archive to your game directory, replace the executables when prompted
 - Launch the game. If you get the annoying VAC message box, launch the game with the -steam argument.
