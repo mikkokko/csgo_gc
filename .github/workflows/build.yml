@@ -120,6 +120,9 @@ jobs:
           if [ ${#files[@]} -gt 0 ]; then
             gh release delete "$TAG" --cleanup-tag --repo "$REPO" --yes || true
 
+            # kludge to avoid the release being created as a draft...
+            sleep 10s
+
             gh release create "$TAG" --repo "$REPO" \
               --title "Continuous Build" \
               --notes "$SHA" \
