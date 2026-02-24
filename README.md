@@ -19,7 +19,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Name tags
 - In-game store
 - Works without full Steam API emulation
-- Full Windows, Linux and MacOS support
+- Full Windows, Linux and macOS support
 - Functional lobbies
 - Dedicated server support
 - Functional server browser (only shows csgo_gc servers)
@@ -48,6 +48,10 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 - Back up your existing launcher executables as they'll be overwritten (i.e. csgo.exe, srcds.exe, csgo_linux64, etc.)
 - Extract the contents of the downloaded archive to your game directory, replace the executables when prompted
 - Launch the game. If you get the annoying VAC message box, launch the game with the -steam argument.
+- macOS users: The release binaries are not notarized, so if you're using them, you'll have to deal with that somehow.
+
+## Inventory editing
+Since there is no graphical editor yet, you'll have to edit `csgo_gc/inventory.txt` manually. There is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
 
 ## Building
 Requirements:
@@ -63,18 +67,18 @@ Linux dedicated servers are also 32-bit:
 
 `cmake -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -B build`
 
-On MacOS, you need to build for x86_64 instead of arm64:
+On macOS, you need to build for x86_64 instead of arm64:
 
 `cmake -DCMAKE_OSX_ARCHITECTURES=x86_64 -DFUNCHOOK_CPU=x86 -B build`
 
 For Linux clients you don't have to specify any additional options.
 
 ## License
-This project is licensed under the 2-Clause BSD License. See the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the 2-Clause BSD License. See [LICENSE.md](LICENSE.md) for details.
 
 ## Credits
-* **Mikko Kokko** - Maintainer
-* **Theeto** - Work on the original project, unusual loot lists
+* **Mikko Kokko** - Author
+* **Theeto** - Code reused from the predecessor project, unusual loot lists
 
 ## Third party dependencies
 - [Crypto++](https://github.com/weidai11/cryptopp) ([Boost Software License](https://github.com/weidai11/cryptopp/blob/master/License.txt))
