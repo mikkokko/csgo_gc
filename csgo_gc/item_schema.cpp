@@ -629,21 +629,47 @@ static uint32_t ItemQualityFromString(std::string_view name)
     return ItemSchema::QualityUnique; // i guess???
 }
 
-void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, const KeyValue *prefabsKey)
+// i hate my life
+static std::vector<std::string_view> SplitString(std::string_view input, char delimiter)
 {
-    std::string_view prefabName = itemKey.GetString("prefab");
-    if (prefabName.size() && prefabsKey)
+    size_t offset = 0;
+    std::vector<std::string_view> result;
+
+    while (true)
     {
-        if (prefabName == "valve coupon_prefab")
+        size_t i = input.find(delimiter, offset);
+        if (i == std::string_view::npos)
         {
-            Platform::Print("WARNING: valve coupon_prefab kludge!!!\n");
-            prefabName = "coupon_prefab";
+            result.emplace_back(input.substr(offset));
+            break;
         }
 
-        const KeyValue *prefabKey = prefabsKey->GetSubkey(prefabName);
-        if (prefabKey)
+        result.emplace_back(input.substr(offset, i - offset));
+        offset = i + 1;
+    }
+
+    return result;
+}
+
+void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, const KeyValue *prefabsKey)
+{
+    std::string_view prefabString = itemKey.GetString("prefab");
+    if (prefabString.size() && prefabsKey)
+    {
+        // might have multiple specifications in a single statement
+        std::vector<std::string_view> prefabNames = SplitString(prefabString, ' ');
+        for (std::string_view prefabName : prefabNames)
         {
-            ParseItemRecursive(info, *prefabKey, prefabsKey);
+            const KeyValue *prefabKey = prefabsKey->GetSubkey(prefabName);
+            if (prefabKey)
+            {
+                ParseItemRecursive(info, *prefabKey, prefabsKey);
+            }
+            else
+            {
+                // not available to us mortals...
+                Platform::Print("No such prefab '%s'\n", std::string{ prefabName }.c_str());
+            }
         }
     }
 
