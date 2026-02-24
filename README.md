@@ -69,6 +69,13 @@ On MacOS, you need to build for x86_64 instead of arm64:
 
 For Linux clients you don't have to specify any additional options.
 
+## License
+This project is licensed under the 2-Clause BSD License. See the [LICENSE.md](LICENSE.md) file for details.
+
+## Credits
+* **Mikko Kokko** - Maintainer
+* **Theeto** - Work on the original project, unusual loot lists
+
 ## Third party dependencies
 - [Crypto++](https://github.com/weidai11/cryptopp) ([Boost Software License](https://github.com/weidai11/cryptopp/blob/master/License.txt))
 - [funchook](https://github.com/kubo/funchook) ([GPL v2 with Classpath Exception](https://github.com/kubo/funchook/blob/master/LICENSE))
