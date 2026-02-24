@@ -431,6 +431,19 @@ bool Inventory::EquipItem(uint64_t itemId, uint32_t classId, uint32_t slotId, CM
     }
 }
 
+bool Inventory::RemoveItem(uint64_t itemId, CMsgSOSingleObject &response)
+{
+    auto it = m_items.find(itemId);
+    if (it == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    DestroyItem(it, response);
+    return true;
+}
+
 bool Inventory::UseItem(uint64_t itemId,
     CMsgSOSingleObject &destroy,
     CMsgSOMultipleObjects &updateMultiple,

@@ -19,6 +19,8 @@ public:
 
     bool EquipItem(uint64_t itemId, uint32_t classId, uint32_t slotId, CMsgSOMultipleObjects &update);
 
+    bool RemoveItem(uint64_t itemId, CMsgSOSingleObject &destroy);
+
     bool UseItem(uint64_t itemId,
         CMsgSOSingleObject &destroy,
         CMsgSOMultipleObjects &updateMultiple,

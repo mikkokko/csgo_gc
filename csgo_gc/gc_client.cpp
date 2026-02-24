@@ -85,6 +85,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     {
         switch (messageRead.TypeUnmasked())
         {
+        case k_EMsgGCDelete:
+            DeleteItem(messageRead);
+            break;
+
         case k_EMsgGCUnlockCrate:
             UnlockCrate(messageRead);
             break;
@@ -589,6 +593,29 @@ void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
 
     // done with this one
     m_transaction.id = 0;
+}
+
+
+void ClientGC::DeleteItem(GCMessageRead &messageRead)
+{
+    // there is data after this, but i don't know what it is
+    uint64_t itemId = messageRead.ReadUint64();
+    if (!messageRead.IsValid())
+    {
+        Platform::Print("Parsing CMsgGCDelete failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject destroyed;
+    if (m_inventory.RemoveItem(itemId, destroyed))
+    {
+        // mikkotodo what does the server want to know
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroyed);
+    }
+    else
+    {
+        assert(false);
+    }
 }
 
 void ClientGC::UnlockCrate(GCMessageRead &messageRead)
