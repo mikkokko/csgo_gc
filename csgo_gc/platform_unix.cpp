@@ -255,7 +255,7 @@ bool PatchGraffitiPublicKey(std::string_view moduleName, const void *original, c
 {
     std::string actualModuleName;
 
-#if defined(__APPLE)
+#if defined(__APPLE__)
     actualModuleName.assign(moduleName);
     actualModuleName.append(".dylib");
 
