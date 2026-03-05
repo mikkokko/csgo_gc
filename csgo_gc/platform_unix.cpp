@@ -229,7 +229,9 @@ void *SteamClientFactory(const void *pathBuffer)
 
 void EnsureEnvVarSet(const char *name, const char *value)
 {
-    setenv(name, value, 0);
+    // Always set the environment variable to ensure consistent behavior
+    // regardless of how the game was launched (directly or via Steam)
+    setenv(name, value, 1);
 }
 
 static void CopyToReadOnly(void *dest, const void *src, size_t size)

@@ -77,10 +77,9 @@ void *SteamClientFactory(const void *pathBuffer)
 
 void EnsureEnvVarSet(const char *name, const char *value)
 {
-    if (!GetEnvironmentVariableA(name, nullptr, 0))
-    {
-        SetEnvironmentVariableA(name, value);
-    }
+    // Always set the environment variable to ensure consistent behavior
+    // regardless of how the game was launched (directly or via Steam)
+    SetEnvironmentVariableA(name, value);
 }
 
 static void *Q_memmem(const void *_haystack, size_t haystack_len, const void *_needle, size_t needle_len)
