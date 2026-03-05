@@ -2,10 +2,13 @@
 // that this is the bridge betweem the game and ClientGC/ServerGC
 #include "stdafx.h"
 #include "steam_hook.h"
+#include "appid.h"
 #include "gc_client.h"
 #include "gc_server.h"
 #include "platform.h"
 #include <funchook.h>
+
+struct SteamNetworkingIdentity;
 
 // defines STEAM_PRIVATE_API
 #include <steam/steam_api_common.h>
@@ -13,17 +16,94 @@
 #undef STEAM_PRIVATE_API // we need these public so we can proxy them
 #define STEAM_PRIVATE_API(...) __VA_ARGS__
 
-// mikkotodo update the sdk...
-struct SteamNetworkingIdentity;
-
 #include <steam/steam_api.h>
 #include <steam/steam_gameserver.h>
 #include <steam/isteamgamecoordinator.h>
 
+// these should come after steam includes
+#include "networking_client.h"
+#include "networking_server.h"
+
+static void CheckServerBrowserPatch()
+{
+    // NYI
+}
+
+class GCMessageQueue
+{
+public:
+    bool IsMessageAvailable(uint32_t &size)
+    {
+        if (m_messages.empty())
+        {
+            return false;
+        }
+
+        Message &message = m_messages.front();
+        size = static_cast<uint32_t>(message.buffer.size());
+
+        return true;
+    }
+
+    bool RetrieveMessage(uint32_t &type, void *buffer, uint32_t bufferSize, uint32_t &size)
+    {
+        if (m_messages.empty())
+        {
+            size = 0;
+            return false;
+        }
+
+        Message &message = m_messages.front();
+        type = message.type;
+        size = static_cast<uint32_t>(message.buffer.size());
+
+        if (bufferSize < message.buffer.size())
+        {
+            return false;
+        }
+
+        memcpy(buffer, message.buffer.data(), message.buffer.size());
+        m_messages.pop();
+        return true;
+    }
+
+    void AddMessage(uint32_t type, std::vector<uint8_t> &&buffer)
+    {
+        Message &dest = m_messages.emplace();
+        dest.type = type;
+        dest.buffer = std::move(buffer);
+    }
+
+private:
+    struct Message
+    {
+        uint32_t type{};
+        std::vector<uint8_t> buffer;
+    };
+
+    std::queue<Message> m_messages;
+};
+
+template<typename GC, typename Networking>
+class GCWrapper final
+{
+public:
+    template<typename... Args>
+    GCWrapper(ISteamNetworkingMessages *networkingMessages, Args &&...args)
+        : m_gc{ std::forward<Args>(args)... }
+        , m_networking{ networkingMessages }
+    {
+    }
+
+    GC m_gc;
+    Networking m_networking;
+    GCMessageQueue m_messageQueue;
+};
+
 // these are in file scope for networking, callbacks and gc server
 // client connect/disconnect notifications
-static ClientGC *s_clientGC;
-static ServerGC *s_serverGC;
+static GCWrapper<ClientGC, NetworkingClient> *s_clientGC;
+static GCWrapper<ServerGC, NetworkingServer> *s_serverGC;
 
 template<size_t N>
 inline bool InterfaceMatches(const char *name, const char (&compare)[N])
@@ -62,12 +142,12 @@ public:
         if (m_server)
         {
             assert(!s_serverGC);
-            s_serverGC = new ServerGC{ SteamGameServerNetworkingMessages() };
+            s_serverGC = new GCWrapper<ServerGC, NetworkingServer>{ SteamGameServerNetworkingMessages() };
         }
         else
         {
             assert(!s_clientGC);
-            s_clientGC = new ClientGC{ steamId, SteamNetworkingMessages() };
+            s_clientGC = new GCWrapper<ClientGC, NetworkingClient>{ SteamNetworkingMessages(), steamId };
         }
     }
 
@@ -92,12 +172,12 @@ public:
         if (m_server)
         {
             assert(s_serverGC);
-            s_serverGC->HandleMessage(unMsgType, pubData, cubData);
+            s_serverGC->m_gc.PostToGC(GCEvent::Message, unMsgType, pubData, cubData);
         }
         else
         {
             assert(s_clientGC);
-            s_clientGC->HandleMessage(unMsgType, pubData, cubData);
+            s_clientGC->m_gc.PostToGC(GCEvent::Message, unMsgType, pubData, cubData);
         }
 
         return k_EGCResultOK;
@@ -107,11 +187,11 @@ public:
     {
         if (m_server)
         {
-            return s_serverGC->HasOutgoingMessages(*pcubMsgSize);
+            return s_serverGC->m_messageQueue.IsMessageAvailable(*pcubMsgSize);
         }
         else
         {
-            return s_clientGC->HasOutgoingMessages(*pcubMsgSize);
+            return s_clientGC->m_messageQueue.IsMessageAvailable(*pcubMsgSize);
         }
     }
 
@@ -121,11 +201,11 @@ public:
 
         if (m_server)
         {
-            result = s_serverGC->PopOutgoingMessage(*punMsgType, pubDest, cubDest, *pcubMsgSize);
+            result = s_serverGC->m_messageQueue.RetrieveMessage(*punMsgType, pubDest, cubDest, *pcubMsgSize);
         }
         else
         {
-            result = s_clientGC->PopOutgoingMessage(*punMsgType, pubDest, cubDest, *pcubMsgSize);
+            result = s_clientGC->m_messageQueue.RetrieveMessage(*punMsgType, pubDest, cubDest, *pcubMsgSize);
         }
 
         if (!result)
@@ -377,6 +457,285 @@ public:
     }
 };
 
+static std::vector<UserStatsReceived_t> s_userStatsReceivedCallbacks;
+
+static void QueueUserStatsCallback()
+{
+    UserStatsReceived_t callback{};
+    // m_nGameID not used
+    callback.m_eResult = k_EResultOK;
+    // m_steamIDUser not used
+    s_userStatsReceivedCallbacks.push_back(callback);
+}
+
+class SteamUserStatsProxy : public ISteamUserStats
+{
+    ISteamUserStats *const m_original;
+
+public:
+    SteamUserStatsProxy(ISteamUserStats *original)
+        : m_original{ original }
+    {
+    }
+
+    bool RequestCurrentStats() override
+    {
+        if (!AppId::IsOriginal())
+        {
+            Platform::Print("Spoofing RequestCurrentStats\n");
+            QueueUserStatsCallback();
+            return true;
+        }
+
+        return m_original->RequestCurrentStats();
+    }
+
+    bool GetStat(const char *pchName, int32 *pData) override
+    {
+        return m_original->GetStat(pchName, pData);
+    }
+
+    bool GetStat(const char *pchName, float *pData) override
+    {
+        return m_original->GetStat(pchName, pData);
+    }
+
+    bool SetStat(const char *pchName, int32 nData) override
+    {
+        return m_original->SetStat(pchName, nData);
+    }
+
+    bool SetStat(const char *pchName, float fData) override
+    {
+        return m_original->SetStat(pchName, fData);
+    }
+
+    bool UpdateAvgRateStat(const char *pchName, float flCountThisSession, double dSessionLength) override
+    {
+        return m_original->UpdateAvgRateStat(pchName, flCountThisSession, dSessionLength);
+    }
+
+    bool GetAchievement(const char *pchName, bool *pbAchieved) override
+    {
+        return m_original->GetAchievement(pchName, pbAchieved);
+    }
+
+    bool SetAchievement(const char *pchName) override
+    {
+        return m_original->SetAchievement(pchName);
+    }
+
+    bool ClearAchievement(const char *pchName) override
+    {
+        return m_original->ClearAchievement(pchName);
+    }
+
+    bool GetAchievementAndUnlockTime(const char *pchName, bool *pbAchieved, uint32 *punUnlockTime) override
+    {
+        return m_original->GetAchievementAndUnlockTime(pchName, pbAchieved, punUnlockTime);
+    }
+
+    bool StoreStats() override
+    {
+        return m_original->StoreStats();
+    }
+
+    int GetAchievementIcon(const char *pchName) override
+    {
+        return m_original->GetAchievementIcon(pchName);
+    }
+
+    const char *GetAchievementDisplayAttribute(const char *pchName, const char *pchKey) override
+    {
+        return m_original->GetAchievementDisplayAttribute(pchName, pchKey);
+    }
+
+    bool IndicateAchievementProgress(const char *pchName, uint32 nCurProgress, uint32 nMaxProgress) override
+    {
+        return m_original->IndicateAchievementProgress(pchName, nCurProgress, nMaxProgress);
+    }
+
+    uint32 GetNumAchievements() override
+    {
+        return m_original->GetNumAchievements();
+    }
+
+    const char *GetAchievementName(uint32 iAchievement) override
+    {
+        return m_original->GetAchievementName(iAchievement);
+    }
+
+    SteamAPICall_t RequestUserStats(CSteamID steamIDUser) override
+    {
+        if (!AppId::IsOriginal())
+        {
+            // not used by csgo, but warn anyway
+            Platform::Print("RequestUserStats not spoofed!!!\n");
+        }
+
+        return m_original->RequestUserStats(steamIDUser);
+    }
+
+    bool GetUserStat(CSteamID steamIDUser, const char *pchName, int32 *pData) override
+    {
+        return m_original->GetUserStat(steamIDUser, pchName, pData);
+    }
+
+    bool GetUserStat(CSteamID steamIDUser, const char *pchName, float *pData) override
+    {
+        return m_original->GetUserStat(steamIDUser, pchName, pData);
+    }
+
+    bool GetUserAchievement(CSteamID steamIDUser, const char *pchName, bool *pbAchieved) override
+    {
+        return m_original->GetUserAchievement(steamIDUser, pchName, pbAchieved);
+    }
+
+    bool GetUserAchievementAndUnlockTime(CSteamID steamIDUser, const char *pchName, bool *pbAchieved, uint32 *punUnlockTime) override
+    {
+        return m_original->GetUserAchievementAndUnlockTime(steamIDUser, pchName, pbAchieved, punUnlockTime);
+    }
+
+    bool ResetAllStats(bool bAchievementsToo) override
+    {
+        return m_original->ResetAllStats(bAchievementsToo);
+    }
+
+    SteamAPICall_t FindOrCreateLeaderboard(const char *pchLeaderboardName,
+        ELeaderboardSortMethod eLeaderboardSortMethod,
+        ELeaderboardDisplayType eLeaderboardDisplayType) override
+    {
+        return m_original->FindOrCreateLeaderboard(pchLeaderboardName, eLeaderboardSortMethod, eLeaderboardDisplayType);
+    }
+
+    SteamAPICall_t FindLeaderboard(const char *pchLeaderboardName) override
+    {
+        return m_original->FindLeaderboard(pchLeaderboardName);
+    }
+
+    const char *GetLeaderboardName(SteamLeaderboard_t hSteamLeaderboard) override
+    {
+        return m_original->GetLeaderboardName(hSteamLeaderboard);
+    }
+
+    int GetLeaderboardEntryCount(SteamLeaderboard_t hSteamLeaderboard) override
+    {
+        return m_original->GetLeaderboardEntryCount(hSteamLeaderboard);
+    }
+
+    ELeaderboardSortMethod GetLeaderboardSortMethod(SteamLeaderboard_t hSteamLeaderboard) override
+    {
+        return m_original->GetLeaderboardSortMethod(hSteamLeaderboard);
+    }
+
+    ELeaderboardDisplayType GetLeaderboardDisplayType(SteamLeaderboard_t hSteamLeaderboard) override
+    {
+        return m_original->GetLeaderboardDisplayType(hSteamLeaderboard);
+    }
+
+    SteamAPICall_t DownloadLeaderboardEntries(SteamLeaderboard_t hSteamLeaderboard,
+        ELeaderboardDataRequest eLeaderboardDataRequest,
+        int nRangeStart,
+        int nRangeEnd) override
+    {
+        return m_original->DownloadLeaderboardEntries(hSteamLeaderboard, eLeaderboardDataRequest, nRangeStart, nRangeEnd);
+    }
+
+    SteamAPICall_t DownloadLeaderboardEntriesForUsers(SteamLeaderboard_t hSteamLeaderboard, CSteamID *prgUsers, int cUsers) override
+    {
+        return m_original->DownloadLeaderboardEntriesForUsers(hSteamLeaderboard, prgUsers, cUsers);
+    }
+
+    bool GetDownloadedLeaderboardEntry(SteamLeaderboardEntries_t hSteamLeaderboardEntries,
+        int index,
+        LeaderboardEntry_t *pLeaderboardEntry,
+        int32 *pDetails,
+        int cDetailsMax) override
+    {
+        return m_original->GetDownloadedLeaderboardEntry(hSteamLeaderboardEntries, index, pLeaderboardEntry, pDetails, cDetailsMax);
+    }
+
+    SteamAPICall_t UploadLeaderboardScore(SteamLeaderboard_t hSteamLeaderboard,
+        ELeaderboardUploadScoreMethod eLeaderboardUploadScoreMethod,
+        int32 nScore,
+        const int32 *pScoreDetails,
+        int cScoreDetailsCount) override
+    {
+        return m_original->UploadLeaderboardScore(hSteamLeaderboard, eLeaderboardUploadScoreMethod, nScore, pScoreDetails, cScoreDetailsCount);
+    }
+
+    SteamAPICall_t AttachLeaderboardUGC(SteamLeaderboard_t hSteamLeaderboard,
+        UGCHandle_t hUGC) override
+    {
+        return m_original->AttachLeaderboardUGC(hSteamLeaderboard, hUGC);
+    }
+
+    SteamAPICall_t GetNumberOfCurrentPlayers() override
+    {
+        return m_original->GetNumberOfCurrentPlayers();
+    }
+
+    SteamAPICall_t RequestGlobalAchievementPercentages() override
+    {
+        return m_original->RequestGlobalAchievementPercentages();
+    }
+
+    int GetMostAchievedAchievementInfo(char *pchName, uint32 unNameBufLen,
+        float *pflPercent, bool *pbAchieved) override
+    {
+        return m_original->GetMostAchievedAchievementInfo(pchName, unNameBufLen, pflPercent, pbAchieved);
+    }
+
+    int GetNextMostAchievedAchievementInfo(int iIteratorPrevious,
+        char *pchName,
+        uint32 unNameBufLen,
+        float *pflPercent,
+        bool *pbAchieved) override
+    {
+        return m_original->GetNextMostAchievedAchievementInfo(iIteratorPrevious, pchName, unNameBufLen, pflPercent, pbAchieved);
+    }
+
+    bool GetAchievementAchievedPercent(const char *pchName, float *pflPercent) override
+    {
+        return m_original->GetAchievementAchievedPercent(pchName, pflPercent);
+    }
+
+    SteamAPICall_t RequestGlobalStats(int nHistoryDays) override
+    {
+        return m_original->RequestGlobalStats(nHistoryDays);
+    }
+
+    bool GetGlobalStat(const char *pchStatName, int64 *pData) override
+    {
+        return m_original->GetGlobalStat(pchStatName, pData);
+    }
+
+    bool GetGlobalStat(const char *pchStatName, double *pData) override
+    {
+        return m_original->GetGlobalStat(pchStatName, pData);
+    }
+
+    int32 GetGlobalStatHistory(const char *pchStatName, int64 *pData, uint32 cubData) override
+    {
+        return m_original->GetGlobalStatHistory(pchStatName, pData, cubData);
+    }
+
+    int32 GetGlobalStatHistory(const char *pchStatName, double *pData, uint32 cubData) override
+    {
+        return m_original->GetGlobalStatHistory(pchStatName, pData, cubData);
+    }
+
+    bool GetAchievementProgressLimits(const char *pchName, int32 *pnMinProgress, int32 *pnMaxProgress) override
+    {
+        return m_original->GetAchievementProgressLimits(pchName, pnMinProgress, pnMaxProgress);
+    }
+
+    bool GetAchievementProgressLimits(const char *pchName, float *pfMinProgress, float *pfMaxProgress) override
+    {
+        return m_original->GetAchievementProgressLimits(pchName, pfMinProgress, pfMaxProgress);
+    }
+};
+
 class SteamGameServerProxy final : public ISteamGameServer
 {
 private:
@@ -399,7 +758,10 @@ public:
         // make sure we're up to date
         pchVersionString = "1.99.9.9";
 
-        if ( m_original->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString))
+        // i recall this wasn't used for anything important, but check anyway
+        assert(nGameAppId == AppId::GetOverride());
+
+        if (m_original->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString))
         {
             // add the csgo_gc gametag
             m_original->SetGameTags("csgo_gc");
@@ -550,7 +912,7 @@ public:
         EBeginAuthSessionResult result = m_original->BeginAuthSession(pAuthTicket, cbAuthTicket, steamID);
         if (s_serverGC && result == k_EBeginAuthSessionResultOK)
         {
-            s_serverGC->ClientConnected(steamID.ConvertToUint64(), pAuthTicket, cbAuthTicket);
+            s_serverGC->m_networking.ClientConnected(steamID.ConvertToUint64(), pAuthTicket, cbAuthTicket);
         }
 
         return result;
@@ -560,7 +922,10 @@ public:
     {
         if (s_serverGC)
         {
-            s_serverGC->ClientDisconnected(steamID.ConvertToUint64());
+            s_serverGC->m_networking.ClientDisconnected(steamID.ConvertToUint64());
+
+            // also remember to unsub from the socache!!! not sure if this does anything in newer builds though
+            s_serverGC->m_gc.PostToGC(GCEvent::ClientSOCacheUnsubscribe, steamID.ConvertToUint64(), nullptr, 0);
         }
 
         m_original->EndAuthSession(steamID);
@@ -727,7 +1092,7 @@ public:
         HAuthTicket ticket = m_original->GetAuthSessionTicket(pTicket, cbMaxTicket, pcbTicket, pSteamNetworkingIdentity);
         if (s_clientGC && ticket != k_HAuthTicketInvalid)
         {
-            s_clientGC->SetAuthTicket(ticket, pTicket, *pcbTicket);
+            s_clientGC->m_networking.SetAuthTicket(ticket, pTicket, *pcbTicket);
         }
 
         return ticket;
@@ -747,7 +1112,7 @@ public:
     {
         if (s_clientGC)
         {
-            s_clientGC->ClearAuthTicket(hAuthTicket);
+            s_clientGC->m_networking.ClearAuthTicket(hAuthTicket);
         }
 
         m_original->CancelAuthTicket(hAuthTicket);
@@ -852,6 +1217,8 @@ public:
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse) override
     {
+        CheckServerBrowserPatch();
+
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
         return m_original->RequestInternetServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
@@ -860,6 +1227,8 @@ public:
     HServerListRequest RequestLANServerList(AppId_t iApp,
         ISteamMatchmakingServerListResponse *pRequestServersResponse) override
     {
+        CheckServerBrowserPatch();
+
         return m_original->RequestLANServerList(iApp, pRequestServersResponse);
     }
 
@@ -868,6 +1237,8 @@ public:
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse) override
     {
+        CheckServerBrowserPatch();
+
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
         return m_original->RequestFriendsServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
@@ -878,6 +1249,8 @@ public:
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse) override
     {
+        CheckServerBrowserPatch();
+
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
         return m_original->RequestFavoritesServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
@@ -888,6 +1261,8 @@ public:
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse) override
     {
+        CheckServerBrowserPatch();
+
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
         return m_original->RequestHistoryServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
@@ -910,7 +1285,14 @@ public:
 
     gameserveritem_t *GetServerDetails(HServerListRequest hRequest, int iServer) override
     {
-        return m_original->GetServerDetails(hRequest, iServer);
+        gameserveritem_t *result = m_original->GetServerDetails(hRequest, iServer);
+
+        if (result)
+        {
+            Platform::Print("Got details: %u\n", result->m_nAppID);
+        }
+
+        return result;
     }
 
     void CancelQuery(HServerListRequest hRequest) override
@@ -996,6 +1378,10 @@ public:
         {
             return GetOrCreate<ISteamUtils>(m_steamUtils, static_cast<ISteamUtils *>(original));
         }
+        else if (InterfaceMatches(version, STEAMUSERSTATS_INTERFACE_VERSION))
+        {
+            return GetOrCreate<ISteamUserStats>(m_steamUserStats, static_cast<ISteamUserStats *>(original));
+        }
         else if (InterfaceMatches(version, STEAMGAMESERVER_INTERFACE_VERSION))
         {
             return GetOrCreate<ISteamGameServer>(m_steamGameServer, static_cast<ISteamGameServer *>(original));
@@ -1017,6 +1403,7 @@ private:
 
     std::unique_ptr<SteamGameCoordinatorProxy> m_steamGameCoordinator;
     std::unique_ptr<SteamUtilsProxy> m_steamUtils;
+    std::unique_ptr<SteamUserStatsProxy> m_steamUserStats;
     std::unique_ptr<SteamGameServerProxy> m_steamGameServer;
     std::unique_ptr<SteamUserProxy> m_steamUser;
     std::unique_ptr<SteamMatchmakingServersProxy> m_steamMatchmakingServers;
@@ -1320,6 +1707,11 @@ struct CallbackHook
 
 static bool ShouldHookCallback(int id)
 {
+    if (id == UserStatsReceived_t::k_iCallback && !AppId::IsOriginal())
+    {
+        return true;
+    }
+
     // we want to spoof all gc callbacks
     switch (id)
     {
@@ -1363,6 +1755,7 @@ public:
             return false;
         }
 
+        assert((void *)callback != (void *)0xDDDDDDDD);
         CallbackHook callbackHook{ id, callback };
         m_hooks.push_back(callbackHook);
 
@@ -1448,23 +1841,64 @@ static void Hk_SteamAPI_RunCallbacks()
 
     if (s_clientGC)
     {
+        // poll events
+        HostEvent type;
+        uint64_t id;
+        std::vector<uint8_t> buffer;
+
+        bool runMicroTransactionResponse = false;
+
+        while (s_clientGC->m_gc.PollFromGC(type, id, buffer))
+        {
+            switch (type)
+            {
+            case HostEvent::Message:
+                s_clientGC->m_messageQueue.AddMessage((uint32_t)id, std::move(buffer));
+                break;
+
+            case HostEvent::NetMessage:
+                s_clientGC->m_networking.SendMessage(buffer.data(), static_cast<uint32_t>(buffer.size()));
+                break;
+
+            case HostEvent::MicroTransactionResponse:
+                runMicroTransactionResponse = true;
+                break;
+
+            default:
+                assert(false);
+                break;
+            }
+        }
+
+        // poll networking
+        s_clientGC->m_networking.Update(&s_clientGC->m_gc);
+
         // run client gc callbacks
         uint32_t messageSize;
-        if (s_clientGC->HasOutgoingMessages(messageSize))
+        if (s_clientGC->m_messageQueue.IsMessageAvailable(messageSize))
         {
             GCMessageAvailable_t param{};
             param.m_nMessageSize = messageSize;
             s_callbackHooks.RunCallback(false, GCMessageAvailable_t::k_iCallback, &param);
         }
 
-        MicroTxnAuthorizationResponse_t response;
-        if (s_clientGC->GetMicroTransactionResponse(response))
+        if (runMicroTransactionResponse)
         {
+            Platform::Print("Running MicroTxnAuthorizationResponse_t\n");
+            MicroTxnAuthorizationResponse_t response{};
+            response.m_bAuthorized = 1; // only field the game cares about
             s_callbackHooks.RunCallback(false, MicroTxnAuthorizationResponse_t::k_iCallback, &response);
         }
 
-        // do networking stuff
-        s_clientGC->Update();
+        if (s_userStatsReceivedCallbacks.size())
+        {
+            for (UserStatsReceived_t &data : s_userStatsReceivedCallbacks)
+            {
+                s_callbackHooks.RunCallback(false, UserStatsReceived_t::k_iCallback, &data);
+            }
+
+            s_userStatsReceivedCallbacks.clear();
+        }
     }
 }
 
@@ -1474,17 +1908,45 @@ static void Hk_SteamGameServer_RunCallbacks()
 
     if (s_serverGC)
     {
+        // poll events
+        HostEvent type;
+        uint64_t id;
+        std::vector<uint8_t> buffer;
+
+        while (s_serverGC->m_gc.PollFromGC(type, id, buffer))
+        {
+            switch (type)
+            {
+            case HostEvent::Message:
+                s_serverGC->m_messageQueue.AddMessage((uint32_t)id, std::move(buffer));
+                break;
+
+            case HostEvent::NetMessage:
+                s_serverGC->m_networking.SendMessage(id, buffer.data(), static_cast<uint32_t>(buffer.size()));
+                break;
+
+            default:
+                assert(false);
+                break;
+            }
+        }
+
         // run server gc callbacks
         uint32_t messageSize;
-        if (s_serverGC->HasOutgoingMessages(messageSize))
+        if (s_serverGC->m_messageQueue.IsMessageAvailable(messageSize))
         {
             GCMessageAvailable_t param{};
             param.m_nMessageSize = messageSize;
             s_callbackHooks.RunCallback(true, GCMessageAvailable_t::k_iCallback, &param);
         }
 
-        // do networking stuff
-        s_serverGC->Update();
+        // poll networking
+        SteamNetworkingMessage_t *message;
+        while (s_serverGC->m_networking.ReceiveMessage(message))
+        {
+            s_serverGC->m_gc.PostToGC(GCEvent::NetMessage, message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
+            message->Release();
+        }
     }
 }
 
@@ -1542,15 +2004,22 @@ static void ShutdownSteamAPI(bool dedicated)
 
 void SteamHookInstall(bool dedicated)
 {
-    Platform::EnsureEnvVarSet("SteamAppId", "730");
+    // thanks valve for ruining my life
+    AppId::Init();
+
+    // no need to write steam_appid.txt, the env var takes precedence
+    Platform::SetEnvVar("SteamAppId", std::to_string(AppId::GetOverride()).c_str());
 
     // this is bit of a clusterfuck
     if (!InitializeSteamAPI(dedicated))
     {
+        // people might not understand what "app 4465480" means, but they
+        // already had a hard time understanding this error in general so it's fine
         Platform::Error("Steam initialization failed. Please try the following steps:\n"
                         "- Ensure that Steam is running.\n"
                         "- Restart Steam and try again.\n"
-                        "- Verify that you have launched CS:GO or CS2 through Steam at least once.");
+                        "- Verify that you have launched app %u through Steam at least once.",
+            AppId::GetOverride());
     }
 
     uint8_t steamClientPath[4096]; // NOTE: text encoding stored depends on the platform (wchar_t on windows)

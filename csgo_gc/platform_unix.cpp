@@ -227,9 +227,9 @@ void *SteamClientFactory(const void *pathBuffer)
     return dlsym(steamclient, "CreateInterface");
 }
 
-void EnsureEnvVarSet(const char *name, const char *value)
+void SetEnvVar(const char *name, const char *value)
 {
-    setenv(name, value, 0);
+    setenv(name, value, 1);
 }
 
 static void CopyToReadOnly(void *dest, const void *src, size_t size)

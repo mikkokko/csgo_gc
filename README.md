@@ -22,7 +22,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Full Windows, Linux and macOS support
 - Functional lobbies
 - Dedicated server support
-- Functional server browser (only shows csgo_gc servers)
+- Functional server browser (only shows csgo_gc servers) (currently broken on app id 4465480)
 - Networking using Steam's P2P interface
 
 ## Planned features

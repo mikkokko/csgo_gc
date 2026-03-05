@@ -75,12 +75,9 @@ void *SteamClientFactory(const void *pathBuffer)
     return GetProcAddress(steamclient, "CreateInterface");
 }
 
-void EnsureEnvVarSet(const char *name, const char *value)
+void SetEnvVar(const char *name, const char *value)
 {
-    if (!GetEnvironmentVariableA(name, nullptr, 0))
-    {
-        SetEnvironmentVariableA(name, value);
-    }
+    SetEnvironmentVariableA(name, value);
 }
 
 static void *Q_memmem(const void *_haystack, size_t haystack_len, const void *_needle, size_t needle_len)

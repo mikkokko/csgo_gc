@@ -15,11 +15,11 @@ struct AuthTicket
 class NetworkingClient
 {
 public:
-    NetworkingClient(ClientGC *clientGC, ISteamNetworkingMessages *networkingMessages);
+    NetworkingClient(ISteamNetworkingMessages *networkingMessages);
 
-    void Update();
+    void Update(ClientGC *gc);
 
-    void SendMessage(const GCMessageWrite &message);
+    void SendMessage(const void *data, uint32_t size);
 
     // for gameserver validation
     void SetAuthTicket(uint32_t handle, const void *data, uint32_t size);
@@ -27,9 +27,8 @@ public:
 
 private:
     // return false if it wasn't handled, in which case we pass it to m_clientGC
-    bool HandleMessage(uint64_t steamId, GCMessageRead &message);
+    bool HandleMessage(ClientGC *gc, uint64_t steamId, GCMessageRead &message);
 
-    ClientGC *const m_clientGC;
     ISteamNetworkingMessages *const m_networkingMessages;
     uint64_t m_serverSteamId{};
 

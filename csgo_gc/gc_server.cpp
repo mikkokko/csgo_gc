@@ -4,20 +4,45 @@
 #include "gc_const_csgo.h"
 #include "graffiti.h"
 
-const char *MessageName(uint32_t type);
+// yuck!! needed for CSteamID (construct full id from account id)
+#include "steam/steamclientpublic.h"
 
-ServerGC::ServerGC(ISteamNetworkingMessages *networkingMessages)
-    : m_networking{ networkingMessages }
+ServerGC::ServerGC()
 {
-    Platform::Print("ServerGC spawned\n");
-
     // also called from ClientGC's constructor
     Graffiti::Initialize();
+
+    StartThread();
+
+    Platform::Print("ServerGC spawned\n");
 }
 
 ServerGC::~ServerGC()
 {
+    StopThread();
     Platform::Print("ServerGC destroyed\n");
+}
+
+void ServerGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer)
+{
+    switch (type)
+    {
+    case GCEvent::Message:
+        HandleMessage(static_cast<uint32_t>(id), buffer.data(), static_cast<uint32_t>(buffer.size()));
+        break;
+
+    case GCEvent::NetMessage:
+        HandleNetMessage(id, buffer.data(), static_cast<uint32_t>(buffer.size()));
+        break;
+
+    case GCEvent::ClientSOCacheUnsubscribe:
+        HandleClientSOCacheUnsubscribe(id);
+        break;
+
+    default:
+        assert(false);
+        break;
+    }
 }
 
 void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
@@ -53,38 +78,16 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     }
 }
 
-void ServerGC::ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize)
+void ServerGC::HandleClientSOCacheUnsubscribe(uint64_t steamId)
 {
-    Platform::Print("ClientConnected: %llu\n", steamId);
-    m_networking.ClientConnected(steamId, ticket, ticketSize);
-}
-
-void ServerGC::ClientDisconnected(uint64_t steamId)
-{
-    Platform::Print("ClientDisconnected: %llu\n", steamId);
-    m_networking.ClientDisconnected(steamId);
+    Platform::Print("HandleClientSOCacheUnsubscribe: %llu\n", steamId);
 
     CMsgSOCacheUnsubscribed message;
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
     message.mutable_owner_soid()->set_id(steamId);
 
-    m_outgoingMessages.emplace(k_ESOMsg_CacheUnsubscribed, message);
-}
-
-void ServerGC::Update()
-{
-    if (!m_receivedHello)
-    {
-        // we're not up yet
-        return;
-    }
-
-    SteamNetworkingMessage_t *message;
-    while (m_networking.ReceiveMessage(message))
-    {
-        HandleNetMessage(message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
-        message->Release();
-    }
+    GCMessageWrite write{ k_ESOMsg_CacheUnsubscribed, message };
+    PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
 }
 
 template<typename T>
@@ -110,6 +113,17 @@ static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamI
 
 void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
+    // FIXME: remove later!!!
+    assert(steamId);
+
+    if (!m_receivedHello)
+    {
+        // don't run networking until we've received the hello and sent the welcome
+        // otherwise we might receive the local client's socache before that and it'll
+        // get wiped after the welcome is received
+        return;
+    }
+
     GCMessageRead validate{ 0, data, size };
     if (!validate.IsValid())
     {
@@ -156,7 +170,7 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         return;
     }
 
-    m_outgoingMessages.emplace(data, size);
+    PostToHost(HostEvent::Message, validate.TypeMasked(), data, size);
 }
 
 void ServerGC::OnServerHello(GCMessageRead &messageRead)
@@ -178,7 +192,8 @@ void ServerGC::OnServerHello(GCMessageRead &messageRead)
     welcome.set_game_data(csWelcome.SerializeAsString());
     welcome.set_rtime32_gc_welcome_timestamp(static_cast<uint32_t>(time(nullptr)));
 
-    m_outgoingMessages.emplace(k_EMsgGCServerWelcome, welcome);
+    GCMessageWrite write{ k_EMsgGCServerWelcome, welcome };
+    PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
 
     m_receivedHello = true;
 }
@@ -195,5 +210,5 @@ void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     // just forward it to the killer
     GCMessageWrite messageWrite{ k_EMsgGC_IncrementKillCountAttribute, message };
     CSteamID killerId{ message.killer_account_id(), k_EUniversePublic, k_EAccountTypeIndividual };
-    m_networking.SendMessage(killerId.ConvertToUint64(), messageWrite);
+    PostToHost(HostEvent::NetMessage, killerId.ConvertToUint64(), messageWrite.Data(), messageWrite.Size());
 }

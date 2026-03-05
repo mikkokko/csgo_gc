@@ -1,41 +1,92 @@
 #include "stdafx.h"
 #include "gc_shared.h"
 
-const char *MessageName(uint32_t type);
-
-bool SharedGC::HasOutgoingMessages(uint32_t &size)
+void SharedGC::StartThread()
 {
-    if (m_outgoingMessages.empty())
+    m_thread = std::thread{ &SharedGC::WorkerThread, this };
+}
+
+void SharedGC::StopThread()
+{
+    {
+        std::lock_guard lock{ m_gcEventMutex };
+        m_stopping = true;
+    }
+
+    m_cv.notify_one();
+    m_thread.join();
+}
+
+void SharedGC::WorkerThread()
+{
+    while (true)
+    {
+        std::unique_lock lock{ m_gcEventMutex };
+
+        // sleep until we get an event, or are shutting down
+        m_cv.wait(lock, [this]
+            { return !m_gcEvents.empty() || m_stopping; });
+
+        if (m_stopping)
+        {
+            break;
+        }
+
+        while (!m_gcEvents.empty())
+        {
+            Event &event = m_gcEvents.front();
+            HandleEvent(static_cast<GCEvent>(event.type), event.id, event.buffer);
+            m_gcEvents.pop();
+        }
+    }
+}
+
+bool SharedGC::PollFromGC(HostEvent &type, uint64_t &id, std::vector<uint8_t> &buffer)
+{
+    std::lock_guard lock{ m_hostEventMutex };
+
+    if (m_hostEvents.empty())
     {
         return false;
     }
 
-    GCMessageWrite &message = m_outgoingMessages.front();
-    size = message.Size();
+    Event &event = m_hostEvents.front();
+    type = static_cast<HostEvent>(event.type);
+    id = event.id;
+    buffer = std::move(event.buffer);
+    m_hostEvents.pop();
 
     return true;
 }
 
-bool SharedGC::PopOutgoingMessage(uint32_t &type, void *buffer, uint32_t bufferSize, uint32_t &size)
+void SharedGC::PostToGC(GCEvent type, uint64_t id, const void *data, uint32_t dataSize)
 {
-    if (m_outgoingMessages.empty())
+    const uint8_t *dataBegin = reinterpret_cast<const uint8_t *>(data);
+    const uint8_t *dataEnd = dataBegin + dataSize;
+
     {
-        size = 0;
-        return false;
+        std::lock_guard lock{ m_gcEventMutex };
+        Event &event = m_gcEvents.emplace();
+        event.type = static_cast<int>(type);
+        event.id = id;
+        event.buffer.assign(dataBegin, dataEnd);
     }
 
-    GCMessageWrite &message = m_outgoingMessages.front();
-    type = message.TypeMasked();
-    size = message.Size();
+    m_cv.notify_one();
+}
 
-    if (bufferSize < message.Size())
+void SharedGC::PostToHost(HostEvent type, uint64_t id, const void *data, uint32_t dataSize)
+{
+    const uint8_t *dataBegin = reinterpret_cast<const uint8_t *>(data);
+    const uint8_t *dataEnd = dataBegin + dataSize;
+
     {
-        return false;
+        std::lock_guard lock{ m_hostEventMutex };
+        Event &event = m_hostEvents.emplace();
+        event.type = static_cast<int>(type);
+        event.id = id;
+        event.buffer.assign(dataBegin, dataEnd);
     }
-
-    memcpy(buffer, message.Data(), message.Size());
-    m_outgoingMessages.pop();
-    return true;
 }
 
 const char *MessageName(uint32_t type)

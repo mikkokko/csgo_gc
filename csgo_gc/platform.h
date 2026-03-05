@@ -21,8 +21,8 @@ bool SteamClientPath(void *buffer, size_t bufferSize);
 // and get a pointer to the factory function (exported symbol CreateInterface)
 void *SteamClientFactory(const void *pathBuffer);
 
-// if the env var is not set, set it to the specified value
-void EnsureEnvVarSet(const char *name, const char *value);
+// set an envar to the specified value even if it's already set
+void SetEnvVar(const char *name, const char *value);
 
 // patch the graffiti public key in the specified module to get sprays working
 // the module name is given in a platform-agnostic format

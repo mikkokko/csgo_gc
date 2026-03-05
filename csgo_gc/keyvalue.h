@@ -99,3 +99,6 @@ private:
     std::vector<KeyValue> m_subkeys;
     std::string m_string;
 };
+
+// FIXME: might want to move, now also used by appid.cpp
+std::string LoadFile(const char *path);

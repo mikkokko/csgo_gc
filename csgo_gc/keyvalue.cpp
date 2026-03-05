@@ -114,7 +114,7 @@ private:
     int m_lineNumber;
 };
 
-static std::string LoadFile(const char *path)
+std::string LoadFile(const char *path)
 {
     FILE *f = fopen(path, "rb");
     if (!f)

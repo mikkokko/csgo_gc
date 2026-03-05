@@ -13,6 +13,7 @@ public:
     bool IsValid() const { return !m_error; }
     bool IsProtobuf() const { return m_type & ProtobufMask; }
     uint32_t TypeUnmasked() const { return m_type & ~ProtobufMask; }
+    uint32_t TypeMasked() const { return m_type; }
     uint64_t JobId() const { return m_jobId; }
 
     template<typename T>
@@ -73,11 +74,12 @@ public:
     // already serialized data that just gets copied over, type parsed from the message
     GCMessageWrite(const void *data, uint32_t size);
 
-    // temp validation
+    GCMessageWrite(GCMessageWrite &&) = default;
+    GCMessageWrite &operator=(GCMessageWrite &&) = default;
+
+    // shouldn't have to copy these
     GCMessageWrite(const GCMessageWrite &) = delete;
-    GCMessageWrite(GCMessageWrite &&) = delete;
     GCMessageWrite &operator=(const GCMessageWrite &) = delete;
-    GCMessageWrite &operator=(GCMessageWrite &&) = delete;
 
     // non protobuf message writing
     void WriteData(const void *data, uint32_t size);

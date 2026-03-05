@@ -19,8 +19,7 @@ bool NetworkingServer::ReceiveMessage(SteamNetworkingMessage_t *&message)
     uint64_t steamId = message->m_identityPeer.GetSteamID64();
 
     // see if we have a session
-    auto it = m_clients.find(steamId);
-    if (it == m_clients.end())
+    if (!m_clients.Has(steamId))
     {
         Platform::Print("NetworkingServer: ignored message from %llu (no session)\n", steamId);
         message->Release();
@@ -31,15 +30,15 @@ bool NetworkingServer::ReceiveMessage(SteamNetworkingMessage_t *&message)
 }
 
 // helper for SteamNetworkingMessages::SendMessageToUser that attempts to do some kind of error handling
-static void SendMessageToUser(ISteamNetworkingMessages *networkingMessages, uint64_t steamId, const GCMessageWrite &message)
+static void SendMessageToUser(ISteamNetworkingMessages *networkingMessages, uint64_t steamId, const void *data, uint32_t size)
 {
     SteamNetworkingIdentity identity;
     identity.SetSteamID64(steamId);
 
     EResult result = networkingMessages->SendMessageToUser(
         identity,
-        message.Data(),
-        message.Size(),
+        data,
+        size,
         NetMessageSendFlags,
         NetMessageChannel);
 
@@ -51,8 +50,8 @@ static void SendMessageToUser(ISteamNetworkingMessages *networkingMessages, uint
 
         result = networkingMessages->SendMessageToUser(
             identity,
-            message.Data(),
-            message.Size(),
+            data,
+            size,
             NetMessageSendFlags,
             NetMessageChannel);
 
@@ -66,8 +65,7 @@ static void SendMessageToUser(ISteamNetworkingMessages *networkingMessages, uint
 
 void NetworkingServer::ClientConnected(uint64_t steamId, const void *ticket, uint32_t ticketSize)
 {
-    auto [it, added] = m_clients.insert(steamId);
-    if (!added)
+    if (!m_clients.Add(steamId))
     {
         Platform::Print("got ClientConnected for %llu but they're already on the list! ignoring\n", steamId);
         return;
@@ -81,43 +79,38 @@ void NetworkingServer::ClientConnected(uint64_t steamId, const void *ticket, uin
 
     // FIXME: this gets sent when the client is connecting to the server, it's not uncommon for
     // the connection to time out, in which case the player's socache never gets to the server
-    SendMessageToUser(m_networkingMessages, steamId, messageWrite);
+    SendMessageToUser(m_networkingMessages, steamId, messageWrite.Data(), messageWrite.Size());
 }
 
 void NetworkingServer::ClientDisconnected(uint64_t steamId)
 {
-    auto it = m_clients.find(steamId);
-    if (it == m_clients.end())
+    if (!m_clients.Remove(steamId))
     {
         Platform::Print("got ClientDisconnected for %llu but they're not on the list! ignoring\n", steamId);
         return;
     }
-
-    m_clients.erase(it);
 
     SteamNetworkingIdentity identity;
     identity.SetSteamID64(steamId);
     m_networkingMessages->CloseChannelWithUser(identity, NetMessageChannel);
 }
 
-void NetworkingServer::SendMessage(uint64_t steamId, const GCMessageWrite &message)
+void NetworkingServer::SendMessage(uint64_t steamId, const void *data, uint32_t size)
 {
-    auto it = m_clients.find(steamId);
-    if (it == m_clients.end())
+    if (!m_clients.Has(steamId))
     {
         Platform::Print("No csgo_gc session with %llu, not sending message!!!\n");
         return;
     }
 
-    SendMessageToUser(m_networkingMessages, steamId, message);
+    SendMessageToUser(m_networkingMessages, steamId, data, size);
 }
 
 void NetworkingServer::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t *param)
 {
     uint64_t steamId = param->m_identityRemote.GetSteamID64();
 
-    auto it = m_clients.find(steamId);
-    if (it == m_clients.end())
+    if (!m_clients.Has(steamId))
     {
         Platform::Print("%llu sent a session request, we don't have a csgo_gc session, ignoring...\n");
         return;

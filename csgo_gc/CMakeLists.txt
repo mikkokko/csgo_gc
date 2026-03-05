@@ -1,6 +1,7 @@
 project(csgo_gc)
 
 add_library(csgo_gc SHARED
+    appid.cpp
     case_opening.cpp
     config.cpp
     gc_client.cpp

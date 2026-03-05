@@ -2,15 +2,14 @@
 #include "networking_client.h"
 #include "gc_client.h"
 
-NetworkingClient::NetworkingClient(ClientGC *clientGC, ISteamNetworkingMessages *networkingMessages)
-    : m_clientGC{ clientGC }
-    , m_networkingMessages{ networkingMessages }
+NetworkingClient::NetworkingClient(ISteamNetworkingMessages *networkingMessages)
+    : m_networkingMessages{ networkingMessages }
     , m_sessionRequest{ this, &NetworkingClient::OnSessionRequest }
     , m_sessionFailed{ this, &NetworkingClient::OnSessionFailed }
 {
 }
 
-void NetworkingClient::Update()
+void NetworkingClient::Update(ClientGC *gc)
 {
     SteamNetworkingMessage_t *message;
     while (m_networkingMessages->ReceiveMessagesOnChannel(NetMessageChannel, &message, 1))
@@ -26,7 +25,7 @@ void NetworkingClient::Update()
             continue;
         }
 
-        if (HandleMessage(steamId, messageRead))
+        if (HandleMessage(gc, steamId, messageRead))
         {
             // that was an internal message
             message->Release();
@@ -42,7 +41,7 @@ void NetworkingClient::Update()
         }
 
         // let the gc have a whack at it
-        m_clientGC->HandleNetMessage(messageRead);
+        gc->PostToGC(GCEvent::NetMessage, 0, message->GetData(), message->GetSize());
 
         message->Release();
     }
@@ -62,7 +61,7 @@ static bool ValidateTicket(std::unordered_map<uint32_t, AuthTicket> &tickets, ui
     return false;
 }
 
-bool NetworkingClient::HandleMessage(uint64_t steamId, GCMessageRead &message)
+bool NetworkingClient::HandleMessage(ClientGC *gc, uint64_t steamId, GCMessageRead &message)
 {
     if (message.IsProtobuf())
     {
@@ -89,7 +88,7 @@ bool NetworkingClient::HandleMessage(uint64_t steamId, GCMessageRead &message)
 
         Platform::Print("NetworkingClient: sending socache to %llu\n", steamId);
         m_serverSteamId = steamId;
-        m_clientGC->SendSOCacheToGameSever();
+        gc->PostToGC(GCEvent::SOCacheRequest, 0, nullptr, 0);
 
         return true;
     }
@@ -97,7 +96,7 @@ bool NetworkingClient::HandleMessage(uint64_t steamId, GCMessageRead &message)
     return false;
 }
 
-void NetworkingClient::SendMessage(const GCMessageWrite &message)
+void NetworkingClient::SendMessage(const void *data, uint32_t size)
 {
     if (!m_serverSteamId)
     {
@@ -111,8 +110,8 @@ void NetworkingClient::SendMessage(const GCMessageWrite &message)
 
     [[maybe_unused]] EResult result = m_networkingMessages->SendMessageToUser(
         identity,
-        message.Data(),
-        message.Size(),
+        data,
+        size,
         NetMessageSendFlags,
         NetMessageChannel);
 
