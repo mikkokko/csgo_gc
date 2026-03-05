@@ -4,9 +4,11 @@
 
 #include <array>
 #include <charconv>
+#include <condition_variable>
 #include <queue>
 #include <random>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
