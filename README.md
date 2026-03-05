@@ -22,7 +22,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Full Windows, Linux and macOS support
 - Functional lobbies
 - Dedicated server support
-- Functional server browser (only shows csgo_gc servers) (currently broken on app id 4465480)
+- Functional server browser (only shows csgo_gc servers)
 - Networking using Steam's P2P interface
 
 ## Planned features
@@ -36,19 +36,13 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 - Matchmaking (can't be implemented without a centralized server)
 
 ## Installation
-- Download the last version of the game before CS2's release using [DepotDownloader](https://github.com/SteamRE/DepotDownloader). Other versions might work, but are not tested or supported. Also note that **this is not the same version as the csgo_legacy branch**. Manifest IDs:
-```
-731 718406683749122620
-732 2224497558453288476
-733 7173575548168592307
-734 3106517550092294329
-740 1512455234357538911
-```
+- Download [CS:GO from Steam](steam://install/4465480)
 - Download the latest release for your platform from the [releases page](https://github.com/mikkokko/csgo_gc/releases/latest)
+- Navigate to the game's installation directory
 - Back up your existing launcher executables as they'll be overwritten (i.e. csgo.exe, srcds.exe, csgo_linux64, etc.)
 - Extract the contents of the downloaded archive to your game directory, replace the executables when prompted
-- Launch the game. If you get the annoying VAC message box, launch the game with the -steam argument.
-- macOS users: The release binaries are not notarized, so if you're using them, you'll have to deal with that somehow.
+- Launch the game. If you get the annoying VAC message box, launch the game with the -steam argument
+- macOS users: The release binaries are not notarized, so if you're using them, you'll have to deal with that somehow
 
 ## Inventory editing
 Since there is no graphical editor yet, you'll have to edit `csgo_gc/inventory.txt` manually. There is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
