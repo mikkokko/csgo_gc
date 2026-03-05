@@ -29,4 +29,7 @@ void SetEnvVar(const char *name, const char *value);
 // (e.g. on linux pass server as moduleName, and it'll operate on server_client.so)
 bool PatchGraffitiPublicKey(std::string_view moduleName, const void *original, const void *replacement, size_t size);
 
+// returns true if serverbrowser was loaded and we patched it
+bool PatchServerBrowserAppId(uint32_t appId);
+
 } // namespace Platform

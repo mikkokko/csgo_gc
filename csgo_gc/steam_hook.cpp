@@ -24,9 +24,34 @@ struct SteamNetworkingIdentity;
 #include "networking_client.h"
 #include "networking_server.h"
 
+// UserStatsReceived_t fails with the new csgo appid, which causes gc callbacks to not run
+// to work around this, spoof user stats requests when running under this appid specifically
+// we also need to patch serverbrowser to allow for appids over 900...
 static void CheckServerBrowserPatch()
 {
-    // NYI
+    static bool attempted = false;
+
+    if (attempted)
+    {
+        return;
+    }
+
+    attempted = true;
+
+    if (AppId::IsOriginal())
+    {
+        // no need for this patch
+        return;
+    }
+
+    if (!Platform::PatchServerBrowserAppId(AppId::GetOverride()))
+    {
+        Platform::Print("serverbrowser patch failed\n");
+    }
+    else
+    {
+        Platform::Print("serverbrowser patch succeeded\n");
+    }
 }
 
 class GCMessageQueue
@@ -1273,6 +1298,8 @@ public:
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse) override
     {
+        CheckServerBrowserPatch();
+
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
         return m_original->RequestSpectatorServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
@@ -1285,14 +1312,7 @@ public:
 
     gameserveritem_t *GetServerDetails(HServerListRequest hRequest, int iServer) override
     {
-        gameserveritem_t *result = m_original->GetServerDetails(hRequest, iServer);
-
-        if (result)
-        {
-            Platform::Print("Got details: %u\n", result->m_nAppID);
-        }
-
-        return result;
+        return m_original->GetServerDetails(hRequest, iServer);
     }
 
     void CancelQuery(HServerListRequest hRequest) override
