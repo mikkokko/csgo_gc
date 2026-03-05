@@ -336,7 +336,7 @@ static bool GetCodeSection(const char *name, uint8_t **pstart, uint8_t **pend)
         if (fullName && strstr(fullName, name))
         {
             // assume 64 bit, don't even check
-            const mach_header_64 *header = (const mach_header_64 *)_dyld_get_image_header(i);
+            mach_header_64 *header = (mach_header_64 *)_dyld_get_image_header(i);
             intptr_t slide = _dyld_get_image_vmaddr_slide(i);
             return GetModuleCodeSection(header, slide, pstart, pend);
         }
