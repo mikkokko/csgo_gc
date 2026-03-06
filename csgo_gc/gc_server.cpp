@@ -113,16 +113,7 @@ static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamI
 
 void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
-    // FIXME: remove later!!!
-    assert(steamId);
-
-    if (!m_receivedHello)
-    {
-        // don't run networking until we've received the hello and sent the welcome
-        // otherwise we might receive the local client's socache before that and it'll
-        // get wiped after the welcome is received
-        return;
-    }
+    assert(CanHandleNetMessages());
 
     GCMessageRead validate{ 0, data, size };
     if (!validate.IsValid())
@@ -195,7 +186,7 @@ void ServerGC::OnServerHello(GCMessageRead &messageRead)
     GCMessageWrite write{ k_EMsgGCServerWelcome, welcome };
     PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
 
-    m_receivedHello = true;
+    m_receivedHello.store(true, std::memory_order_release);
 }
 
 void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)

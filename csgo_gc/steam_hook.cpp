@@ -1960,12 +1960,17 @@ static void Hk_SteamGameServer_RunCallbacks()
             s_callbackHooks.RunCallback(true, GCMessageAvailable_t::k_iCallback, &param);
         }
 
-        // poll networking
-        SteamNetworkingMessage_t *message;
-        while (s_serverGC->m_networking.ReceiveMessage(message))
+        // don't run networking until we've received the hello and sent the welcome
+        // otherwise we might receive the local client's socache before that and it'll
+        // get wiped after the welcome is received
+        if (s_serverGC->m_gc.CanHandleNetMessages())
         {
-            s_serverGC->m_gc.PostToGC(GCEvent::NetMessage, message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
-            message->Release();
+            SteamNetworkingMessage_t *message;
+            while (s_serverGC->m_networking.ReceiveMessage(message))
+            {
+                s_serverGC->m_gc.PostToGC(GCEvent::NetMessage, message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
+                message->Release();
+            }
         }
     }
 }

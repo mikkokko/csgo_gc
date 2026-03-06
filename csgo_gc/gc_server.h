@@ -8,6 +8,8 @@ public:
     ServerGC();
     ~ServerGC();
 
+    bool CanHandleNetMessages() const { return m_receivedHello.load(std::memory_order_acquire); }
+
 private:
     void HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer) override;
 
@@ -19,5 +21,5 @@ private:
     void OnServerHello(GCMessageRead &messageRead);
     void IncrementKillCountAttribute(GCMessageRead &messageRead);
 
-    bool m_receivedHello{};
+    std::atomic_bool m_receivedHello{};
 };

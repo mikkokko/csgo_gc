@@ -3,6 +3,7 @@
 #include <assert.h>
 
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <condition_variable>
 #include <queue>
