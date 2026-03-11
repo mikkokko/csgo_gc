@@ -17,6 +17,11 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Weapon StatTrak support
 - Stickers and patches
 - Name tags
+- StatTrak swaps
+- Storage Units
+- Majors & operations passes (passes.txt)
+- Recent teammates (configurable on config.txt, friends block)
+- Party search (configurable on config.txt, friends block)
 - In-game store
 - Works without full Steam API emulation
 - Full Windows, Linux and macOS support
@@ -26,7 +31,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Networking using Steam's P2P interface
 
 ## Planned features
-- Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
+- Rest of the core features (trade ups, souvenirs...)
 - Graphical inventory editor
 - A tool to copy your CS2 inventory over
 

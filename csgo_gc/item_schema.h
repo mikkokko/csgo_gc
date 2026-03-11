@@ -130,6 +130,7 @@ public:
 
     // item creation: id and account id not set, needs to be done by the caller
     bool CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const;
+    bool PassItemsData(KeyValue &itemsData, uint32_t defIndex) const;
 
 public:
     // these could be parsed from the item schema but reduce code complexity by hardcoding them
@@ -177,9 +178,12 @@ public:
 
     enum Item
     {
+        ItemSticker = 1209,
+        ItemMusicKit = 1314,
         ItemSpray = 1348,
         ItemSprayPaint = 1349,
-        ItemPatch = 4609
+        ItemPatch = 4609,
+        ItemCasket = 1201
     };
 
     enum Attribute
@@ -223,6 +227,11 @@ public:
 
         AttributeSpraysRemaining = 232,
         AttributeSprayTintId = 233,
+
+        AttributeCasketItemsCount = 270,
+        AttributeCasketModificationDate = 271,
+        AttributeCasketIdLow = 272,
+        AttributeCasketIdHigh = 273,
     };
 
 private:
@@ -235,6 +244,7 @@ private:
     void ParseMusicDefinitions(const KeyValue *musicDefinitionsKey);
     void ParseLootLists(const KeyValue *lootListsKey, bool unusual);
     void ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey);
+    void ParsePasses(const KeyValue *passesListKey);
 
     bool ParseLootListItem(LootListItem &item, std::string_view name);
 
@@ -253,4 +263,6 @@ private:
     std::unordered_map<std::string, LootList> m_lootLists;
 
     std::unordered_map<uint32_t, const LootList &> m_revolvingLootLists;
+
+    std::unordered_map<uint32_t, KeyValue> m_passes;
 };

@@ -96,6 +96,34 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             StorePurchaseFinalize(messageRead);
             break;
 
+        case k_EMsgGCCStrike15_v2_Party_Search:
+            PartySearch(messageRead);
+            break;
+            
+        case k_EMsgGCCStrike15_v2_Account_RequestCoPlays:
+            RequestCoPlays(messageRead);
+            break;
+        
+        case k_EMsgGCCStrike15_v2_ClientRequestPlayersProfile:
+            ClientRequestPlayersProfile(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemLoadContents:
+            CasketItemLoadContents(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemAdd:
+            CasketItemAdd(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemExtract:
+            CasketItemExtract(messageRead);
+            break;
+
+        case k_EMsgGCStatTrakSwap:
+            StatTrakSwap(messageRead);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n",
                 MessageName(messageRead.TypeUnmasked()));
@@ -236,11 +264,11 @@ void ClientGC::BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike1
     m_inventory.BuildCacheSubscription(*message.add_outofdate_subscribed_caches(), m_config.Level(), false);
     message.mutable_location()->set_latitude(65.0133006f);
     message.mutable_location()->set_longitude(25.4646212f);
-    message.mutable_location()->set_country("FI"); // finland
+    message.mutable_location()->set_country("RU"); // russia
     message.set_game_data2(matchmakingHello.SerializeAsString());
     message.set_rtime32_gc_welcome_timestamp(static_cast<uint32_t>(time(nullptr)));
-    message.set_currency(2); // euros
-    message.set_txn_country_code("FI"); // finland
+    message.set_currency(3); // rub
+    message.set_txn_country_code("RU"); // russia
 }
 
 void ClientGC::SendRankUpdate()
@@ -601,6 +629,189 @@ void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
 
     // done with this one
     m_transactionId = 0;
+}
+
+void ClientGC::PartySearch(GCMessageRead &messageRead)
+{
+    CMsgGCCStrike15_v2_Party_Search message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgGCCStrike15_v2_Party_Search failed, ignoring\n");
+        return;
+    }
+
+    CMsgGCCStrike15_v2_Party_SearchResults response;
+
+    // adding self
+    CMsgGCCStrike15_v2_Party_SearchResults::Entry *entry = response.add_entries();
+    entry->set_id(AccountId());
+    entry->set_grp(3);
+    entry->set_game_type(message.game_type());
+    entry->set_apr(1);
+    entry->set_ark(std::rand() % 18 + 1);
+    entry->set_loc(30066);
+    entry->set_accountid(AccountId());
+
+    for (uint32_t player_id : m_config.GetFriends())
+    {
+        // dont make self duplicate
+        if (AccountId() == player_id)
+            continue;
+
+        entry = response.add_entries();
+        entry->set_id(player_id);
+        entry->set_grp(3);
+        entry->set_game_type(message.game_type());
+        entry->set_apr(std::rand() % 40 + 1);
+        entry->set_ark(std::rand() % 18 + 1);
+        entry->set_loc(30066);
+        entry->set_accountid(player_id);
+    }
+
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_Party_Search, response);
+}
+
+void ClientGC::RequestCoPlays(GCMessageRead &messageRead)
+{
+    CMsgGCCStrike15_v2_Account_RequestCoPlays message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgGCCStrike15_v2_Account_RequestCoPlays failed, ignoring\n");
+        return;
+    }
+    
+    // adding self
+    CMsgGCCStrike15_v2_Account_RequestCoPlays_Player *player = message.add_players();
+    player->set_accountid(AccountId());
+    player->set_online(true);
+    player->set_rtcoplay(1771263169);
+
+    for (uint32_t player_id : m_config.GetFriends())
+    {
+        // dont make self duplicate
+        if (AccountId() == player_id)
+            continue;
+
+        player = message.add_players();
+        player->set_accountid(player_id);
+        player->set_online(true);
+        player->set_rtcoplay(1771262169);
+    }
+
+    message.set_servertime(1771263169);
+
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_Account_RequestCoPlays, message);
+}
+
+void ClientGC::ClientRequestPlayersProfile(GCMessageRead &messageRead)
+{
+    CMsgGCCStrike15_v2_ClientRequestPlayersProfile message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgGCCStrike15_v2_ClientRequestPlayersProfile failed, ignoring\n");
+        return;
+    }
+
+    Platform::Print("Requested accountId: %u\n", message.account_id());
+
+    CMsgGCCStrike15_v2_PlayersProfile response;
+
+    response.set_request_id(message.account_id());
+
+    CMsgGCCStrike15_v2_MatchmakingGC2ClientHello* mmHello = response.add_account_profiles();
+    mmHello->set_account_id(message.account_id());
+    mmHello->mutable_commendation()->set_cmd_friendly(m_config.CommendedFriendly());
+    mmHello->mutable_commendation()->set_cmd_teaching(m_config.CommendedTeaching());
+    mmHello->mutable_commendation()->set_cmd_leader(m_config.CommendedLeader());
+    mmHello->set_player_level(m_config.Level());
+    mmHello->set_player_cur_xp(m_config.Xp());
+
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_PlayersProfile, response);
+}
+
+void ClientGC::CasketItemLoadContents(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CasketItemLoadContents::CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    // wha
+    CMsgGCItemCustomizationNotification notification;
+    notification.set_request(k_EGCItemCustomizationNotification_CasketContents);
+    notification.add_item_id(message.casket_item_id());
+
+    SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+}
+
+void ClientGC::CasketItemAdd(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CasketItemAdd::CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject updateItem, updateCasket;
+    CMsgGCItemCustomizationNotification notification;
+    if (m_inventory.CasketItemAdd(message.casket_item_id(), message.item_item_id(), updateItem, updateCasket, notification))
+    {
+        SendMessageToGame(false, k_ESOMsg_Update, updateItem);
+        SendMessageToGame(false, k_ESOMsg_Update, updateCasket);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
+}
+
+void ClientGC::CasketItemExtract(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CasketItemExtract::CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject updateItem, updateCasket;
+    CMsgGCItemCustomizationNotification notification;
+    if (m_inventory.CasketItemRemove(message.casket_item_id(), message.item_item_id(), updateItem, updateCasket, notification))
+    {
+        SendMessageToGame(false, k_ESOMsg_Update, updateItem);
+        SendMessageToGame(false, k_ESOMsg_Update, updateCasket);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
+}
+
+void ClientGC::StatTrakSwap(GCMessageRead &messageRead)
+{
+    CMsgApplyStatTrakSwap message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing StatTrakSwap::CMsgApplyStatTrakSwap failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject destroy, updateItem1, updateItem2;
+    CMsgGCItemCustomizationNotification notification;
+
+    // ugh
+    if (m_inventory.StatTrakSwap(
+            message.tool_item_id(),
+            message.item_1_item_id(),
+            message.item_2_item_id(),
+            destroy,
+            updateItem1,
+            updateItem2,
+            notification))
+    {
+        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
+        SendMessageToGame(true, k_ESOMsg_Update, updateItem1);
+        SendMessageToGame(true, k_ESOMsg_Update, updateItem2);
+
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
 }
 
 void ClientGC::DeleteItem(GCMessageRead &messageRead)

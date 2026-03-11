@@ -456,32 +456,51 @@ bool Inventory::UseItem(uint64_t itemId,
         return false;
     }
 
-    if (it->second.def_index() != ItemSchema::ItemSpray)
+    if (it->second.def_index() == ItemSchema::ItemSpray)
     {
-        assert(false);
-        return false;
+        // create an unsealed spray based on the sealed one
+        CSOEconItem &unsealed = CreateItem(it->second);
+        unsealed.set_def_index(ItemSchema::ItemSprayPaint);
+
+        // remove the sealed spray from our inventory
+        DestroyItem(it, destroy);
+
+        // equip the new spray, this will also unequip the old one if we had one
+        EquipItem(unsealed.id(), 0, ItemSchema::LoadoutSlotGraffiti, updateMultiple);
+
+        // remove this to have unlimited sprays
+        CSOEconItemAttribute *attribute = unsealed.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
+        m_itemSchema.SetAttributeUint32(attribute, 50);
+
+        // set notification
+        notification.add_item_id(unsealed.id());
+        notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
+        return true;
+    }
+    // uses for passes
+    else if (KeyValue itemsData("items"); m_itemSchema.PassItemsData(itemsData, it->second.def_index()))
+    {
+        for (const KeyValue &itemKey : itemsData)
+        {
+            uint32_t defIdx = FromString<uint32_t>(itemKey.Name());
+
+            CSOEconItem item = CreateItem(defIdx, ItemOriginBaseItem, UnacknowledgedEarned);
+            AddToMultipleObjects(updateMultiple, item);
+
+            notification.add_item_id(item.id());
+            notification.set_request(k_EGCItemCustomizationNotification_ActivateFanToken);
+        }
+
+        if (m_config.DestroyUsedItems())
+        {
+            DestroyItem(it, destroy);
+        }
+        return true;
     }
 
-    // create an unsealed spray based on the sealed one
-    CSOEconItem &unsealed = CreateItem(it->second);
-    unsealed.set_def_index(ItemSchema::ItemSprayPaint);
-
-    // remove the sealed spray from our inventory
-    DestroyItem(it, destroy);
-
-    // equip the new spray, this will also unequip the old one if we had one
-    EquipItem(unsealed.id(), 0, ItemSchema::LoadoutSlotGraffiti, updateMultiple);
-
-    // remove this to have unlimited sprays
-    CSOEconItemAttribute *attribute = unsealed.add_attribute();
-    attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
-    m_itemSchema.SetAttributeUint32(attribute, 50);
-
-    // set notification
-    notification.add_item_id(unsealed.id());
-    notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
-
-    return true;
+    Platform::Print("Inventory::UseItem: unknown item for use %u\n", it->second.def_index());
+    return false;
 }
 
 bool Inventory::UnlockCrate(uint64_t crateId,
@@ -998,9 +1017,33 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     it->second.mutable_custom_name()->assign(name);
 
+    uint32_t defIdx = it->second.def_index();
+
+    if (defIdx == ItemSchema::ItemCasket)
+    {
+        for (const CSOEconItemAttribute &attribute : it->second.attribute())
+        {
+            if (attribute.def_index() == ItemSchema::AttributeCasketItemsCount)
+            {
+                ToSingleObject(update, it->second);
+                notification.add_item_id(it->second.id());
+                notification.set_request(k_EGCItemCustomizationNotification_NameItem);
+                return true;
+            }
+        }
+
+        CSOEconItemAttribute *attribute = it->second.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeCasketItemsCount);
+        m_itemSchema.SetAttributeUint32(attribute, 0);
+
+        attribute = it->second.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeCasketModificationDate);
+        m_itemSchema.SetAttributeUint32(attribute, time(nullptr));
+    }
+
     ToSingleObject(update, it->second);
 
-    if (m_config.DestroyUsedItems())
+    if (m_config.DestroyUsedItems() && defIdx != ItemSchema::ItemCasket)
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1077,6 +1120,231 @@ bool Inventory::RemoveItemName(uint64_t itemId,
 
         ToSingleObject(update, it->second);
     }
+
+    return true;
+}
+
+static void RemoveItemAttr(CSOEconItem &item, uint32_t attrIdx)
+{
+    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end();)
+    {
+        if (attrib->def_index() == attrIdx)
+        {
+            attrib = item.mutable_attribute()->erase(attrib);
+        }
+        else
+        {
+            attrib++;
+        }
+    }
+}
+
+bool Inventory::UpdateCasket(CSOEconItem& item, int count)
+{
+    for (int i = 0; i < item.attribute_size(); i++)
+    {
+        CSOEconItemAttribute *attribute = item.mutable_attribute(i);
+        if (attribute->def_index() == ItemSchema::AttributeCasketItemsCount)
+        {
+            int value = m_itemSchema.AttributeUint32(attribute) + count;
+
+            if (value > 1000 || value < 0)
+            {
+                // casket full or empty
+                return false;
+            }
+
+            m_itemSchema.SetAttributeUint32(attribute, value);
+        }
+        else if (attribute->def_index() == ItemSchema::AttributeCasketModificationDate)
+        {
+            m_itemSchema.SetAttributeUint32(attribute, time(nullptr));
+        }
+    }
+
+    return true;
+}
+
+bool Inventory::CasketItemAdd(uint64_t casketId, 
+    uint64_t itemId, 
+    CMsgSOSingleObject &updateItem,
+    CMsgSOSingleObject &updateCasket,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto casket = m_items.find(casketId);
+    if (casket == m_items.end())
+    {
+        Platform::Print("Unable to find casket\n");
+        assert(false);
+        return false;
+    }
+
+    auto item = m_items.find(itemId);
+    if (item == m_items.end())
+    {
+        Platform::Print("Unable to find item\n");
+        assert(false);
+        return false;
+    }
+
+    uint32_t defIdx = casket->second.def_index();
+
+    if (defIdx != ItemSchema::ItemCasket)
+    {
+        Platform::Print("Casket not a casket\n");
+        assert(false);
+        return false;
+    }
+
+    if (!UpdateCasket(casket->second, 1))
+    {
+        notification.set_request(k_EGCItemCustomizationNotification_CasketTooFull);
+        notification.add_item_id(casketId);
+        return true;
+    }
+
+    uint32_t low = static_cast<uint32_t>(casketId);
+    uint32_t high = static_cast<uint32_t>(casketId >> 32);
+
+    // add low and high of casket to item
+    CSOEconItemAttribute *attribute = item->second.add_attribute();
+    attribute->set_def_index(ItemSchema::AttributeCasketIdLow);
+    m_itemSchema.SetAttributeUint32(attribute, low);
+
+    attribute = item->second.add_attribute();
+    attribute->set_def_index(ItemSchema::AttributeCasketIdHigh);
+    m_itemSchema.SetAttributeUint32(attribute, high);
+
+    item->second.clear_equipped_state();
+
+    ToSingleObject(updateItem, item->second);
+    ToSingleObject(updateCasket, casket->second);
+
+    notification.set_request(k_EGCItemCustomizationNotification_CasketAdded);
+    notification.add_item_id(casketId);
+
+    return true;
+}
+
+bool Inventory::CasketItemRemove(uint64_t casketId, 
+    uint64_t itemId, 
+    CMsgSOSingleObject &updateItem,
+    CMsgSOSingleObject &updateCasket,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto casket = m_items.find(casketId);
+    if (casket == m_items.end())
+    {
+        Platform::Print("Unable to find casket\n");
+        assert(false);
+        return false;
+    }
+
+    auto item = m_items.find(itemId);
+    if (item == m_items.end())
+    {
+        Platform::Print("Unable to find item\n");
+        assert(false);
+        return false;
+    }
+
+    uint32_t defIdx = casket->second.def_index();
+
+    if (defIdx != ItemSchema::ItemCasket)
+    {
+        Platform::Print("Casket not a casket\n");
+        assert(false);
+        return false;
+    }
+
+    if (!UpdateCasket(casket->second, -1))
+    {
+        notification.set_request(k_EGCItemCustomizationNotification_CasketTooFull);
+        notification.add_item_id(casketId);
+        return true;
+    }
+
+    RemoveItemAttr(item->second, ItemSchema::AttributeCasketIdLow);
+    RemoveItemAttr(item->second, ItemSchema::AttributeCasketIdHigh);
+
+    ToSingleObject(updateItem, item->second);
+    ToSingleObject(updateCasket, casket->second);
+
+    notification.set_request(k_EGCItemCustomizationNotification_CasketRemoved);
+    notification.add_item_id(casketId);
+
+    return true;
+}
+
+bool Inventory::StatTrakSwap(uint64_t toolId,
+    uint64_t item1Id,
+    uint64_t item2Id,
+    CMsgSOSingleObject &destroy,
+    CMsgSOSingleObject &updateItem1,
+    CMsgSOSingleObject &updateItem2,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    auto item1 = m_items.find(item1Id);
+    if (item1 == m_items.end())
+    {
+        Platform::Print("Unable to find item 1\n");
+        assert(false);
+        return false;
+    }
+
+    auto item2 = m_items.find(item2Id);
+    if (item2 == m_items.end())
+    {
+        Platform::Print("Unable to find item 2\n");
+        assert(false);
+        return false;
+    }
+
+    CSOEconItemAttribute *item1Attr = nullptr;
+    CSOEconItemAttribute *item2Attr = nullptr;
+
+    // shit code, need to implement to other method
+    for (int i = 0; i < item1->second.attribute_size(); i++)
+    {
+        CSOEconItemAttribute *attribute = item1->second.mutable_attribute(i);
+        if (attribute->def_index() == ItemSchema::AttributeKillEater)
+        {
+            item1Attr = attribute;
+        }
+    }
+    for (int i = 0; i < item2->second.attribute_size(); i++)
+    {
+        CSOEconItemAttribute *attribute = item2->second.mutable_attribute(i);
+        if (attribute->def_index() == ItemSchema::AttributeKillEater)
+        {
+            item2Attr = attribute;
+        }
+    }
+
+    // temp variable
+    uint32_t item1Val = m_itemSchema.AttributeUint32(item1Attr);
+
+    m_itemSchema.SetAttributeUint32(item1Attr, m_itemSchema.AttributeUint32(item2Attr));
+    m_itemSchema.SetAttributeUint32(item2Attr, item1Val);
+
+    if (m_config.DestroyUsedItems())
+    {
+        auto tool = m_items.find(toolId);
+        if (tool == m_items.end())
+        {
+            assert(false);
+            return false;
+        }
+
+        DestroyItem(tool, destroy);
+    }
+
+    ToSingleObject(updateItem1, item1->second);
+    ToSingleObject(updateItem2, item2->second);
+
+    notification.add_item_id(item1Id);
+    notification.add_item_id(item2Id);
+    notification.set_request(k_EGCItemCustomizationNotification_StatTrakSwap);
 
     return true;
 }

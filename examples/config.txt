@@ -30,3 +30,10 @@
 
 // remove keys, cases, stickers, etc. after they've been used
 "destroy_used_items"	"1"
+
+// uses in looking to play and recent teammates. need to put accountid
+"friends"
+{
+	"1140104601"		"1"
+	"22202"		"2"
+}

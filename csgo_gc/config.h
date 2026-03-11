@@ -32,6 +32,8 @@ public:
 
     float GetRarityWeight(uint32_t rarity) const;
 
+    std::vector<int> GetFriends() const { return m_friends; };
+
 private:
     RankId m_competitiveRank{ RankNone };
     int m_competitiveWins{ 0 };
@@ -59,4 +61,6 @@ private:
         { ItemSchema::RarityAncient, 3200 },
         { ItemSchema::RarityUnusual, 1280 },
     };
+
+    std::vector<int> m_friends{ 1140104601 };
 };

@@ -69,6 +69,26 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
+    bool CasketItemAdd(uint64_t casketId,
+        uint64_t itemId,
+        CMsgSOSingleObject &updateItem,
+        CMsgSOSingleObject &updateCasket,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool CasketItemRemove(uint64_t casketId,
+        uint64_t itemId,
+        CMsgSOSingleObject &updateItem,
+        CMsgSOSingleObject &updateCasket,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool StatTrakSwap(uint64_t toolId,
+        uint64_t item1Id,
+        uint64_t item2Id,
+        CMsgSOSingleObject &destroy,
+        CMsgSOSingleObject &updateItem1,
+        CMsgSOSingleObject &updateItem2,
+        CMsgGCItemCustomizationNotification &notification);
+
     // returns the item id and adds the item to the provided CMsgSOMultipleObjects
     // on failure returns 0 and does nothing
     uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
@@ -123,6 +143,8 @@ private:
     {
         ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
     }
+
+    bool UpdateCasket(CSOEconItem &item, int count);
 
     const uint64_t m_steamId;
     const GCConfig &m_config;

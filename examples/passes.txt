@@ -1,0 +1,270 @@
+// uses for activating major and operation passes 
+
+// Katowice 2019
+"4554"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"16"
+	"items"
+	{
+		// Bronze medal
+		"4555"		"1"
+		// Silver medal
+		"4556"		"2"
+		// Gold medal
+		"4557"		"3"
+		// Crystal medal
+		"4558"		"4"
+	}
+}
+// Berlin 2019
+"4622"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"17"
+	"items"
+	{
+		"4623"		"1"
+	}
+}
+// Berlin 2019 + 3 tokens
+"4627"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"17"
+	"items"
+	{
+		"4623"		"1"
+		"4624"		"2"
+		"4625"		"3"
+		"4626"		"4"
+	}
+}
+// Stockholm 2021
+"4796"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"18"
+	"items"
+	{
+		"4797"		"1"
+	}
+}
+// Stockholm 2021  + 3 tokens
+"4801"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"18"
+	"items"
+	{
+		"4797"		"1"
+		"4798"		"2"
+		"4799"		"3"
+		"4800"		"4"
+	}
+}
+// Antwerp 2022
+"4825"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"19"
+	"items"
+	{
+		"4826"		"1"
+	}
+}
+// Antwerp 2022  + 3 tokens
+"4830"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"19"
+	"items"
+	{
+		"4826"		"1"
+		"4827"		"2"
+		"4828"		"3"
+		"4829"		"4"
+	}
+}
+// Rio 2022
+"4850"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"20"
+	"items"
+	{
+		"4851"		"1"
+	}
+}
+// Rio 2022  + 3 tokens
+"4855"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"20"
+	"items"
+	{
+		"4851"		"1"
+		"4852"		"2"
+		"4853"		"3"
+		"4854"		"4"
+	}
+}
+// Paris 2023
+"4883"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"21"
+	"items"
+	{
+		"4884"		"1"
+	}
+}
+// Paris 2023  + 3 tokens
+"4888"
+{
+	"seasonal_id"	"0"
+	"tournament_id"	"21"
+	"items"
+	{
+		"4884"		"1"
+		"4885"		"2"
+		"4886"		"3"
+		"4887"		"4"
+	}
+}
+// Operaton Payback
+"1000"
+{
+	"seasonal_id"	"1"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1001"		"1"
+		"1002"		"2"
+		"1003"		"3"
+	}
+}
+// Operaton Bravo
+"1012"
+{
+	"seasonal_id"	"2"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1013"		"1"
+		"1014"		"2"
+		"1015"		"3"
+	}
+}
+// Operaton Phoenix
+"1023"
+{
+	"seasonal_id"	"3"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1024"		"1"
+		"1025"		"2"
+		"1026"		"3"
+	}
+}
+// Operaton Breakout
+"1027"
+{
+	"seasonal_id"	"4"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1028"		"1"
+		"1029"		"2"
+		"1030"		"3"
+	}
+}
+// Operaton Vanguard
+"1315"
+{
+	"seasonal_id"	"5"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1316"		"1"
+		"1317"		"2"
+		"1318"		"3"
+	}
+}
+// Operaton Bloodhound
+"1326"
+{
+	"seasonal_id"	"6"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1327"		"1"
+		"1328"		"2"
+		"1329"		"3"
+	}
+}
+// Operaton Wildfire
+"1335"
+{
+	"seasonal_id"	"7"
+	"tournament_id"	"0"
+	"items"
+	{
+		"1336"		"1"
+		"1337"		"2"
+		"1338"		"3"
+	}
+}
+// Operaton Hydra
+"1352"
+{
+	"seasonal_id"	"8"
+	"tournament_id"	"0"
+	"items"
+	{
+		"4353"		"1"
+		"4354"		"2"
+		"4355"		"3"
+		"4356"		"4"
+	}
+}
+// Operaton Shattered Web
+"4549"
+{
+	"seasonal_id"	"9"
+	"tournament_id"	"0"
+	"items"
+	{
+		"4550"		"1"
+		"4551"		"2"
+		"4552"		"3"
+		"4553"		"4"
+	}
+}
+// Operaton Broken Fang
+"4699"
+{
+	"seasonal_id"	"10"
+	"tournament_id"	"0"
+	"items"
+	{
+		"4700"		"1"
+		"4701"		"2"
+		"4702"		"3"
+		"4703"		"4"
+	}
+}
+// Operaton Riptide
+"4758"
+{
+	"seasonal_id"	"11"
+	"tournament_id"	"0"
+	"items"
+	{
+		"4759"		"1"
+		"4760"		"2"
+		"4761"		"3"
+		"4762"		"4"
+	}
+}

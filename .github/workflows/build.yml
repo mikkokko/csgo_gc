@@ -71,6 +71,7 @@ jobs:
         cp $GITHUB_WORKSPACE/examples/inventory.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/price_sheet.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/unusual_loot_lists.txt $GITHUB_WORKSPACE/release/csgo_gc/
+        cp $GITHUB_WORKSPACE/examples/passes.txt $GITHUB_WORKSPACE/release/csgo_gc/
 
     - name: Zip artifacts (Windows)
       if: runner.os == 'Windows'

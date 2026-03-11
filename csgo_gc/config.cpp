@@ -44,6 +44,19 @@ GCConfig::GCConfig()
         }
     }
 
+    const KeyValue *friends = config.GetSubkey("friends");
+    if (friends)
+    {
+        m_friends.clear();
+        m_friends.reserve(friends->SubkeyCount());
+
+        for (const KeyValue &subkey : *friends)
+        {
+            uint32_t friendId = FromString<uint32_t>(subkey.Name());
+            m_friends.push_back(friendId);
+        }
+    }
+
     m_vacBanned = config.GetNumber("vac_banned", m_vacBanned);
     m_commendedFriendly = config.GetNumber("cmd_friendly", m_commendedFriendly);
     m_commendedTeaching = config.GetNumber("cmd_teaching", m_commendedTeaching);
