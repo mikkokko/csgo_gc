@@ -30,6 +30,9 @@ public:
     int Level() const { return m_level; }
     int Xp() const { return m_xp; }
 
+    std::string Country() const { return m_country; }
+    int Currency() const { return m_currency; }
+
     float GetRarityWeight(uint32_t rarity) const;
 
     std::vector<int> GetFriends() const { return m_friends; };
@@ -50,6 +53,9 @@ private:
     int m_commendedLeader{ 0 };
     int m_level{ 0 };
     int m_xp{ 0 };
+
+    std::string m_country{ "RU" };
+    int m_currency{ 3 };
 
     // default to valve weights
     std::vector<RarityWeight> m_rarityWeights{

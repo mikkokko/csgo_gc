@@ -63,6 +63,9 @@ GCConfig::GCConfig()
     m_commendedLeader = config.GetNumber("cmd_leader", m_commendedLeader);
     m_level = config.GetNumber("player_level", m_level);
     m_xp = config.GetNumber("player_cur_xp", m_xp);
+
+    m_country = config.GetString("country", m_country);
+    m_currency = config.GetNumber("currency", m_currency);
 }
 
 float GCConfig::GetRarityWeight(uint32_t rarity) const

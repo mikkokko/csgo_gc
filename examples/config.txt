@@ -16,6 +16,9 @@
 "player_level"	"39"
 "player_cur_xp"	"4999"
 
+"country"	"RU"
+"currency"	"3"
+
 // these are the same weights valve uses
 "rarity_weights"
 {

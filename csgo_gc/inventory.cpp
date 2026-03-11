@@ -1235,7 +1235,6 @@ bool Inventory::CasketItemRemove(uint64_t casketId,
     auto casket = m_items.find(casketId);
     if (casket == m_items.end())
     {
-        Platform::Print("Unable to find casket\n");
         assert(false);
         return false;
     }
@@ -1243,7 +1242,6 @@ bool Inventory::CasketItemRemove(uint64_t casketId,
     auto item = m_items.find(itemId);
     if (item == m_items.end())
     {
-        Platform::Print("Unable to find item\n");
         assert(false);
         return false;
     }
@@ -1252,7 +1250,6 @@ bool Inventory::CasketItemRemove(uint64_t casketId,
 
     if (defIdx != ItemSchema::ItemCasket)
     {
-        Platform::Print("Casket not a casket\n");
         assert(false);
         return false;
     }
@@ -1287,7 +1284,6 @@ bool Inventory::StatTrakSwap(uint64_t toolId,
     auto item1 = m_items.find(item1Id);
     if (item1 == m_items.end())
     {
-        Platform::Print("Unable to find item 1\n");
         assert(false);
         return false;
     }
@@ -1295,7 +1291,6 @@ bool Inventory::StatTrakSwap(uint64_t toolId,
     auto item2 = m_items.find(item2Id);
     if (item2 == m_items.end())
     {
-        Platform::Print("Unable to find item 2\n");
         assert(false);
         return false;
     }
