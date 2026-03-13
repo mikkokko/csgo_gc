@@ -1,11 +1,10 @@
 #include "stdafx.h"
 #include "appid.h"
 #include "keyvalue.h" // LoadFile
+#include "config.h"
 
 namespace AppId
 {
-
-static uint32_t g_appIdOverride = 730;
 
 static size_t ifind(std::string_view haystack, std::string_view needle)
 {
@@ -70,47 +69,40 @@ static void WriteFile(const char *path, const std::string &buffer)
 
 void Init()
 {
-    std::string appIdString = LoadFile("csgo_gc/appid_override.txt");
-    if (appIdString.size())
-    {
-        uint32_t appId = FromString<uint32_t>(appIdString);
-        if (appId)
-        {
-            g_appIdOverride = appId;
-        }
-    }
-    
-    Platform::Print("Using app id %u\n", g_appIdOverride);
+    // defaults to 730 if not specified
+    uint32_t appIdOverride = GetConfig().AppIdOverride();
+
+    Platform::Print("Using app id %u\n", appIdOverride);
 
     std::string steamInf = LoadFile("csgo/steam.inf");
-    SteamInfResult steamInfResult = ReplaceSteamInfAppId(steamInf, g_appIdOverride);
+    SteamInfResult steamInfResult = ReplaceSteamInfAppId(steamInf, appIdOverride);
 
     switch (steamInfResult)
     {
     case SteamInfResult::Ok:
         // could make a backup, but don't...
         WriteFile("csgo/steam.inf", steamInf);
-        Platform::Print("Replaced steam.inf app id with %u\n", g_appIdOverride);
+        Platform::Print("Replaced steam.inf app id with %u\n", appIdOverride);
         break;
 
     case SteamInfResult::InvalidFile:
-        Platform::Print("Did not replace steam.inf app id with %u (invalid file)\n", g_appIdOverride);
+        Platform::Print("Did not replace steam.inf app id with %u (invalid file)\n", appIdOverride);
         break;
 
     case SteamInfResult::AlreadyOk:
-        Platform::Print("steam.inf app id was already set to %u\n", g_appIdOverride);
+        Platform::Print("steam.inf app id was already set to %u\n", appIdOverride);
         break;
     }
 }
 
 uint32_t GetOverride()
 {
-    return g_appIdOverride;
+    return GetConfig().AppIdOverride();
 }
 
 bool IsOriginal()
 {
-    return (g_appIdOverride == 730);
+    return (GetConfig().AppIdOverride() == 730);
 }
 
 }

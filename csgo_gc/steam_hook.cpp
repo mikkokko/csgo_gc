@@ -1233,7 +1233,12 @@ public:
     {
         buffer.reserve(nFilters + 1);
         buffer.assign(pchFilters, pchFilters + nFilters);
-        buffer.push_back({ "gametagsand", "csgo_gc" });
+
+        if (GetConfig().ShowCsgoGCServersOnly())
+        {
+            buffer.push_back({ "gametagsand", "csgo_gc" });
+        }
+
         return buffer.data();
     }
 

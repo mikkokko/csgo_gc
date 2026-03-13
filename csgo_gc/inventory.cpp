@@ -37,9 +37,8 @@ inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paint
     return false;
 }
 
-Inventory::Inventory(uint64_t steamId, const GCConfig &config)
+Inventory::Inventory(uint64_t steamId)
     : m_steamId{ steamId }
-    , m_config{ config }
 {
     ReadFromFile();
 }
@@ -499,7 +498,7 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     }
 
     // CASE OPENING
-    CaseOpening caseOpening{ m_itemSchema, m_config, m_random };
+    CaseOpening caseOpening{ m_itemSchema, m_random };
 
     CSOEconItem temp;
     if (!caseOpening.SelectItemFromCrate(crate->second, temp))
@@ -517,7 +516,7 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     notification.set_request(k_EGCItemCustomizationNotification_UnlockCrate);
 
     // remove the crate
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         DestroyItem(crate, destroyCrate);
 
@@ -835,7 +834,7 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
     ToSingleObject(update, *item);
 
     // remove the sticker
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         DestroyItem(sticker, destroy);
     }
@@ -1000,7 +999,7 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     ToSingleObject(update, it->second);
 
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1031,7 +1030,7 @@ bool Inventory::NameBaseItem(uint64_t nameTagId,
 
     ToSingleObject(create, item);
 
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())

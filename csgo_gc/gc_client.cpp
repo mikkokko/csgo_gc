@@ -5,7 +5,7 @@
 
 ClientGC::ClientGC(uint64_t steamId)
     : m_steamId{ steamId }
-    , m_inventory{ steamId, m_config }
+    , m_inventory{ steamId }
 {
     // also called from ServerGC's constructor
     Graffiti::Initialize();
@@ -161,7 +161,7 @@ void ClientGC::HandleNetMessage(const void *data, uint32_t size)
 void ClientGC::HandleSOCacheRequest()
 {
     CMsgSOCacheSubscribed message;
-    m_inventory.BuildCacheSubscription(message, m_config.Level(), true);
+    m_inventory.BuildCacheSubscription(message, GetConfig().Level(), true);
 
     GCMessageWrite messageWrite{ k_ESOMsg_CacheSubscribed, message };
     PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
@@ -219,12 +219,12 @@ void ClientGC::BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHell
     message.mutable_global_stats()->set_active_survey_id(0);
     message.mutable_global_stats()->set_required_appid_version2(13862); // csgo s2
 
-    message.set_vac_banned(m_config.VacBanned());
-    message.mutable_commendation()->set_cmd_friendly(m_config.CommendedFriendly());
-    message.mutable_commendation()->set_cmd_teaching(m_config.CommendedTeaching());
-    message.mutable_commendation()->set_cmd_leader(m_config.CommendedLeader());
-    message.set_player_level(m_config.Level());
-    message.set_player_cur_xp(m_config.Xp());
+    message.set_vac_banned(GetConfig().VacBanned());
+    message.mutable_commendation()->set_cmd_friendly(GetConfig().CommendedFriendly());
+    message.mutable_commendation()->set_cmd_teaching(GetConfig().CommendedTeaching());
+    message.mutable_commendation()->set_cmd_leader(GetConfig().CommendedLeader());
+    message.set_player_level(GetConfig().Level());
+    message.set_player_cur_xp(GetConfig().Xp());
 }
 
 void ClientGC::BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,
@@ -233,7 +233,7 @@ void ClientGC::BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike1
     // mikkotodo remove dox
     message.set_version(0); // this is accurate
     message.set_game_data(csWelcome.SerializeAsString());
-    m_inventory.BuildCacheSubscription(*message.add_outofdate_subscribed_caches(), m_config.Level(), false);
+    m_inventory.BuildCacheSubscription(*message.add_outofdate_subscribed_caches(), GetConfig().Level(), false);
     message.mutable_location()->set_latitude(65.0133006f);
     message.mutable_location()->set_longitude(25.4646212f);
     message.mutable_location()->set_country("FI"); // finland
@@ -249,20 +249,20 @@ void ClientGC::SendRankUpdate()
 
     PlayerRankingInfo *rank = message.add_rankings();
     rank->set_account_id(AccountId());
-    rank->set_rank_id(m_config.CompetitiveRank());
-    rank->set_wins(m_config.CompetitiveWins());
+    rank->set_rank_id(GetConfig().CompetitiveRank());
+    rank->set_wins(GetConfig().CompetitiveWins());
     rank->set_rank_type_id(RankTypeCompetitive);
 
     rank = message.add_rankings();
     rank->set_account_id(AccountId());
-    rank->set_rank_id(m_config.WingmanRank());
-    rank->set_wins(m_config.WingmanWins());
+    rank->set_rank_id(GetConfig().WingmanRank());
+    rank->set_wins(GetConfig().WingmanWins());
     rank->set_rank_type_id(RankTypeWingman);
 
     rank = message.add_rankings();
     rank->set_account_id(AccountId());
-    rank->set_rank_id(m_config.DangerZoneRank());
-    rank->set_wins(m_config.DangerZoneWins());
+    rank->set_rank_id(GetConfig().DangerZoneRank());
+    rank->set_wins(GetConfig().DangerZoneWins());
     rank->set_rank_type_id(RankTypeDangerZone);
 
     SendMessageToGame(false, k_EMsgGCCStrike15_v2_ClientGCRankUpdate, message);

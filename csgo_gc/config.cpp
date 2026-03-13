@@ -5,6 +5,12 @@
 
 constexpr const char *ConfigFilePath = "csgo_gc/config.txt";
 
+const GCConfig &GetConfig()
+{
+    static GCConfig instance;
+    return instance;
+}
+
 GCConfig::GCConfig()
 {
     KeyValue config{ "config" };
@@ -13,6 +19,9 @@ GCConfig::GCConfig()
     {
         return;
     }
+
+    m_appIdOverride = config.GetNumber("appid_override", m_appIdOverride);
+    m_showCsgoGCServersOnly = config.GetNumber("show_csgo_gc_servers_only", m_showCsgoGCServersOnly);
 
     const KeyValue *ranks = config.GetSubkey("ranks");
     if (ranks)

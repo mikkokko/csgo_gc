@@ -14,6 +14,10 @@ class GCConfig
 public:
     GCConfig();
 
+    // options used by steam hook
+    uint32_t AppIdOverride() const { return m_appIdOverride; }
+    bool ShowCsgoGCServersOnly() const { return m_showCsgoGCServersOnly; }
+
     RankId CompetitiveRank() const { return m_competitiveRank; }
     int CompetitiveWins() const { return m_competitiveWins; }
     RankId WingmanRank() const { return m_wingmanRank; }
@@ -33,6 +37,11 @@ public:
     float GetRarityWeight(uint32_t rarity) const;
 
 private:
+    // actually default to 4465480 instead of 730, people are going to use old configs
+    // and then wonder why the game doesn't work and open an issue on github otherwise
+    uint32_t m_appIdOverride{ 4465480 };
+    bool m_showCsgoGCServersOnly{ true };
+
     RankId m_competitiveRank{ RankNone };
     int m_competitiveWins{ 0 };
     RankId m_wingmanRank{ RankNone };
@@ -60,3 +69,5 @@ private:
         { ItemSchema::RarityUnusual, 1280 },
     };
 };
+
+const GCConfig &GetConfig();
