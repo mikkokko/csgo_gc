@@ -1933,6 +1933,13 @@ static void Hk_SteamGameServer_RunCallbacks()
 
     if (s_serverGC)
     {
+        // only run server gc when logged on as an attempt to more accurately mimic real gc behaviour
+        // FIXME: does csgo handle CMsgConnectionStatus?
+        if (!SteamGameServer()->BLoggedOn())
+        {
+            return;
+        }
+
         // poll events
         HostEvent type;
         uint64_t id;
@@ -1965,17 +1972,11 @@ static void Hk_SteamGameServer_RunCallbacks()
             s_callbackHooks.RunCallback(true, GCMessageAvailable_t::k_iCallback, &param);
         }
 
-        // don't run networking until we've received the hello and sent the welcome
-        // otherwise we might receive the local client's socache before that and it'll
-        // get wiped after the welcome is received
-        if (s_serverGC->m_gc.CanHandleNetMessages())
+        SteamNetworkingMessage_t *message;
+        while (s_serverGC->m_networking.ReceiveMessage(message))
         {
-            SteamNetworkingMessage_t *message;
-            while (s_serverGC->m_networking.ReceiveMessage(message))
-            {
-                s_serverGC->m_gc.PostToGC(GCEvent::NetMessage, message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
-                message->Release();
-            }
+            s_serverGC->m_gc.PostToGC(GCEvent::NetMessage, message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
+            message->Release();
         }
     }
 }

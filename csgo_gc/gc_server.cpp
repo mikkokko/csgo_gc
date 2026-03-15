@@ -59,7 +59,7 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
         switch (messageRead.TypeUnmasked())
         {
         case k_EMsgGCServerHello:
-            OnServerHello(messageRead);
+            SendServerWelcome();
             break;
 
         case k_EMsgGCCStrike15_v2_Server2GCClientValidate:
@@ -113,8 +113,6 @@ static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamI
 
 void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
-    assert(CanHandleNetMessages());
-
     GCMessageRead validate{ 0, data, size };
     if (!validate.IsValid())
     {
@@ -161,18 +159,18 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         return;
     }
 
+    if (!IsWelcomeSent())
+    {
+        // FIXME: ideally we'd sent this on steam logon, instead of on demand...
+        Platform::Print("Sending server welcome due to net message\n");
+        SendServerWelcome();
+    }
+
     PostToHost(HostEvent::Message, validate.TypeMasked(), data, size);
 }
 
-void ServerGC::OnServerHello(GCMessageRead &messageRead)
+void ServerGC::SendServerWelcome()
 {
-    CMsgServerHello hello;
-    if (!messageRead.ReadProtobuf(hello))
-    {
-        Platform::Print("Parsing CMsgServerHello failed, ignoring\n");
-        return;
-    }
-
     // we don't care about anything in this message, just reply
 
     CMsgCStrike15Welcome csWelcome;
@@ -186,7 +184,7 @@ void ServerGC::OnServerHello(GCMessageRead &messageRead)
     GCMessageWrite write{ k_EMsgGCServerWelcome, welcome };
     PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
 
-    m_receivedHello.store(true, std::memory_order_release);
+    m_sentWelcome.store(true, std::memory_order_release);
 }
 
 void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
