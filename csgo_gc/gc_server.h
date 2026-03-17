@@ -8,8 +8,6 @@ public:
     ServerGC();
     ~ServerGC();
 
-    bool IsWelcomeSent() const { return m_sentWelcome.load(std::memory_order_acquire); }
-
 private:
     void HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer) override;
 
@@ -21,5 +19,5 @@ private:
     void SendServerWelcome();
     void IncrementKillCountAttribute(GCMessageRead &messageRead);
 
-    std::atomic_bool m_sentWelcome{};
+    bool m_sentWelcome{};
 };

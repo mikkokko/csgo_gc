@@ -128,6 +128,8 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         return;
     }
 
+    Platform::Print("HandleNetMessage: %llu\n", steamId);
+
     // validate the type and contents
     bool isValid = false;
 
@@ -159,7 +161,7 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         return;
     }
 
-    if (!IsWelcomeSent())
+    if (!m_sentWelcome)
     {
         // FIXME: ideally we'd sent this on steam logon, instead of on demand...
         Platform::Print("Sending server welcome due to net message\n");
@@ -184,7 +186,7 @@ void ServerGC::SendServerWelcome()
     GCMessageWrite write{ k_EMsgGCServerWelcome, welcome };
     PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
 
-    m_sentWelcome.store(true, std::memory_order_release);
+    m_sentWelcome = true;
 }
 
 void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)

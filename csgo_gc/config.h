@@ -9,10 +9,21 @@ struct RarityWeight
     float weight;
 };
 
+// for Platform::Print calls
+enum LogOutput
+{
+    LogOutputNone, // don't output anything
+    LogOutputConsole, // game console
+    LogOutputFile // game console and gc_log.txt
+};
+
 class GCConfig
 {
 public:
     GCConfig();
+
+    // options used by platform layer (bruh)
+    LogOutput GetLogOutput() const { return m_logOutput; }
 
     // options used by steam hook
     uint32_t AppIdOverride() const { return m_appIdOverride; }
@@ -37,6 +48,8 @@ public:
     float GetRarityWeight(uint32_t rarity) const;
 
 private:
+    LogOutput m_logOutput{ LogOutputConsole };
+
     // actually default to 4465480 instead of 730, people are going to use old configs
     // and then wonder why the game doesn't work and open an issue on github otherwise
     uint32_t m_appIdOverride{ 4465480 };

@@ -17,13 +17,20 @@ enum class GCEvent
     ClientSOCacheUnsubscribe, // sent to server gc when a client disconnects, id contains the steam id
 };
 
+struct EventData
+{
+    int type; // HostEvent or GCEvent
+    uint64_t id;
+    std::vector<uint8_t> buffer;
+};
+
 // shared logic between client and server gcs
 class SharedGC
 {
 public:
     void PostToGC(GCEvent type, uint64_t id, const void *data, uint32_t dataSize);
 
-    bool PollFromGC(HostEvent &type, uint64_t &id, std::vector<uint8_t> &buffer);
+    void GetHostEvents(std::vector<EventData> &events);
 
 protected:
     // must be manually called by the gc
@@ -37,21 +44,14 @@ private:
 
     void WorkerThread();
 
-    struct Event
-    {
-        int type; // HostEvent or GCEvent
-        uint64_t id;
-        std::vector<uint8_t> buffer;
-    };
-
     std::mutex m_gcEventMutex;
     std::condition_variable m_cv;
-    std::queue<Event> m_gcEvents;
+    std::vector<EventData> m_gcEvents;
     std::thread m_thread;
     bool m_stopping{ false };
 
     std::mutex m_hostEventMutex;
-    std::queue<Event> m_hostEvents;
+    std::vector<EventData> m_hostEvents;
 };
 
 const char *MessageName(uint32_t type);

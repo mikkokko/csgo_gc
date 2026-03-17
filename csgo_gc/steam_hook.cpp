@@ -1866,23 +1866,22 @@ static void Hk_SteamAPI_RunCallbacks()
 
     if (s_clientGC)
     {
-        // poll events
-        HostEvent type;
-        uint64_t id;
-        std::vector<uint8_t> buffer;
+        std::vector<EventData> events;
+        s_clientGC->m_gc.GetHostEvents(events);
 
+        // poll events
         bool runMicroTransactionResponse = false;
 
-        while (s_clientGC->m_gc.PollFromGC(type, id, buffer))
+        for (EventData &event : events)
         {
-            switch (type)
+            switch (static_cast<HostEvent>(event.type))
             {
             case HostEvent::Message:
-                s_clientGC->m_messageQueue.AddMessage((uint32_t)id, std::move(buffer));
+                s_clientGC->m_messageQueue.AddMessage(static_cast<uint32_t>(event.id), std::move(event.buffer));
                 break;
 
             case HostEvent::NetMessage:
-                s_clientGC->m_networking.SendMessage(buffer.data(), static_cast<uint32_t>(buffer.size()));
+                s_clientGC->m_networking.SendMessage(event.buffer.data(), static_cast<uint32_t>(event.buffer.size()));
                 break;
 
             case HostEvent::MicroTransactionResponse:
@@ -1940,21 +1939,20 @@ static void Hk_SteamGameServer_RunCallbacks()
             return;
         }
 
-        // poll events
-        HostEvent type;
-        uint64_t id;
-        std::vector<uint8_t> buffer;
+        std::vector<EventData> events;
+        s_serverGC->m_gc.GetHostEvents(events);
 
-        while (s_serverGC->m_gc.PollFromGC(type, id, buffer))
+        // poll events
+        for (EventData &event : events)
         {
-            switch (type)
+            switch ((HostEvent)event.type)
             {
             case HostEvent::Message:
-                s_serverGC->m_messageQueue.AddMessage((uint32_t)id, std::move(buffer));
+                s_serverGC->m_messageQueue.AddMessage((uint32_t)event.id, std::move(event.buffer));
                 break;
 
             case HostEvent::NetMessage:
-                s_serverGC->m_networking.SendMessage(id, buffer.data(), static_cast<uint32_t>(buffer.size()));
+                s_serverGC->m_networking.SendMessage((uint32_t)event.id, event.buffer.data(), static_cast<uint32_t>(event.buffer.size()));
                 break;
 
             default:

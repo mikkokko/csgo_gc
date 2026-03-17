@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "platform.h"
+#include "config.h" // yuck
 #include <windows.h>
 
 namespace Platform
@@ -22,6 +23,13 @@ void Initialize()
 
 void Print(const char *format, ...)
 {
+    LogOutput logOutput = GetConfig().GetLogOutput();
+    if (logOutput <= LogOutputNone)
+    {
+        // no logging
+        return;
+    }
+
     va_list ap;
     char buffer[4096];
 
@@ -35,9 +43,13 @@ void Print(const char *format, ...)
         s_ConColorMsg(color, "[GC] %s", buffer);
     }
 
-    FILE *f = fopen("gc_log.txt", "a");
-    fprintf(f, "%s", buffer);
-    fclose(f);
+    // optionally also log to file
+    if (logOutput >= LogOutputFile)
+    {
+        FILE *f = fopen("gc_log.txt", "a");
+        fprintf(f, "%s", buffer);
+        fclose(f);
+    }
 }
 
 void Error(const char *format, ...)
