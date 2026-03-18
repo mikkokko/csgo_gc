@@ -321,6 +321,11 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
 
         for (const auto &pair : m_items)
         {
+            if (server && !pair.second.equipped_state_size())
+            {
+                continue;
+            }
+
             object->add_object_data(pair.second.SerializeAsString());
         }
     }

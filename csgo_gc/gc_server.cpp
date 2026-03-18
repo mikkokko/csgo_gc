@@ -113,6 +113,8 @@ static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamI
 
 void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
+    Platform::Print("HandleNetMessage: %llu, %u bytes\n", steamId, size);
+
     GCMessageRead validate{ 0, data, size };
     if (!validate.IsValid())
     {
@@ -127,8 +129,6 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
             validate.TypeUnmasked(), steamId);
         return;
     }
-
-    Platform::Print("HandleNetMessage: %llu\n", steamId);
 
     // validate the type and contents
     bool isValid = false;
