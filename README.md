@@ -27,8 +27,6 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 
 ## Planned features
 - Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
-- Graphical inventory editor
-- A tool to copy your CS2 inventory over
 
 I'm still looking for the **full** CS:GO Item Schema. If you have a relatively recent copy of it and are willing to share it, let me know!
 
@@ -45,7 +43,7 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 - macOS users: The release binaries are not notarized, so if you're using them, you'll have to deal with that somehow
 
 ## Inventory editing
-Since there is no graphical editor yet, you'll have to edit `csgo_gc/inventory.txt` manually. There is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
+For GUI inventory editors, see https://github.com/mikkokko/csgo_gc/issues/82. For manual editing, there is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
 
 ## Building
 Requirements:
