@@ -120,10 +120,9 @@ static void AppendProtobuf(std::vector<uint8_t> &buffer, const google::protobuf:
 }
 
 GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message, uint64_t jobId)
-    : m_type{ type | ProtobufMask }
 {
     // write the protobuf message hader
-    WriteUint32(m_type);
+    WriteUint32(type | ProtobufMask);
 
     if (jobId != JobIdInvalid)
     {
@@ -146,29 +145,19 @@ GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLit
 }
 
 GCMessageWrite::GCMessageWrite(uint32_t type)
-    : m_type{ type }
 {
     // write the non protobuf messge hader
     // mikkotoodo using GameStructMsgHeader is wrong here!!! we should be using the fat one
     // however we're not sending these to the game (yet) so it doesn't matter
-    WriteUint32(m_type);
+    WriteUint32(type);
     WriteUint32(0);
     WriteUint64(0);
     WriteUint16(0);
 }
 
 GCMessageWrite::GCMessageWrite(const void *data, uint32_t size)
-    : m_type{ 0 } // don't know yet
 {
-    if (size >= sizeof(uint32_t))
-    {
-        m_type = *reinterpret_cast<const uint32_t *>(data);
-    }
-    else
-    {
-        assert(false);
-    }
-
+    assert(size >= sizeof(uint32_t));
     const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
     m_buffer.assign(bytes, bytes + size);
 }
