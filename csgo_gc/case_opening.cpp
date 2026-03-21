@@ -4,9 +4,8 @@
 #include "item_schema.h"
 #include "random.h"
 
-CaseOpening::CaseOpening(const ItemSchema &itemSchema, const GCConfig &config, Random &random)
+CaseOpening::CaseOpening(const ItemSchema &itemSchema, Random &random)
     : m_itemSchema{ itemSchema }
-    , m_config{ config }
     , m_random{ random }
 {
 }
@@ -111,7 +110,7 @@ uint32_t CaseOpening::RandomRarityForItems(const std::vector<const LootListItem 
     for (size_t i = 0; i < items.size(); i++)
     {
         uint32_t rarity = items[i]->CaseRarity();
-        float weight = m_config.GetRarityWeight(rarity);
+        float weight = GetConfig().GetRarityWeight(rarity);
 
         weights.push_back({ rarity, weight });
         totalWeight += weight;

@@ -449,9 +449,9 @@ bool ItemSchema::CreateItemFromLootListItem(Random &random,
     {
         item.set_quality(ItemSchema::QualityStrange);
     }
-    else
+    else if (lootListItem.quality != ItemSchema::QualityUnusual)
     {
-        // need unique
+        // if not a unusual, make it unique
         item.set_quality(ItemSchema::QualityUnique);
     }
 
@@ -508,7 +508,9 @@ bool ItemSchema::CreateItemFromLootListItem(Random &random,
         // mikkotodo how does the float distribution work?
         attribute = item.add_attribute();
         attribute->set_def_index(ItemSchema::AttributeTextureWear);
-        SetAttributeFloat(attribute, random.Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat));
+
+        float itemFloat = GetConfig().RandomizeFloat() ? random.Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat) : 0;
+        SetAttributeFloat(attribute, itemFloat);
     }
     else if (lootListItem.type == LootListItemNoAttribute)
     {
@@ -592,7 +594,6 @@ bool ItemSchema::PassItemsData(KeyValue &itemsData, uint32_t defIndex) const
     auto passKey = m_passes.find(defIndex);
     if (passKey == m_passes.end())
     {
-        assert(false);
         return false;
     }
     const KeyValue *subkey = passKey->second.GetSubkey("items");

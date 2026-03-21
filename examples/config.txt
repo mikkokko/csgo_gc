@@ -33,6 +33,7 @@
 
 // remove keys, cases, stickers, etc. after they've been used
 "destroy_used_items"	"1"
+"randomize_item_float" "1"
 
 // uses in looking to play and recent teammates. need to put accountid
 "friends"
@@ -40,3 +41,12 @@
 	"1140104601"		"1"
 	"22202"		"2"
 }
+
+// steam related options
+
+// specifies what app id to use for the game. csgo/steam.inf is automatically modified if necessary, and the SteamAppId
+// environment variable is set. when using csgo_gc, this is the only thing you need to modify to switch app ids
+"appid_override"	"4465480" // new csgo appid
+
+// only show servers with the "csgo_gc" tag in the server browser
+"show_csgo_gc_servers_only"	"1"

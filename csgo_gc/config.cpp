@@ -5,6 +5,12 @@
 
 constexpr const char *ConfigFilePath = "csgo_gc/config.txt";
 
+const GCConfig &GetConfig()
+{
+    static GCConfig instance;
+    return instance;
+}
+
 GCConfig::GCConfig()
 {
     KeyValue config{ "config" };
@@ -13,6 +19,9 @@ GCConfig::GCConfig()
     {
         return;
     }
+
+    m_appIdOverride = config.GetNumber("appid_override", m_appIdOverride);
+    m_showCsgoGCServersOnly = config.GetNumber("show_csgo_gc_servers_only", m_showCsgoGCServersOnly);
 
     const KeyValue *ranks = config.GetSubkey("ranks");
     if (ranks)
@@ -28,6 +37,7 @@ GCConfig::GCConfig()
     }
 
     m_destroyUsedItems = config.GetNumber("destroy_used_items", m_destroyUsedItems);
+    m_randomizeFloat = config.GetNumber("randomize_item_float", m_randomizeFloat);
 
     const KeyValue *rarityWeights = config.GetSubkey("rarity_weights");
     if (rarityWeights)

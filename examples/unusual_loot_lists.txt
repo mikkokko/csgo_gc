@@ -650,3 +650,7 @@
 	"[cu_falchion_lore]weapon_knife_falchion"		"1"
 	"[gs_falchion_autotronic]weapon_knife_falchion"		"1"
 }
+"crate_xray_p250_lootlist"
+{
+	"[cu_xray_p250]weapon_p250"		"1"
+}

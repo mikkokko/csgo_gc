@@ -56,7 +56,6 @@ private:
 
     const uint64_t m_steamId;
 
-    GCConfig m_config;
     Inventory m_inventory;
 
     // microtransactions, we only have one going at a time

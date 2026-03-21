@@ -14,6 +14,10 @@ class GCConfig
 public:
     GCConfig();
 
+    // options used by steam hook
+    uint32_t AppIdOverride() const { return m_appIdOverride; }
+    bool ShowCsgoGCServersOnly() const { return m_showCsgoGCServersOnly; }
+
     RankId CompetitiveRank() const { return m_competitiveRank; }
     int CompetitiveWins() const { return m_competitiveWins; }
     RankId WingmanRank() const { return m_wingmanRank; }
@@ -22,6 +26,7 @@ public:
     int DangerZoneWins() const { return m_dangerZoneWins; }
 
     bool DestroyUsedItems() const { return m_destroyUsedItems; }
+    bool RandomizeFloat() const { return m_randomizeFloat; }
 
     bool VacBanned() const { return m_vacBanned; }
     int CommendedFriendly() const { return m_commendedFriendly; }
@@ -38,6 +43,11 @@ public:
     std::vector<int> GetFriends() const { return m_friends; };
 
 private:
+    // actually default to 4465480 instead of 730, people are going to use old configs
+    // and then wonder why the game doesn't work and open an issue on github otherwise
+    uint32_t m_appIdOverride{ 4465480 };
+    bool m_showCsgoGCServersOnly{ true };
+
     RankId m_competitiveRank{ RankNone };
     int m_competitiveWins{ 0 };
     RankId m_wingmanRank{ RankNone };
@@ -46,6 +56,7 @@ private:
     int m_dangerZoneWins{ 0 };
 
     bool m_destroyUsedItems{ true };
+    bool m_randomizeFloat{ true };
 
     bool m_vacBanned{ false };
     int m_commendedFriendly{ 0 };
@@ -70,3 +81,5 @@ private:
 
     std::vector<int> m_friends{ 1140104601 };
 };
+
+const GCConfig &GetConfig();

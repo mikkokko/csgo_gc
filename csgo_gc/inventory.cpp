@@ -37,9 +37,8 @@ inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paint
     return false;
 }
 
-Inventory::Inventory(uint64_t steamId, const GCConfig &config)
+Inventory::Inventory(uint64_t steamId)
     : m_steamId{ steamId }
-    , m_config{ config }
 {
     ReadFromFile();
 }
@@ -492,7 +491,7 @@ bool Inventory::UseItem(uint64_t itemId,
             notification.set_request(k_EGCItemCustomizationNotification_ActivateFanToken);
         }
 
-        if (m_config.DestroyUsedItems())
+        if (GetConfig().DestroyUsedItems())
         {
             DestroyItem(it, destroy);
         }
@@ -518,7 +517,7 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     }
 
     // CASE OPENING
-    CaseOpening caseOpening{ m_itemSchema, m_config, m_random };
+    CaseOpening caseOpening{ m_itemSchema, m_random };
 
     CSOEconItem temp;
     if (!caseOpening.SelectItemFromCrate(crate->second, temp))
@@ -536,7 +535,7 @@ bool Inventory::UnlockCrate(uint64_t crateId,
     notification.set_request(k_EGCItemCustomizationNotification_UnlockCrate);
 
     // remove the crate
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         DestroyItem(crate, destroyCrate);
 
@@ -854,7 +853,7 @@ bool Inventory::ApplySticker(const CMsgApplySticker &message,
     ToSingleObject(update, *item);
 
     // remove the sticker
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         DestroyItem(sticker, destroy);
     }
@@ -1043,7 +1042,7 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     ToSingleObject(update, it->second);
 
-    if (m_config.DestroyUsedItems() && defIdx != ItemSchema::ItemCasket)
+    if (GetConfig().DestroyUsedItems() && defIdx != ItemSchema::ItemCasket)
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1074,7 +1073,7 @@ bool Inventory::NameBaseItem(uint64_t nameTagId,
 
     ToSingleObject(create, item);
 
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1174,7 +1173,6 @@ bool Inventory::CasketItemAdd(uint64_t casketId,
     auto casket = m_items.find(casketId);
     if (casket == m_items.end())
     {
-        Platform::Print("Unable to find casket\n");
         assert(false);
         return false;
     }
@@ -1182,7 +1180,6 @@ bool Inventory::CasketItemAdd(uint64_t casketId,
     auto item = m_items.find(itemId);
     if (item == m_items.end())
     {
-        Platform::Print("Unable to find item\n");
         assert(false);
         return false;
     }
@@ -1191,7 +1188,6 @@ bool Inventory::CasketItemAdd(uint64_t casketId,
 
     if (defIdx != ItemSchema::ItemCasket)
     {
-        Platform::Print("Casket not a casket\n");
         assert(false);
         return false;
     }
@@ -1322,7 +1318,7 @@ bool Inventory::StatTrakSwap(uint64_t toolId,
     m_itemSchema.SetAttributeUint32(item1Attr, m_itemSchema.AttributeUint32(item2Attr));
     m_itemSchema.SetAttributeUint32(item2Attr, item1Val);
 
-    if (m_config.DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems())
     {
         auto tool = m_items.find(toolId);
         if (tool == m_items.end())
