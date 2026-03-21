@@ -17,6 +17,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Weapon StatTrak support
 - Stickers and patches
 - Name tags
+- Music kits
 - In-game store
 - Works without full Steam API emulation
 - Full Windows, Linux and macOS support
