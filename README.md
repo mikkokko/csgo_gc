@@ -1,6 +1,6 @@
 # csgo_gc
 
-> [!WARNING]
+> [!CAUTION]
 > This project is incomplete and not ready for general use.
 
 ## What is this?
@@ -22,11 +22,11 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Full Windows, Linux and macOS support
 - Functional lobbies
 - Dedicated server support
-- Functional server browser (only shows csgo_gc servers)
+- Functional server browser (only shows csgo_gc servers by default)
 - Networking using Steam's P2P interface
 
 ## Planned features
-- Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
+- Rest of the core features (trade ups, souvenirs, storage units, StatTrak swaps...)
 
 I'm still looking for the **full** CS:GO Item Schema. If you have a relatively recent copy of it and are willing to share it, let me know!
 
@@ -44,6 +44,9 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 
 ## Inventory editing
 For GUI inventory editors, see https://github.com/mikkokko/csgo_gc/issues/82. For manual editing, there is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
+
+## Configuration
+See [csgo_gc/config.txt](examples/config.txt) for available options.
 
 ## Building
 Requirements:
