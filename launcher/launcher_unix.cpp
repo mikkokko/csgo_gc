@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
 #include <dlfcn.h>
 
 #if defined(__APPLE__)
@@ -73,6 +74,26 @@ static void *LoadModuleAndFindSymbol(const char *modulePath, const char *symbol)
 
 int main(int argc, char **argv)
 {
+    // Add bin dir to LD_LIBRARY_PATH so Vulkan libraries and other dependencies can be found
+    {
+        const char *binPath = "bin/" GC_LIB_DIR;
+        const char *currentPath = getenv("LD_LIBRARY_PATH");
+        if (currentPath)
+        {
+            char *newPath = nullptr;
+            asprintf(&newPath, "%s:%s", binPath, currentPath);
+            if (newPath)
+            {
+                setenv("LD_LIBRARY_PATH", newPath, 1);
+                free(newPath);
+            }
+        }
+        else
+        {
+            setenv("LD_LIBRARY_PATH", binPath, 1);
+        }
+    }
+
     const char *modulePath = "bin/" GC_LIB_DIR "/" LAUNCHER_LIB GC_LIB_SUFFIX GC_LIB_EXTENSION;
     LauncherMain_t LauncherMain = (LauncherMain_t)LoadModuleAndFindSymbol(modulePath, SYMBOL_NAME);
     if (!LauncherMain)
