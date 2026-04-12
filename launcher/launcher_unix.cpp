@@ -76,16 +76,14 @@ int main(int argc, char **argv)
 {
     // Add bin dir to LD_LIBRARY_PATH so Vulkan libraries and other dependencies can be found
     {
-        char binPath[512];
-        snprintf(binPath, sizeof(binPath), "bin/" GC_LIB_DIR);
-
+        const char *binPath = "bin/" GC_LIB_DIR;
         const char *currentPath = getenv("LD_LIBRARY_PATH");
         if (currentPath)
         {
-            char *newPath = (char *)malloc(strlen(binPath) + 1 + strlen(currentPath) + 1);
+            char *newPath = nullptr;
+            asprintf(&newPath, "%s:%s", binPath, currentPath);
             if (newPath)
             {
-                sprintf(newPath, "%s:%s", binPath, currentPath);
                 setenv("LD_LIBRARY_PATH", newPath, 1);
                 free(newPath);
             }
