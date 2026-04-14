@@ -162,6 +162,13 @@ public:
     virtual bool IsEmpty(const char *keyName = nullptr) const = 0;
     virtual bool GetBool(const char *keyName = nullptr, bool defaultValue = false) const = 0;
     virtual int GetInt(const char *keyName = nullptr, int defaultValue = 0) const = 0;
+    virtual uint64_t GetUint64(const char *keyName = nullptr, uint64_t defaultValue = 0) const = 0;
+    virtual float GetFloat(const char *keyName = nullptr, float defaultValue = 0.0f) const = 0;
+    virtual const char *GetString(const char *keyName = nullptr, const char *defaultValue = "") const = 0;
+    virtual const wchar_t *GetWString(const char *keyName = nullptr, const wchar_t *defaultValue = L"") const = 0;
+    virtual const void *GetPtr(const char *keyName = nullptr) const = 0;
+    virtual void SetBool(const char *keyName, bool value) = 0;
+    virtual void SetInt(const char *keyName, int value) = 0;
 };
 
 class IGameEventListener2
@@ -211,7 +218,7 @@ static CreateInterfaceFn s_engineFactory;
 static IGameEventManager2 *s_gameEventManager;
 static IVEngineClient *s_engineClient;
 
-class RoundMVPEventListener final : public IGameEventListener2
+class ClientGameEventListener final : public IGameEventListener2
 {
 public:
     void FireGameEvent(IGameEvent *event) override
@@ -221,7 +228,30 @@ public:
             return;
         }
 
-        if (strcmp(event->GetName(), "round_mvp"))
+        const char *eventName = event->GetName();
+        if (!strcmp(eventName, "round_start"))
+        {
+            int localPlayer = s_engineClient->GetLocalPlayer();
+            if (localPlayer <= 0)
+            {
+                return;
+            }
+
+            PlayerInfo playerInfo{};
+            if (!s_engineClient->GetPlayerInfo(localPlayer, &playerInfo) || playerInfo.userId <= 0)
+            {
+                return;
+            }
+
+            Platform::Print("Listener syncing local music kit state on round_start: userid=%d\n", playerInfo.userId);
+            s_clientGC->m_gc.PostToGC(GCEvent::SyncLocalPlayerMusicKitState,
+                0,
+                &playerInfo.userId,
+                sizeof(playerInfo.userId));
+            return;
+        }
+
+        if (strcmp(eventName, "round_mvp"))
         {
             return;
         }
@@ -243,10 +273,26 @@ public:
             return;
         }
 
-        Platform::Print("Listener saw local round_mvp: userid=%d reason=%d\n",
-            playerInfo.userId,
-            event->GetInt("reason"));
+        int musickitmvps = event->GetInt("musickitmvps");
+        if (musickitmvps <= 0)
+        {
+            musickitmvps = static_cast<int>(s_clientGC->m_gc.LocalPlayerMusicKitMVPsForRoundMVPEvent());
+            if (musickitmvps > 0)
+            {
+                event->SetInt("musickitmvps", musickitmvps);
+                Platform::Print("Listener injected local musickitmvps into round_mvp: %d\n", musickitmvps);
+            }
+        }
 
+        Platform::Print("Listener saw local round_mvp: userid=%d reason=%d musickitmvps=%d\n",
+            playerInfo.userId,
+            event->GetInt("reason"),
+            musickitmvps);
+
+        s_clientGC->m_gc.PostToGC(GCEvent::SyncLocalPlayerMusicKitState,
+            0,
+            &playerInfo.userId,
+            sizeof(playerInfo.userId));
         s_clientGC->m_gc.PostToGC(GCEvent::LocalPlayerRoundMVP, 0, nullptr, 0);
     }
 
@@ -256,8 +302,45 @@ public:
     }
 };
 
-static RoundMVPEventListener s_roundMVPEventListener;
-static bool s_roundMVPListenerRegistered = false;
+class ServerRoundMVPEventListener final : public IGameEventListener2
+{
+public:
+    void FireGameEvent(IGameEvent *event) override
+    {
+        if (!event || !s_serverGC || strcmp(event->GetName(), "round_mvp"))
+        {
+            return;
+        }
+
+        int userId = event->GetInt("userid");
+        if (userId <= 0)
+        {
+            return;
+        }
+
+        int musickitmvps = 0;
+        if (!s_serverGC->m_gc.RoundMVPMusicKitCountForUserId(userId, musickitmvps))
+        {
+            return;
+        }
+
+        event->SetInt("musickitmvps", musickitmvps);
+        Platform::Print("Server listener injected musickitmvps into round_mvp: userid=%d musickitmvps=%d\n",
+            userId,
+            musickitmvps);
+    }
+
+    int GetEventDebugID() override
+    {
+        return EventDebugIdInit;
+    }
+};
+
+static ClientGameEventListener s_clientGameEventListener;
+static ServerRoundMVPEventListener s_serverRoundMVPEventListener;
+static bool s_clientRoundMVPListenerRegistered = false;
+static bool s_clientRoundStartListenerRegistered = false;
+static bool s_serverRoundMVPListenerRegistered = false;
 
 static void InitializeClientGameInterfaces()
 {
@@ -266,13 +349,7 @@ static void InitializeClientGameInterfaces()
         return;
     }
 
-    HMODULE engineModule = GetModuleHandleA("engine.dll");
-    if (!engineModule)
-    {
-        return;
-    }
-
-    s_engineFactory = reinterpret_cast<CreateInterfaceFn>(GetProcAddress(engineModule, "CreateInterface"));
+    s_engineFactory = reinterpret_cast<CreateInterfaceFn>(Platform::ModuleFactory("engine"));
     if (!s_engineFactory)
     {
         Platform::Print("engine CreateInterface not found\n");
@@ -283,29 +360,80 @@ static void InitializeClientGameInterfaces()
     s_engineClient = reinterpret_cast<IVEngineClient *>(s_engineFactory(VEngineClientVersion, nullptr));
 }
 
-static void UpdateRoundMVPListener()
+static void UpdateGameEventListeners()
 {
     InitializeClientGameInterfaces();
 
-    // Keep the listener lifecycle tied to the local ClientGC so reconnects do not
-    // leave stale listeners behind in engine.dll's event manager.
-    if (s_clientGC && s_gameEventManager && !s_roundMVPListenerRegistered)
+    if (!s_gameEventManager)
     {
-        if (s_gameEventManager->AddListener(&s_roundMVPEventListener, "round_mvp", false))
+        return;
+    }
+
+    // Keep client listener lifecycle tied to the local ClientGC so reconnects do not
+    // leave stale listeners behind in engine.dll's event manager.
+    if (s_clientGC)
+    {
+        if (!s_clientRoundMVPListenerRegistered)
         {
-            s_roundMVPListenerRegistered = true;
-            Platform::Print("Registered round_mvp listener\n");
+            if (s_gameEventManager->AddListener(&s_clientGameEventListener, "round_mvp", false))
+            {
+                s_clientRoundMVPListenerRegistered = true;
+                Platform::Print("Registered round_mvp listener\n");
+            }
+            else
+            {
+                Platform::Print("Failed to register round_mvp listener\n");
+            }
+        }
+
+        if (!s_clientRoundStartListenerRegistered)
+        {
+            if (s_gameEventManager->AddListener(&s_clientGameEventListener, "round_start", false))
+            {
+                s_clientRoundStartListenerRegistered = true;
+                Platform::Print("Registered round_start listener\n");
+            }
+            else
+            {
+                Platform::Print("Failed to register round_start listener\n");
+            }
+        }
+    }
+    else
+    {
+        if (s_clientRoundMVPListenerRegistered || s_clientRoundStartListenerRegistered)
+        {
+            s_gameEventManager->RemoveListener(&s_clientGameEventListener);
+            if (s_clientRoundMVPListenerRegistered)
+            {
+                Platform::Print("Unregistered round_mvp listener\n");
+            }
+            if (s_clientRoundStartListenerRegistered)
+            {
+                Platform::Print("Unregistered round_start listener\n");
+            }
+            s_clientRoundMVPListenerRegistered = false;
+            s_clientRoundStartListenerRegistered = false;
+        }
+    }
+
+    if (s_serverGC && !s_serverRoundMVPListenerRegistered)
+    {
+        if (s_gameEventManager->AddListener(&s_serverRoundMVPEventListener, "round_mvp", true))
+        {
+            s_serverRoundMVPListenerRegistered = true;
+            Platform::Print("Registered server-side round_mvp listener\n");
         }
         else
         {
-            Platform::Print("Failed to register round_mvp listener\n");
+            Platform::Print("Failed to register server-side round_mvp listener\n");
         }
     }
-    else if (!s_clientGC && s_gameEventManager && s_roundMVPListenerRegistered)
+    else if (!s_serverGC && s_serverRoundMVPListenerRegistered)
     {
-        s_gameEventManager->RemoveListener(&s_roundMVPEventListener);
-        s_roundMVPListenerRegistered = false;
-        Platform::Print("Unregistered round_mvp listener\n");
+        s_gameEventManager->RemoveListener(&s_serverRoundMVPEventListener);
+        s_serverRoundMVPListenerRegistered = false;
+        Platform::Print("Unregistered server-side round_mvp listener\n");
     }
 }
 
@@ -2043,7 +2171,7 @@ static void Hk_SteamAPI_RunCallbacks()
 {
     Og_SteamAPI_RunCallbacks();
 
-    UpdateRoundMVPListener();
+    UpdateGameEventListeners();
 
     if (s_clientGC)
     {
@@ -2110,6 +2238,8 @@ static void Hk_SteamAPI_RunCallbacks()
 static void Hk_SteamGameServer_RunCallbacks()
 {
     Og_SteamGameServer_RunCallbacks();
+
+    UpdateGameEventListeners();
 
     if (s_serverGC)
     {

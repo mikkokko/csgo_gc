@@ -3,6 +3,7 @@
 #include "gc_const.h"
 #include "gc_const_csgo.h"
 #include "graffiti.h"
+#include "networking_shared.h"
 
 // yuck!! needed for CSteamID (construct full id from account id)
 #include "steam/steamclientpublic.h"
@@ -21,6 +22,20 @@ ServerGC::~ServerGC()
 {
     StopThread();
     Platform::Print("ServerGC destroyed\n");
+}
+
+bool ServerGC::RoundMVPMusicKitCountForUserId(int userId, int &musickitmvps) const
+{
+    std::lock_guard<std::mutex> lock{ m_musicKitMVPStateMutex };
+
+    auto it = m_musicKitMVPStateByUserId.find(userId);
+    if (it == m_musicKitMVPStateByUserId.end() || !it->second.hasEquippedStatTrakMusicKit)
+    {
+        return false;
+    }
+
+    musickitmvps = static_cast<int>(it->second.currentMVPs + 1);
+    return true;
 }
 
 void ServerGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer)
@@ -81,6 +96,16 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
 void ServerGC::HandleClientSOCacheUnsubscribe(uint64_t steamId)
 {
     Platform::Print("HandleClientSOCacheUnsubscribe: %llu\n", steamId);
+
+    {
+        std::lock_guard<std::mutex> lock{ m_musicKitMVPStateMutex };
+        auto stateIt = m_musicKitMVPStateBySteamId.find(steamId);
+        if (stateIt != m_musicKitMVPStateBySteamId.end())
+        {
+            m_musicKitMVPStateByUserId.erase(stateIt->second.userId);
+            m_musicKitMVPStateBySteamId.erase(stateIt);
+        }
+    }
 
     CMsgSOCacheUnsubscribed message;
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
@@ -195,7 +220,12 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
 
     if (!validate.IsProtobuf())
     {
-        // all the allowed messages are protobuf based
+        if (validate.TypeUnmasked() == k_EMsgNetworkMusicKitMVPState)
+        {
+            UpdateMusicKitMVPState(steamId, validate);
+            return;
+        }
+
         Platform::Print("ServerGC: ignoring non protobuf message %u from %llu\n",
             validate.TypeUnmasked(), steamId);
         return;
@@ -250,6 +280,42 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         // otherwise the old message was fine
         PostToHost(HostEvent::Message, validate.TypeMasked(), data, size);
     }
+}
+
+void ServerGC::UpdateMusicKitMVPState(uint64_t steamId, GCMessageRead &messageRead)
+{
+    uint32_t userId = messageRead.ReadUint32();
+    uint32_t hasEquippedStatTrakMusicKit = messageRead.ReadUint32();
+    uint32_t currentMVPs = messageRead.ReadUint32();
+    if (!messageRead.IsValid() || !userId || hasEquippedStatTrakMusicKit > 1)
+    {
+        Platform::Print("ServerGC: ignoring malformed music kit MVP state from %llu\n", steamId);
+        return;
+    }
+
+    MusicKitMVPState state;
+    state.userId = static_cast<int>(userId);
+    state.currentMVPs = currentMVPs;
+    state.hasEquippedStatTrakMusicKit = hasEquippedStatTrakMusicKit != 0;
+
+    {
+        std::lock_guard<std::mutex> lock{ m_musicKitMVPStateMutex };
+
+        auto &slot = m_musicKitMVPStateBySteamId[steamId];
+        if (slot.userId > 0 && slot.userId != state.userId)
+        {
+            m_musicKitMVPStateByUserId.erase(slot.userId);
+        }
+
+        slot = state;
+        m_musicKitMVPStateByUserId[state.userId] = state;
+    }
+
+    Platform::Print("ServerGC: updated music kit MVP state from %llu: userid=%u haskit=%u mvps=%u\n",
+        steamId,
+        userId,
+        hasEquippedStatTrakMusicKit,
+        currentMVPs);
 }
 
 void ServerGC::SendServerWelcome()

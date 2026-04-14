@@ -48,6 +48,7 @@ public:
         CMsgGCItemCustomizationNotification &notification);
 
     uint64_t EquippedMusicKitItemId(bool statTrakOnly) const;
+    uint32_t EquippedMusicKitMVPCount(bool incrementForLocalMVP) const;
     bool IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CMsgSOSingleObject &update);
 
     bool NameItem(uint64_t nameTagId,

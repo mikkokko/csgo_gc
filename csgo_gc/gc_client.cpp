@@ -2,6 +2,7 @@
 #include "gc_client.h"
 #include "graffiti.h"
 #include "keyvalue.h"
+#include "networking_shared.h"
 
 ClientGC::ClientGC(uint64_t steamId)
     : m_steamId{ steamId }
@@ -9,6 +10,13 @@ ClientGC::ClientGC(uint64_t steamId)
 {
     // also called from ServerGC's constructor
     Graffiti::Initialize();
+
+    // The inventory exists before the worker thread starts, so seed the
+    // round_mvp event cache here and keep later refreshes on the worker thread.
+    if (m_inventory.EquippedMusicKitItemId(true))
+    {
+        m_cachedMusicKitMVPs.store(static_cast<int32_t>(m_inventory.EquippedMusicKitMVPCount(false)));
+    }
 
     StartThread();
 
@@ -19,6 +27,69 @@ ClientGC::~ClientGC()
 {
     StopThread();
     Platform::Print("ClientGC destroyed\n");
+}
+
+uint32_t ClientGC::LocalPlayerMusicKitMVPsForRoundMVPEvent() const
+{
+    // round_mvp is observed before the worker-thread inventory mirror applies
+    // the local increment, so expose the post-MVP value here.
+    int32_t cachedMVPs = m_cachedMusicKitMVPs.load();
+    return cachedMVPs >= 0 ? static_cast<uint32_t>(cachedMVPs + 1) : 0;
+}
+
+void ClientGC::RefreshCachedMusicKitMVPs()
+{
+    if (!m_inventory.EquippedMusicKitItemId(true))
+    {
+        m_cachedMusicKitMVPs.store(-1);
+        SendMusicKitMVPStateToGameServer();
+        return;
+    }
+
+    m_cachedMusicKitMVPs.store(static_cast<int32_t>(m_inventory.EquippedMusicKitMVPCount(false)));
+    SendMusicKitMVPStateToGameServer();
+}
+
+void ClientGC::SendMusicKitMVPStateToGameServer()
+{
+    int32_t userId = m_localUserId.load();
+    if (userId <= 0)
+    {
+        return;
+    }
+
+    GCMessageWrite messageWrite{ k_EMsgNetworkMusicKitMVPState };
+
+    int32_t cachedMVPs = m_cachedMusicKitMVPs.load();
+    uint32_t currentMVPs = cachedMVPs >= 0 ? static_cast<uint32_t>(cachedMVPs) : 0;
+    uint32_t hasEquippedStatTrakMusicKit = cachedMVPs >= 0 ? 1u : 0u;
+
+    messageWrite.WriteUint32(static_cast<uint32_t>(userId));
+    messageWrite.WriteUint32(hasEquippedStatTrakMusicKit);
+    messageWrite.WriteUint32(currentMVPs);
+
+    Platform::Print("ClientGC: syncing music kit MVP state to server: userid=%d haskit=%u mvps=%u\n",
+        userId,
+        hasEquippedStatTrakMusicKit,
+        currentMVPs);
+    PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
+}
+
+void ClientGC::SyncLocalPlayerMusicKitState(int userId)
+{
+    if (userId <= 0)
+    {
+        return;
+    }
+
+    int32_t previousUserId = m_localUserId.exchange(userId);
+    if (previousUserId != userId)
+    {
+        Platform::Print("ClientGC: local userid changed from %d to %d, syncing music kit state\n",
+            previousUserId,
+            userId);
+        SendMusicKitMVPStateToGameServer();
+    }
 }
 
 void ClientGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer)
@@ -39,6 +110,19 @@ void ClientGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t>
 
     case GCEvent::LocalPlayerRoundMVP:
         LocalPlayerRoundMVP();
+        break;
+
+    case GCEvent::SyncLocalPlayerMusicKitState:
+        if (buffer.size() == sizeof(uint32_t))
+        {
+            uint32_t userId;
+            memcpy(&userId, buffer.data(), sizeof(userId));
+            SyncLocalPlayerMusicKitState(static_cast<int>(userId));
+        }
+        else
+        {
+            assert(false);
+        }
         break;
 
     default:
@@ -319,6 +403,8 @@ void ClientGC::AdjustItemEquippedState(GCMessageRead &messageRead)
         return;
     }
 
+    RefreshCachedMusicKitMVPs();
+
     // let the gameserver know, too
     SendMessageToGame(true, k_ESOMsg_UpdateMultiple, update);
 }
@@ -440,6 +526,7 @@ void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     CMsgSOSingleObject update;
     if (m_inventory.IncrementKillCountAttribute(message.item_id(), message.amount(), update))
     {
+        RefreshCachedMusicKitMVPs();
         SendMessageToGame(true, k_ESOMsg_Update, update);
     }
     else
@@ -466,6 +553,7 @@ void ClientGC::LocalPlayerRoundMVP()
         return;
     }
 
+    RefreshCachedMusicKitMVPs();
     Platform::Print("LocalPlayerRoundMVP: incremented music kit %llu\n", itemId);
     SendMessageToGame(true, k_ESOMsg_Update, update);
 }

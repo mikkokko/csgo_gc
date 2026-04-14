@@ -87,6 +87,21 @@ void *SteamClientFactory(const void *pathBuffer)
     return GetProcAddress(steamclient, "CreateInterface");
 }
 
+void *ModuleFactory(std::string_view moduleName)
+{
+    std::string actualModuleName;
+    actualModuleName.assign(moduleName);
+    actualModuleName.append(".dll");
+
+    HMODULE module = GetModuleHandleA(actualModuleName.c_str());
+    if (!module)
+    {
+        return nullptr;
+    }
+
+    return GetProcAddress(module, "CreateInterface");
+}
+
 void SetEnvVar(const char *name, const char *value)
 {
     SetEnvironmentVariableA(name, value);

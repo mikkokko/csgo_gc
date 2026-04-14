@@ -1046,6 +1046,32 @@ uint64_t Inventory::EquippedMusicKitItemId(bool statTrakOnly) const
     return 0;
 }
 
+uint32_t Inventory::EquippedMusicKitMVPCount(bool incrementForLocalMVP) const
+{
+    uint64_t itemId = EquippedMusicKitItemId(true);
+    if (!itemId)
+    {
+        return 0;
+    }
+
+    auto it = m_items.find(itemId);
+    if (it == m_items.end())
+    {
+        return 0;
+    }
+
+    for (const CSOEconItemAttribute &attribute : it->second.attribute())
+    {
+        if (attribute.def_index() == ItemSchema::AttributeKillEater)
+        {
+            uint32_t count = m_itemSchema.AttributeUint32(&attribute);
+            return incrementForLocalMVP ? count + 1 : count;
+        }
+    }
+
+    return 0;
+}
+
 bool Inventory::NameItem(uint64_t nameTagId,
     uint64_t itemId,
     std::string_view name,
