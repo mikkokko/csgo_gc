@@ -239,6 +239,43 @@ void *SteamClientFactory(const void *pathBuffer)
     return dlsym(steamclient, "CreateInterface");
 }
 
+void *ModuleFactory(std::string_view moduleName)
+{
+    ModuleInfo moduleInfo;
+
+#if defined(__APPLE__)
+    std::string primaryName;
+    primaryName.assign(moduleName);
+    primaryName.append(".dylib");
+    if (!GetModuleInfo(primaryName, moduleInfo))
+    {
+        return nullptr;
+    }
+#else
+    std::string primaryName;
+    primaryName.assign(moduleName);
+    primaryName.append("_client.so");
+
+    if (!GetModuleInfo(primaryName, moduleInfo))
+    {
+        primaryName.assign(moduleName);
+        primaryName.append(".so");
+        if (!GetModuleInfo(primaryName, moduleInfo))
+        {
+            return nullptr;
+        }
+    }
+#endif
+
+    void *module = dlopen(moduleInfo.fullPath.c_str(), RTLD_NOW);
+    if (!module)
+    {
+        return nullptr;
+    }
+
+    return dlsym(module, "CreateInterface");
+}
+
 void SetEnvVar(const char *name, const char *value)
 {
     setenv(name, value, 1);

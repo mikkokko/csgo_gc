@@ -11,4 +11,6 @@ enum ENetworkMsg : uint32_t
 {
     // sent by the server to client when they connect, data is the auth ticket
     k_EMsgNetworkConnect = (1u << 31) - 1,
+    // sent by the client to server to keep round_mvp musickitmvps injectable
+    k_EMsgNetworkMusicKitMVPState = (1u << 31) - 2,
 };

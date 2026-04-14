@@ -21,6 +21,11 @@ bool SteamClientPath(void *buffer, size_t bufferSize);
 // and get a pointer to the factory function (exported symbol CreateInterface)
 void *SteamClientFactory(const void *pathBuffer);
 
+// get a module's factory function from an already loaded game module
+// the module name is given in a platform-agnostic format
+// (e.g. "engine" maps to engine.dll / engine_client.so / engine.dylib)
+void *ModuleFactory(std::string_view moduleName);
+
 // set an envar to the specified value even if it's already set
 void SetEnvVar(const char *name, const char *value);
 

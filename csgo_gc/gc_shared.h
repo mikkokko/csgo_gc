@@ -14,6 +14,8 @@ enum class GCEvent
     Message, // id contains the message type, buffer contains the payload
     NetMessage, // id contains the recipient steam id, buffer contains the payload
     SOCacheRequest, // sent to client gc when connected to a gameserver
+    LocalPlayerRoundMVP, // sent to client gc when the local player earns round MVP
+    SyncLocalPlayerMusicKitState, // sent to client gc from the main thread, buffer contains the local userid
     ClientSOCacheUnsubscribe, // sent to server gc when a client disconnects, id contains the steam id
 };
 
