@@ -986,6 +986,66 @@ bool Inventory::IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CM
     return false;
 }
 
+static bool IsEquippedMusicKitItem(const CSOEconItem &item)
+{
+    // Music kits live in the shared no-team loadout.
+    for (const CSOEconItemEquipped &equipped : item.equipped_state())
+    {
+        if (equipped.new_class() == 0
+            && equipped.new_slot() == ItemSchema::LoadoutSlotMusicKit)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+uint64_t Inventory::EquippedMusicKitItemId(bool statTrakOnly) const
+{
+    for (const auto &pair : m_items)
+    {
+        const CSOEconItem &item = pair.second;
+        if (!IsEquippedMusicKitItem(item))
+        {
+            continue;
+        }
+
+        bool hasKillEater = false;
+        bool isMusicKitScoreType = false;
+
+        for (const CSOEconItemAttribute &attribute : item.attribute())
+        {
+            if (attribute.def_index() == ItemSchema::AttributeKillEater)
+            {
+                hasKillEater = true;
+            }
+            else if (attribute.def_index() == ItemSchema::AttributeKillEaterScoreType
+                && m_itemSchema.AttributeUint32(&attribute) == 1)
+            {
+                isMusicKitScoreType = true;
+            }
+        }
+
+        if (!hasKillEater)
+        {
+            if (statTrakOnly)
+            {
+                continue;
+            }
+
+            return item.id();
+        }
+
+        if (isMusicKitScoreType)
+        {
+            return item.id();
+        }
+    }
+
+    return 0;
+}
+
 bool Inventory::NameItem(uint64_t nameTagId,
     uint64_t itemId,
     std::string_view name,

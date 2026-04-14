@@ -8,6 +8,13 @@
 #include "platform.h"
 #include <funchook.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#ifdef SendMessage
+#undef SendMessage
+#endif
+#endif
+
 struct SteamNetworkingIdentity;
 
 // defines STEAM_PRIVATE_API
@@ -129,6 +136,178 @@ public:
 // client connect/disconnect notifications
 static GCWrapper<ClientGC, NetworkingClient> *s_clientGC;
 static GCWrapper<ServerGC, NetworkingServer> *s_serverGC;
+
+struct PlayerInfo
+{
+    uint64_t version;
+    uint64_t xuid;
+    char name[128];
+    int userId;
+    char guid[33];
+    uint32_t friendsId;
+    char friendsName[128];
+    bool fakePlayer;
+    bool isHltv;
+    uint32_t customFiles[4];
+    unsigned char filesDownloaded;
+};
+
+class IGameEvent
+{
+public:
+    virtual ~IGameEvent() = default;
+    virtual const char *GetName() const = 0;
+    virtual bool IsReliable() const = 0;
+    virtual bool IsLocal() const = 0;
+    virtual bool IsEmpty(const char *keyName = nullptr) const = 0;
+    virtual bool GetBool(const char *keyName = nullptr, bool defaultValue = false) const = 0;
+    virtual int GetInt(const char *keyName = nullptr, int defaultValue = 0) const = 0;
+};
+
+class IGameEventListener2
+{
+public:
+    virtual ~IGameEventListener2() = default;
+    virtual void FireGameEvent(IGameEvent *event) = 0;
+    virtual int GetEventDebugID() = 0;
+};
+
+class IGameEventManager2
+{
+public:
+    virtual ~IGameEventManager2() = default;
+    virtual int LoadEventsFromFile(const char *filename) = 0;
+    virtual void Reset() = 0;
+    virtual bool AddListener(IGameEventListener2 *listener, const char *name, bool serverSide) = 0;
+    virtual bool FindListener(IGameEventListener2 *listener, const char *name) = 0;
+    virtual void RemoveListener(IGameEventListener2 *listener) = 0;
+};
+
+class IVEngineClient
+{
+public:
+    virtual void Unused0() = 0;
+    virtual void Unused1() = 0;
+    virtual void Unused2() = 0;
+    virtual void Unused3() = 0;
+    virtual void Unused4() = 0;
+    virtual void Unused5() = 0;
+    virtual void Unused6() = 0;
+    virtual void Unused7() = 0;
+    virtual bool GetPlayerInfo(int entNum, PlayerInfo *info) = 0;
+    virtual int GetPlayerForUserID(int userId) = 0;
+    virtual void *TextMessageGet(const char *name) = 0;
+    virtual bool Con_IsVisible() = 0;
+    virtual int GetLocalPlayer() = 0;
+};
+
+using CreateInterfaceFn = void *(*)(const char *name, int *returnCode);
+
+constexpr const char *GameEventManagerVersion = "GAMEEVENTSMANAGER002";
+constexpr const char *VEngineClientVersion = "VEngineClient014";
+constexpr int EventDebugIdInit = 42;
+
+static CreateInterfaceFn s_engineFactory;
+static IGameEventManager2 *s_gameEventManager;
+static IVEngineClient *s_engineClient;
+
+class RoundMVPEventListener final : public IGameEventListener2
+{
+public:
+    void FireGameEvent(IGameEvent *event) override
+    {
+        if (!event || !s_clientGC || !s_engineClient)
+        {
+            return;
+        }
+
+        if (strcmp(event->GetName(), "round_mvp"))
+        {
+            return;
+        }
+
+        int localPlayer = s_engineClient->GetLocalPlayer();
+        if (localPlayer <= 0)
+        {
+            return;
+        }
+
+        PlayerInfo playerInfo{};
+        if (!s_engineClient->GetPlayerInfo(localPlayer, &playerInfo))
+        {
+            return;
+        }
+
+        if (event->GetInt("userid") != playerInfo.userId)
+        {
+            return;
+        }
+
+        Platform::Print("Listener saw local round_mvp: userid=%d reason=%d\n",
+            playerInfo.userId,
+            event->GetInt("reason"));
+
+        s_clientGC->m_gc.PostToGC(GCEvent::LocalPlayerRoundMVP, 0, nullptr, 0);
+    }
+
+    int GetEventDebugID() override
+    {
+        return EventDebugIdInit;
+    }
+};
+
+static RoundMVPEventListener s_roundMVPEventListener;
+static bool s_roundMVPListenerRegistered = false;
+
+static void InitializeClientGameInterfaces()
+{
+    if (s_engineFactory)
+    {
+        return;
+    }
+
+    HMODULE engineModule = GetModuleHandleA("engine.dll");
+    if (!engineModule)
+    {
+        return;
+    }
+
+    s_engineFactory = reinterpret_cast<CreateInterfaceFn>(GetProcAddress(engineModule, "CreateInterface"));
+    if (!s_engineFactory)
+    {
+        Platform::Print("engine CreateInterface not found\n");
+        return;
+    }
+
+    s_gameEventManager = reinterpret_cast<IGameEventManager2 *>(s_engineFactory(GameEventManagerVersion, nullptr));
+    s_engineClient = reinterpret_cast<IVEngineClient *>(s_engineFactory(VEngineClientVersion, nullptr));
+}
+
+static void UpdateRoundMVPListener()
+{
+    InitializeClientGameInterfaces();
+
+    // Keep the listener lifecycle tied to the local ClientGC so reconnects do not
+    // leave stale listeners behind in engine.dll's event manager.
+    if (s_clientGC && s_gameEventManager && !s_roundMVPListenerRegistered)
+    {
+        if (s_gameEventManager->AddListener(&s_roundMVPEventListener, "round_mvp", false))
+        {
+            s_roundMVPListenerRegistered = true;
+            Platform::Print("Registered round_mvp listener\n");
+        }
+        else
+        {
+            Platform::Print("Failed to register round_mvp listener\n");
+        }
+    }
+    else if (!s_clientGC && s_gameEventManager && s_roundMVPListenerRegistered)
+    {
+        s_gameEventManager->RemoveListener(&s_roundMVPEventListener);
+        s_roundMVPListenerRegistered = false;
+        Platform::Print("Unregistered round_mvp listener\n");
+    }
+}
 
 template<size_t N>
 inline bool InterfaceMatches(const char *name, const char (&compare)[N])
@@ -1863,6 +2042,8 @@ static void Hk_SteamAPI_UnregisterCallback(class CCallbackBase *pCallback)
 static void Hk_SteamAPI_RunCallbacks()
 {
     Og_SteamAPI_RunCallbacks();
+
+    UpdateRoundMVPListener();
 
     if (s_clientGC)
     {

@@ -47,6 +47,7 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
+    uint64_t EquippedMusicKitItemId(bool statTrakOnly) const;
     bool IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CMsgSOSingleObject &update);
 
     bool NameItem(uint64_t nameTagId,
