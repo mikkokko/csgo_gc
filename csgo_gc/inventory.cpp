@@ -1277,3 +1277,18 @@ void Inventory::DestroyItem(ItemMap::iterator iterator, CMsgSOSingleObject &mess
 
     m_items.erase(iterator);
 }
+
+// CREDITS TO shashlik226
+uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &created)
+{
+    // create the purchased item
+    CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
+
+    CMsgSOSingleObject message;
+    ToSingleObject(message, item);
+
+    created.push_back(std::move(message));
+
+    return item.id();
+}
+
