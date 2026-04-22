@@ -1279,7 +1279,7 @@ void Inventory::DestroyItem(ItemMap::iterator iterator, CMsgSOSingleObject &mess
 }
 
 // CREDITS TO shashlik226
-uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &created)
+uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update)
 {
     // create the purchased item
     CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
