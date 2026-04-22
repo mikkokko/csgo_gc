@@ -20,8 +20,6 @@ GCConfig::GCConfig()
         return;
     }
 
-    m_logOutput = config.GetNumber("log_output", m_logOutput);
-
     m_appIdOverride = config.GetNumber("appid_override", m_appIdOverride);
     m_showCsgoGCServersOnly = config.GetNumber("show_csgo_gc_servers_only", m_showCsgoGCServersOnly);
 
@@ -39,6 +37,7 @@ GCConfig::GCConfig()
     }
 
     m_destroyUsedItems = config.GetNumber("destroy_used_items", m_destroyUsedItems);
+    m_randomizeFloat = config.GetNumber("randomize_item_float", m_randomizeFloat);
 
     const KeyValue *rarityWeights = config.GetSubkey("rarity_weights");
     if (rarityWeights)
@@ -52,6 +51,19 @@ GCConfig::GCConfig()
             weight.rarity = FromString<uint32_t>(subkey.Name());
             weight.weight = FromString<float>(subkey.String());
             m_rarityWeights.push_back(weight);
+        }
+    }
+
+    const KeyValue *friends = config.GetSubkey("friends");
+    if (friends)
+    {
+        m_friends.clear();
+        m_friends.reserve(friends->SubkeyCount());
+
+        for (const KeyValue &subkey : *friends)
+        {
+            uint32_t friendId = FromString<uint32_t>(subkey.Name());
+            m_friends.push_back(friendId);
         }
     }
 

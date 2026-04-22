@@ -321,11 +321,6 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
 
         for (const auto &pair : m_items)
         {
-            if (server && !pair.second.equipped_state_size())
-            {
-                continue;
-            }
-
             object->add_object_data(pair.second.SerializeAsString());
         }
     }
@@ -460,32 +455,31 @@ bool Inventory::UseItem(uint64_t itemId,
         return false;
     }
 
-    if (it->second.def_index() != ItemSchema::ItemSpray)
+    if (it->second.def_index() == ItemSchema::ItemSpray)
     {
-        assert(false);
-        return false;
+        // create an unsealed spray based on the sealed one
+        CSOEconItem &unsealed = CreateItem(it->second);
+        unsealed.set_def_index(ItemSchema::ItemSprayPaint);
+
+        // remove the sealed spray from our inventory
+        DestroyItem(it, destroy);
+
+        // equip the new spray, this will also unequip the old one if we had one
+        EquipItem(unsealed.id(), 0, ItemSchema::LoadoutSlotGraffiti, updateMultiple);
+
+        // remove this to have unlimited sprays
+        CSOEconItemAttribute *attribute = unsealed.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
+        m_itemSchema.SetAttributeUint32(attribute, 50);
+
+        // set notification
+        notification.add_item_id(unsealed.id());
+        notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
+        return true;
     }
 
-    // create an unsealed spray based on the sealed one
-    CSOEconItem &unsealed = CreateItem(it->second);
-    unsealed.set_def_index(ItemSchema::ItemSprayPaint);
-
-    // remove the sealed spray from our inventory
-    DestroyItem(it, destroy);
-
-    // equip the new spray, this will also unequip the old one if we had one
-    EquipItem(unsealed.id(), 0, ItemSchema::LoadoutSlotGraffiti, updateMultiple);
-
-    // remove this to have unlimited sprays
-    CSOEconItemAttribute *attribute = unsealed.add_attribute();
-    attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
-    m_itemSchema.SetAttributeUint32(attribute, 50);
-
-    // set notification
-    notification.add_item_id(unsealed.id());
-    notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
-
-    return true;
+    Platform::Print("Inventory::UseItem: unknown item for use %u\n", it->second.def_index());
+    return false;
 }
 
 bool Inventory::UnlockCrate(uint64_t crateId,
@@ -1002,9 +996,33 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     it->second.mutable_custom_name()->assign(name);
 
+    uint32_t defIdx = it->second.def_index();
+
+    if (defIdx == ItemSchema::ItemCasket)
+    {
+        for (const CSOEconItemAttribute &attribute : it->second.attribute())
+        {
+            if (attribute.def_index() == ItemSchema::AttributeCasketItemsCount)
+            {
+                ToSingleObject(update, it->second);
+                notification.add_item_id(it->second.id());
+                notification.set_request(k_EGCItemCustomizationNotification_NameItem);
+                return true;
+            }
+        }
+
+        CSOEconItemAttribute *attribute = it->second.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeCasketItemsCount);
+        m_itemSchema.SetAttributeUint32(attribute, 0);
+
+        attribute = it->second.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeCasketModificationDate);
+        m_itemSchema.SetAttributeUint32(attribute, time(nullptr));
+    }
+
     ToSingleObject(update, it->second);
 
-    if (GetConfig().DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems() && defIdx != ItemSchema::ItemCasket)
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1085,14 +1103,180 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     return true;
 }
 
-uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update)
+static void RemoveItemAttr(CSOEconItem &item, uint32_t attrIdx)
 {
-    CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
+    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end();)
+    {
+        if (attrib->def_index() == attrIdx)
+        {
+            attrib = item.mutable_attribute()->erase(attrib);
+        }
+        else
+        {
+            attrib++;
+        }
+    }
+}
 
-    CMsgSOSingleObject &single = update.emplace_back();
-    ToSingleObject(single, item);
+bool Inventory::UpdateCasket(CSOEconItem& item, int count)
+{
+    bool success = true;
+    for (size_t attrIdx = 0; attrIdx < item.attribute_size(); ++attrIdx)
+    {
+        CSOEconItemAttribute *attrPtr = item.mutable_attribute(static_cast<int>(attrIdx));
+        if (attrPtr->def_index() == ItemSchema::AttributeCasketItemsCount)
+        {
+            int newCount = m_itemSchema.AttributeUint32(attrPtr) + count;
 
-    return item.id();
+            // Storage Unit Max Item Count (LIKE IN REAL COUNT STRIK GO!)
+            if (newCount > 1000 || newCount < 0)
+            {
+                success = false;
+            }
+            else
+            {
+                m_itemSchema.SetAttributeUint32(attrPtr, static_cast<uint32_t>(newCount));
+            }
+        }
+        else if (attrPtr->def_index() == ItemSchema::AttributeCasketModificationDate)
+        {
+            // Refresh the last modified timestamp
+            m_itemSchema.SetAttributeUint32(attrPtr, static_cast<uint32_t>(time(nullptr)));
+        }
+    }
+
+    return success;
+}
+
+bool Inventory::CasketItemAdd(uint64_t casketId, 
+    uint64_t itemId, 
+    CMsgSOSingleObject &updateItem,
+    CMsgSOSingleObject &updateCasket,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    // Fetch the storage container
+    auto storageIter = m_items.find(casketId);
+    if (storageIter == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    // Fetch the item to store
+    auto storedItemIter = m_items.find(itemId);
+    if (storedItemIter == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    // Confirm it's a valid storage unit
+    if (storageIter->second.def_index() != ItemSchema::ItemCasket)
+    {
+        assert(false);
+        return false;
+    }
+
+    // Check if storage has space
+    if (!UpdateCasket(storageIter->second, 1))
+    {
+        // Storage is at capacity
+        notification.set_request(k_EGCItemCustomizationNotification_CasketTooFull);
+        notification.add_item_id(casketId);
+        return true;
+    }
+
+    // Split the casket's unique ID
+    uint32_t casketIdLow = static_cast<uint32_t>(casketId);
+    uint32_t casketIdHigh = static_cast<uint32_t>(casketId >> 32);
+
+    // Tag the item with storage identifiers
+    CSOEconItemAttribute *lowIdAttr = storedItemIter->second.add_attribute();
+    lowIdAttr->set_def_index(ItemSchema::AttributeCasketIdLow);
+    m_itemSchema.SetAttributeUint32(lowIdAttr, casketIdLow);
+
+    CSOEconItemAttribute *highIdAttr = storedItemIter->second.add_attribute();
+    highIdAttr->set_def_index(ItemSchema::AttributeCasketIdHigh);
+    m_itemSchema.SetAttributeUint32(highIdAttr, casketIdHigh);
+
+    // De-equip the item as it's now stored
+    storedItemIter->second.clear_equipped_state();
+
+    // Broadcast changes
+    ToSingleObject(updateItem, storedItemIter->second);
+    ToSingleObject(updateCasket, storageIter->second);
+
+    // Alert of successful storage
+    notification.set_request(k_EGCItemCustomizationNotification_CasketAdded);
+    notification.add_item_id(casketId);
+
+    return true;
+}
+
+bool Inventory::CasketItemRemove(uint64_t casketId, 
+    uint64_t itemId, 
+    CMsgSOSingleObject &updateItem,
+    CMsgSOSingleObject &updateCasket,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    // Access the storage container
+    auto storageIter = m_items.find(casketId);
+    if (storageIter == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    // Access the item to retrieve
+    auto retrievedItemIter = m_items.find(itemId);
+    if (retrievedItemIter == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    // Validate storage type
+    if (storageIter->second.def_index() != ItemSchema::ItemCasket)
+    {
+        assert(false);
+        return false;
+    }
+
+    // Reduce storage count
+    if (!UpdateCasket(storageIter->second, -1))
+    {
+        // Unexpected underflow, but handle gracefully
+        notification.set_request(k_EGCItemCustomizationNotification_CasketTooFull);
+        notification.add_item_id(casketId);
+        return true;
+    }
+
+    // Strip storage markers from the item
+    RemoveItemAttr(retrievedItemIter->second, ItemSchema::AttributeCasketIdLow);
+    RemoveItemAttr(retrievedItemIter->second, ItemSchema::AttributeCasketIdHigh);
+
+    // Send out updates
+    ToSingleObject(updateItem, retrievedItemIter->second);
+    ToSingleObject(updateCasket, storageIter->second);
+
+    // Confirm retrieval
+    notification.set_request(k_EGCItemCustomizationNotification_CasketRemoved);
+    notification.add_item_id(casketId);
+
+    return true;
+}
+
+CSOEconItemAttribute *Inventory::FindAttribute(CSOEconItem &item, uint32_t defIndex)
+{
+    for (int i = 0; i < item.attribute_size(); ++i)
+    {
+        CSOEconItemAttribute *attribute = item.mutable_attribute(i);
+        if (attribute->def_index() == defIndex)
+        {
+            return attribute;
+        }
+    }
+    return nullptr;
 }
 
 bool Inventory::UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update)

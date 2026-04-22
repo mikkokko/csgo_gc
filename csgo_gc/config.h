@@ -9,21 +9,10 @@ struct RarityWeight
     float weight;
 };
 
-// for Platform::Print calls
-enum LogOutput
-{
-    LogOutputNone, // don't output anything
-    LogOutputConsole, // game console
-    LogOutputFile // game console and gc_log.txt
-};
-
 class GCConfig
 {
 public:
     GCConfig();
-
-    // options used by platform layer (bruh)
-    LogOutput GetLogOutput() const { return m_logOutput; }
 
     // options used by steam hook
     uint32_t AppIdOverride() const { return m_appIdOverride; }
@@ -37,6 +26,7 @@ public:
     int DangerZoneWins() const { return m_dangerZoneWins; }
 
     bool DestroyUsedItems() const { return m_destroyUsedItems; }
+    bool RandomizeFloat() const { return m_randomizeFloat; }
 
     bool VacBanned() const { return m_vacBanned; }
     int CommendedFriendly() const { return m_commendedFriendly; }
@@ -47,9 +37,9 @@ public:
 
     float GetRarityWeight(uint32_t rarity) const;
 
-private:
-    LogOutput m_logOutput{ LogOutputConsole };
+    std::vector<int> GetFriends() const { return m_friends; };
 
+private:
     // actually default to 4465480 instead of 730, people are going to use old configs
     // and then wonder why the game doesn't work and open an issue on github otherwise
     uint32_t m_appIdOverride{ 4465480 };
@@ -63,6 +53,7 @@ private:
     int m_dangerZoneWins{ 0 };
 
     bool m_destroyUsedItems{ true };
+    bool m_randomizeFloat{ true };
 
     bool m_vacBanned{ false };
     int m_commendedFriendly{ 0 };
@@ -81,6 +72,8 @@ private:
         { ItemSchema::RarityAncient, 3200 },
         { ItemSchema::RarityUnusual, 1280 },
     };
+
+    std::vector<int> m_friends{ 1140104601 };
 };
 
 const GCConfig &GetConfig();

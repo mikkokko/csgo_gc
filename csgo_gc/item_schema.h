@@ -177,9 +177,12 @@ public:
 
     enum Item
     {
+        ItemSticker = 1209,
+        ItemMusicKit = 1314,
         ItemSpray = 1348,
         ItemSprayPaint = 1349,
-        ItemPatch = 4609
+        ItemPatch = 4609,
+        ItemCasket = 1201
     };
 
     enum Attribute
@@ -223,6 +226,11 @@ public:
 
         AttributeSpraysRemaining = 232,
         AttributeSprayTintId = 233,
+
+        AttributeCasketItemsCount = 270,
+        AttributeCasketModificationDate = 271,
+        AttributeCasketIdLow = 272,
+        AttributeCasketIdHigh = 273,
     };
 
 private:
@@ -235,6 +243,7 @@ private:
     void ParseMusicDefinitions(const KeyValue *musicDefinitionsKey);
     void ParseLootLists(const KeyValue *lootListsKey, bool unusual);
     void ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey);
+    void ParsePasses(const KeyValue *passesListKey);
 
     bool ParseLootListItem(LootListItem &item, std::string_view name);
 
