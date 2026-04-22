@@ -86,6 +86,8 @@ private:
     // create a new item of a specific type
     CSOEconItem &CreateItem(const CSOEconItem &copyFrom);
     CSOEconItem &CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType);
+    
+    uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &created);
 
     void ReadFromFile();
     void ReadItem(const KeyValue &itemKey, CSOEconItem &item) const;
