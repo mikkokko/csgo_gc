@@ -68,9 +68,9 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
-    // returns the item id and adds the item to the provided CMsgSOMultipleObjects
-    // on failure returns 0 and does nothing
-    uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
+// this is better
+uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
+
 
 private:
     uint32_t AccountId() const;
@@ -82,6 +82,8 @@ private:
     // create a new item of a specific type
     CSOEconItem &CreateItem(const CSOEconItem &copyFrom);
     CSOEconItem &CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType);
+
+    
 
     void ReadFromFile();
     void ReadItem(const KeyValue &itemKey, CSOEconItem &item) const;
