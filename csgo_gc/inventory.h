@@ -68,9 +68,17 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
-    // returns the item id and adds the item to the provided CMsgSOMultipleObjects
-    // on failure returns 0 and does nothing
-    uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
+    bool CasketItemAdd(uint64_t casketId,
+        uint64_t itemId,
+        CMsgSOSingleObject &updateItem,
+        CMsgSOSingleObject &updateCasket,
+        CMsgGCItemCustomizationNotification &notification);
+
+    bool CasketItemRemove(uint64_t casketId,
+        uint64_t itemId,
+        CMsgSOSingleObject &updateItem,
+        CMsgSOSingleObject &updateCasket,
+        CMsgGCItemCustomizationNotification &notification);
 
 private:
     uint32_t AccountId() const;
@@ -123,6 +131,12 @@ private:
         ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
     }
 
+    bool UpdateCasket(CSOEconItem &item, int count);
+
+    // Helper to find an attribute by def_index in an item
+    CSOEconItemAttribute *FindAttribute(CSOEconItem &item, uint32_t defIndex);
+
+private:
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
     Random m_random;

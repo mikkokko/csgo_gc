@@ -84,16 +84,17 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             ApplySticker(messageRead);
             break;
 
-        case k_EMsgGCStoreGetUserData:
-            StoreGetUserData(messageRead);
+        case k_EMsgGCCasketItemLoadContents:
+            CasketItemLoadContents(messageRead);
             break;
 
-        case k_EMsgGCStorePurchaseInit:
-            StorePurchaseInit(messageRead);
+        case k_EMsgGCCasketItemAdd:
+            CasketItemAdd(messageRead);
             break;
 
-        case k_EMsgGCStorePurchaseFinalize:
-            StorePurchaseFinalize(messageRead);
+        case k_EMsgGCCasketItemExtract:
+            CasketItemExtract(messageRead);
+            break;
             break;
 
         default:
@@ -499,108 +500,69 @@ void ClientGC::ApplySticker(GCMessageRead &messageRead)
     }
 }
 
-void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
+void ClientGC::CasketItemLoadContents(GCMessageRead &messageRead)
 {
-    CMsgStoreGetUserData message;
-    if (!messageRead.ReadProtobuf(message))
+    CMsgCasketItem contentsQuery;
+    if (!messageRead.ReadProtobuf(contentsQuery))
     {
-        Platform::Print("Parsing CMsgStoreGetUserData failed, ignoring\n");
+        Platform::Print("Error decoding casket contents request\n");
         return;
     }
 
-    KeyValue priceSheet{ "price_sheet" };
-    if (!priceSheet.ParseFromFile("csgo_gc/price_sheet.txt"))
-    {
-        return;
-    }
+    // Issue contents notification
+    CMsgGCItemCustomizationNotification contentsAlert;
+    contentsAlert.set_request(k_EGCItemCustomizationNotification_CasketContents);
+    contentsAlert.add_item_id(contentsQuery.casket_item_id());
 
-    std::string binaryString;
-    binaryString.reserve(1 << 17);
-    priceSheet.BinaryWriteToString(binaryString);
-
-    // fuck you idiot
-    CMsgStoreGetUserDataResponse response;
-    response.set_result(1);
-    response.set_price_sheet_version(1729); // what
-    *response.mutable_price_sheet() = std::move(binaryString);
-
-    SendMessageToGame(false, k_EMsgGCStoreGetUserDataResponse, response);
+    SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, contentsAlert);
 }
 
-void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
+void ClientGC::CasketItemAdd(GCMessageRead &messageRead)
 {
-    CMsgGCStorePurchaseInit message;
-    if (!messageRead.ReadProtobuf(message))
+    CMsgCasketItem storageCmd;
+    if (!messageRead.ReadProtobuf(storageCmd))
     {
-        Platform::Print("Parsing CMsgGCStorePurchaseInit failed, ignoring\n");
+        Platform::Print("Protobuf decode failure for casket storage\n");
         return;
     }
 
-    // value doesn't matter
-    uint64_t transactionId = Random{}.Integer<uint64_t>();
+    // Set up change notifications
+    CMsgSOSingleObject storedItemMsg, storageUnitMsg;
+    CMsgGCItemCustomizationNotification storageConfirm;
 
-    assert(!m_transactionId);
-    m_transactionId = transactionId;
-    m_transactionItemIds.reserve(message.line_items_size()); // rough approx
-
-    // inventory update response
-    std::vector<CMsgSOSingleObject> inventoryUpdate;
-
-    for (const auto &item : message.line_items())
+    // Process the storage action
+    if (m_inventory.CasketItemAdd(storageCmd.casket_item_id(), storageCmd.item_item_id(), storedItemMsg, storageUnitMsg, storageConfirm))
     {
-        for (uint32_t i = 0; i < item.quantity(); i++)
-        {
-            uint64_t itemId = m_inventory.PurchaseItem(item.item_def_id(), inventoryUpdate);
-            if (!itemId)
-            {
-                assert(false);
-            }
-            else
-            {
-                m_transactionItemIds.push_back(itemId);
-            }
-        }
+        // Relay item and casket state changes
+        SendMessageToGame(false, k_ESOMsg_Update, storedItemMsg);
+        SendMessageToGame(false, k_ESOMsg_Update, storageUnitMsg);
+        // Confirm the storage operation
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, storageConfirm);
     }
-
-    char url[128]; // url doesn't matter, but it needs to be set
-    snprintf(url, sizeof(url), "https://checkout.steampowered.com/checkout/approvetxn/%llu/?returnurl=steam", transactionId);
-
-    CMsgGCStorePurchaseInitResponse response;
-    response.set_result(1); // success
-    response.set_txn_id(transactionId);
-    response.set_url(url);
-    response.mutable_item_ids()->Assign(m_transactionItemIds.begin(), m_transactionItemIds.end());
-
-    SendMessageToGame(false, k_EMsgGCStorePurchaseInitResponse, response, messageRead.JobId());
-
-    // FIXME: why would the server care???
-    for (auto &newItem : inventoryUpdate)
-    {
-        SendMessageToGame(true, k_ESOMsg_Create, newItem);
-    }
-
-    // this will run the steam callback
-    PostToHost(HostEvent::MicroTransactionResponse, 0, nullptr, 0);
 }
 
-void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
+void ClientGC::CasketItemExtract(GCMessageRead &messageRead)
 {
-    CMsgGCStorePurchaseFinalize message;
-    if (!messageRead.ReadProtobuf(message))
+    CMsgCasketItem retrievalCmd;
+    if (!messageRead.ReadProtobuf(retrievalCmd))
     {
-        Platform::Print("Parsing CMsgGCStorePurchaseFinalize failed, ignoring\n");
+        Platform::Print("Error parsing casket retrieval message\n");
         return;
     }
 
-    assert(m_transactionId);
+    // Prepare state change messages
+    CMsgSOSingleObject retrievedItemMsg, storageUnitMsg;
+    CMsgGCItemCustomizationNotification retrievalConfirm;
 
-    CMsgGCStorePurchaseFinalizeResponse response;
-    response.set_result(1); // success
-    response.mutable_item_ids()->Assign(m_transactionItemIds.begin(), m_transactionItemIds.end());
-    SendMessageToGame(false, k_EMsgGCStorePurchaseFinalizeResponse, response, messageRead.JobId());
-
-    // done with this one
-    m_transactionId = 0;
+    // Execute the retrieval
+    if (m_inventory.CasketItemRemove(retrievalCmd.casket_item_id(), retrievalCmd.item_item_id(), retrievedItemMsg, storageUnitMsg, retrievalConfirm))
+    {
+        // Broadcast updates for item and casket
+        SendMessageToGame(false, k_ESOMsg_Update, retrievedItemMsg);
+        SendMessageToGame(false, k_ESOMsg_Update, storageUnitMsg);
+        // Acknowledge the retrieval
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, retrievalConfirm);
+    }
 }
 
 void ClientGC::DeleteItem(GCMessageRead &messageRead)

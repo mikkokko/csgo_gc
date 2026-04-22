@@ -30,9 +30,9 @@ private:
     void SetItemPositions(GCMessageRead &messageRead);
     void IncrementKillCountAttribute(GCMessageRead &messageRead);
     void ApplySticker(GCMessageRead &messageRead);
-    void StoreGetUserData(GCMessageRead &messageRead);
-    void StorePurchaseInit(GCMessageRead &messageRead);
-    void StorePurchaseFinalize(GCMessageRead &messageRead);
+    void CasketItemLoadContents(GCMessageRead &messageRead);
+    void CasketItemAdd(GCMessageRead &messageRead);
+    void CasketItemExtract(GCMessageRead &messageRead);
 
     void DeleteItem(GCMessageRead &messageRead);
     void UnlockCrate(GCMessageRead &messageRead);
@@ -51,7 +51,4 @@ private:
 
     Inventory m_inventory;
 
-    // microtransactions, we only have one going at a time
-    uint64_t m_transactionId{};
-    std::vector<uint64_t> m_transactionItemIds;
 };
