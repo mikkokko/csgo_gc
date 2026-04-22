@@ -71,10 +71,12 @@ public:
     bool StatTrakSwap(uint64_t toolId,
         uint64_t item1Id,
         uint64_t item2Id,
-        CMsgSOSingleObject &destroy,
+        CMsgSOSingleObject &destroy,rrrrrrrrr
         CMsgSOSingleObject &updateItem1,
         CMsgSOSingleObject &updateItem2,
         CMsgGCItemCustomizationNotification &notification);
+
+    uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
 
 private:
     uint32_t AccountId() const;
@@ -86,8 +88,6 @@ private:
     // create a new item of a specific type
     CSOEconItem &CreateItem(const CSOEconItem &copyFrom);
     CSOEconItem &CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType);
-    
-    uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &created);
 
     void ReadFromFile();
     void ReadItem(const KeyValue &itemKey, CSOEconItem &item) const;
