@@ -321,11 +321,6 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
 
         for (const auto &pair : m_items)
         {
-            if (server && !pair.second.equipped_state_size())
-            {
-                continue;
-            }
-
             object->add_object_data(pair.second.SerializeAsString());
         }
     }
@@ -460,32 +455,31 @@ bool Inventory::UseItem(uint64_t itemId,
         return false;
     }
 
-    if (it->second.def_index() != ItemSchema::ItemSpray)
+    if (it->second.def_index() == ItemSchema::ItemSpray)
     {
-        assert(false);
-        return false;
+        // create an unsealed spray based on the sealed one
+        CSOEconItem &unsealed = CreateItem(it->second);
+        unsealed.set_def_index(ItemSchema::ItemSprayPaint);
+
+        // remove the sealed spray from our inventory
+        DestroyItem(it, destroy);
+
+        // equip the new spray, this will also unequip the old one if we had one
+        EquipItem(unsealed.id(), 0, ItemSchema::LoadoutSlotGraffiti, updateMultiple);
+
+        // remove this to have unlimited sprays
+        CSOEconItemAttribute *attribute = unsealed.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
+        m_itemSchema.SetAttributeUint32(attribute, 50);
+
+        // set notification
+        notification.add_item_id(unsealed.id());
+        notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
+        return true;
     }
 
-    // create an unsealed spray based on the sealed one
-    CSOEconItem &unsealed = CreateItem(it->second);
-    unsealed.set_def_index(ItemSchema::ItemSprayPaint);
-
-    // remove the sealed spray from our inventory
-    DestroyItem(it, destroy);
-
-    // equip the new spray, this will also unequip the old one if we had one
-    EquipItem(unsealed.id(), 0, ItemSchema::LoadoutSlotGraffiti, updateMultiple);
-
-    // remove this to have unlimited sprays
-    CSOEconItemAttribute *attribute = unsealed.add_attribute();
-    attribute->set_def_index(ItemSchema::AttributeSpraysRemaining);
-    m_itemSchema.SetAttributeUint32(attribute, 50);
-
-    // set notification
-    notification.add_item_id(unsealed.id());
-    notification.set_request(k_EGCItemCustomizationNotification_GraffitiUnseal);
-
-    return true;
+    Platform::Print("Inventory::UseItem: unknown item for use %u\n", it->second.def_index());
+    return false;
 }
 
 bool Inventory::UnlockCrate(uint64_t crateId,
@@ -1002,9 +996,33 @@ bool Inventory::NameItem(uint64_t nameTagId,
 
     it->second.mutable_custom_name()->assign(name);
 
+    uint32_t defIdx = it->second.def_index();
+
+    if (defIdx == ItemSchema::ItemCasket)
+    {
+        for (const CSOEconItemAttribute &attribute : it->second.attribute())
+        {
+            if (attribute.def_index() == ItemSchema::AttributeCasketItemsCount)
+            {
+                ToSingleObject(update, it->second);
+                notification.add_item_id(it->second.id());
+                notification.set_request(k_EGCItemCustomizationNotification_NameItem);
+                return true;
+            }
+        }
+
+        CSOEconItemAttribute *attribute = it->second.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeCasketItemsCount);
+        m_itemSchema.SetAttributeUint32(attribute, 0);
+
+        attribute = it->second.add_attribute();
+        attribute->set_def_index(ItemSchema::AttributeCasketModificationDate);
+        m_itemSchema.SetAttributeUint32(attribute, time(nullptr));
+    }
+
     ToSingleObject(update, it->second);
 
-    if (GetConfig().DestroyUsedItems())
+    if (GetConfig().DestroyUsedItems() && defIdx != ItemSchema::ItemCasket)
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1085,14 +1103,90 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     return true;
 }
 
-uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update)
+static void RemoveItemAttr(CSOEconItem &item, uint32_t attrIdx)
 {
-    CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
+    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end();)
+    {
+        if (attrib->def_index() == attrIdx)
+        {
+            attrib = item.mutable_attribute()->erase(attrib);
+        }
+        else
+        {
+            attrib++;
+        }
+    }
+}
 
-    CMsgSOSingleObject &single = update.emplace_back();
-    ToSingleObject(single, item);
+CSOEconItemAttribute *Inventory::FindAttribute(CSOEconItem &item, uint32_t defIndex)
+{
+    for (int i = 0; i < item.attribute_size(); ++i)
+    {
+        CSOEconItemAttribute *attribute = item.mutable_attribute(i);
+        if (attribute->def_index() == defIndex)
+        {
+            return attribute;
+        }
+    }
+    return nullptr;
+}
 
-    return item.id();
+bool Inventory::StatTrakSwap(uint64_t toolId,
+    uint64_t item1Id,
+    uint64_t item2Id,
+    CMsgSOSingleObject &destroy,
+    CMsgSOSingleObject &updateItem1,
+    CMsgSOSingleObject &updateItem2,
+    CMsgGCItemCustomizationNotification &notification)
+{
+    // Retrieve the first weapon from inventory
+    auto weapon1Iter = m_items.find(item1Id);
+    if (weapon1Iter == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    // Retrieve the second weapon from inventory
+    auto weapon2Iter = m_items.find(item2Id);
+    if (weapon2Iter == m_items.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    // Locate the kill counter attributes on both weapons
+    CSOEconItemAttribute *killsAttr1 = FindAttribute(weapon1Iter->second, ItemSchema::AttributeKillEater);
+    CSOEconItemAttribute *killsAttr2 = FindAttribute(weapon2Iter->second, ItemSchema::AttributeKillEater);
+
+    // Perform the kill count exchange
+    uint32_t originalKills1 = m_itemSchema.AttributeUint32(killsAttr1);
+    m_itemSchema.SetAttributeUint32(killsAttr1, m_itemSchema.AttributeUint32(killsAttr2));
+    m_itemSchema.SetAttributeUint32(killsAttr2, originalKills1);
+
+    // Optionally consume the tool item
+    if (GetConfig().DestroyUsedItems())
+    {
+        auto toolIter = m_items.find(toolId);
+        if (toolIter == m_items.end())
+        {
+            assert(false);
+            return false;
+        }
+
+        DestroyItem(toolIter, destroy);
+    }
+
+    // Generate update notifications for the modified weapons
+    ToSingleObject(updateItem1, weapon1Iter->second);
+    ToSingleObject(updateItem2, weapon2Iter->second);
+
+    // Prepare the customization alert
+    notification.add_item_id(item1Id);
+    notification.add_item_id(item2Id);
+    notification.set_request(k_EGCItemCustomizationNotification_StatTrakSwap);
+
+    return true;
 }
 
 bool Inventory::UnequipItem(uint64_t itemId, CMsgSOMultipleObjects &update)

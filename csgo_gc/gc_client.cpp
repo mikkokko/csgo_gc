@@ -84,16 +84,8 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             ApplySticker(messageRead);
             break;
 
-        case k_EMsgGCStoreGetUserData:
-            StoreGetUserData(messageRead);
-            break;
-
-        case k_EMsgGCStorePurchaseInit:
-            StorePurchaseInit(messageRead);
-            break;
-
-        case k_EMsgGCStorePurchaseFinalize:
-            StorePurchaseFinalize(messageRead);
+        case k_EMsgGCStatTrakSwap:
+            StatTrakSwap(messageRead);
             break;
 
         default:
@@ -499,108 +491,38 @@ void ClientGC::ApplySticker(GCMessageRead &messageRead)
     }
 }
 
-void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
+void ClientGC::StatTrakSwap(GCMessageRead &messageRead)
 {
-    CMsgStoreGetUserData message;
-    if (!messageRead.ReadProtobuf(message))
+    CMsgApplyStatTrakSwap swapMsg;
+    if (!messageRead.ReadProtobuf(swapMsg))
     {
-        Platform::Print("Parsing CMsgStoreGetUserData failed, ignoring\n");
+        Platform::Print("Protobuf parsing error for StatTrak swap request\n");
         return;
     }
 
-    KeyValue priceSheet{ "price_sheet" };
-    if (!priceSheet.ParseFromFile("csgo_gc/price_sheet.txt"))
+    // Initialize response structures
+    CMsgSOSingleObject toolRemoval, firstWeaponUpdate, secondWeaponUpdate;
+    CMsgGCItemCustomizationNotification swapAlert;
+
+    // Execute the swap logic
+    if (m_inventory.StatTrakSwap(
+            swapMsg.tool_item_id(),
+            swapMsg.item_1_item_id(),
+            swapMsg.item_2_item_id(),
+            toolRemoval,
+            firstWeaponUpdate,
+            secondWeaponUpdate,
+            swapAlert))
     {
-        return;
+        // Dispatch removal for consumed tool
+        SendMessageToGame(true, k_ESOMsg_Destroy, toolRemoval);
+        // Dispatch updates for swapped weapons
+        SendMessageToGame(true, k_ESOMsg_Update, firstWeaponUpdate);
+        SendMessageToGame(true, k_ESOMsg_Update, secondWeaponUpdate);
+
+        // Broadcast the swap confirmation
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, swapAlert);
     }
-
-    std::string binaryString;
-    binaryString.reserve(1 << 17);
-    priceSheet.BinaryWriteToString(binaryString);
-
-    // fuck you idiot
-    CMsgStoreGetUserDataResponse response;
-    response.set_result(1);
-    response.set_price_sheet_version(1729); // what
-    *response.mutable_price_sheet() = std::move(binaryString);
-
-    SendMessageToGame(false, k_EMsgGCStoreGetUserDataResponse, response);
-}
-
-void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
-{
-    CMsgGCStorePurchaseInit message;
-    if (!messageRead.ReadProtobuf(message))
-    {
-        Platform::Print("Parsing CMsgGCStorePurchaseInit failed, ignoring\n");
-        return;
-    }
-
-    // value doesn't matter
-    uint64_t transactionId = Random{}.Integer<uint64_t>();
-
-    assert(!m_transactionId);
-    m_transactionId = transactionId;
-    m_transactionItemIds.reserve(message.line_items_size()); // rough approx
-
-    // inventory update response
-    std::vector<CMsgSOSingleObject> inventoryUpdate;
-
-    for (const auto &item : message.line_items())
-    {
-        for (uint32_t i = 0; i < item.quantity(); i++)
-        {
-            uint64_t itemId = m_inventory.PurchaseItem(item.item_def_id(), inventoryUpdate);
-            if (!itemId)
-            {
-                assert(false);
-            }
-            else
-            {
-                m_transactionItemIds.push_back(itemId);
-            }
-        }
-    }
-
-    char url[128]; // url doesn't matter, but it needs to be set
-    snprintf(url, sizeof(url), "https://checkout.steampowered.com/checkout/approvetxn/%llu/?returnurl=steam", transactionId);
-
-    CMsgGCStorePurchaseInitResponse response;
-    response.set_result(1); // success
-    response.set_txn_id(transactionId);
-    response.set_url(url);
-    response.mutable_item_ids()->Assign(m_transactionItemIds.begin(), m_transactionItemIds.end());
-
-    SendMessageToGame(false, k_EMsgGCStorePurchaseInitResponse, response, messageRead.JobId());
-
-    // FIXME: why would the server care???
-    for (auto &newItem : inventoryUpdate)
-    {
-        SendMessageToGame(true, k_ESOMsg_Create, newItem);
-    }
-
-    // this will run the steam callback
-    PostToHost(HostEvent::MicroTransactionResponse, 0, nullptr, 0);
-}
-
-void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
-{
-    CMsgGCStorePurchaseFinalize message;
-    if (!messageRead.ReadProtobuf(message))
-    {
-        Platform::Print("Parsing CMsgGCStorePurchaseFinalize failed, ignoring\n");
-        return;
-    }
-
-    assert(m_transactionId);
-
-    CMsgGCStorePurchaseFinalizeResponse response;
-    response.set_result(1); // success
-    response.mutable_item_ids()->Assign(m_transactionItemIds.begin(), m_transactionItemIds.end());
-    SendMessageToGame(false, k_EMsgGCStorePurchaseFinalizeResponse, response, messageRead.JobId());
-
-    // done with this one
-    m_transactionId = 0;
 }
 
 void ClientGC::DeleteItem(GCMessageRead &messageRead)
