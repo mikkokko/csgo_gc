@@ -39,6 +39,7 @@ GCConfig::GCConfig()
     }
 
     m_destroyUsedItems = config.GetNumber("destroy_used_items", m_destroyUsedItems);
+    m_randomizeFloat = config.GetNumber("randomize_item_float", m_randomizeFloat);
 
     const KeyValue *rarityWeights = config.GetSubkey("rarity_weights");
     if (rarityWeights)
