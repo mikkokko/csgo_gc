@@ -1085,6 +1085,96 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     return true;
 }
 
+uint32_t* Inventory::GetKillCounterPtr(CSOEconItem &weapon)
+{
+    int attrCount = weapon.attribute_size();
+    for (int i = 0; i < attrCount; ++i)
+    {
+        auto *attr = weapon.mutable_attribute(i);
+        if (attr->def_index() != ItemSchema::AttributeKillEater)
+            continue;
+            
+        static thread_local uint32_t valueHolder;
+        valueHolder = m_itemSchema.AttributeUint32(attr);
+        return &valueHolder;
+    }
+    return nullptr;
+}
+
+void Inventory::ConsumeToolItem(uint64_t toolId, CMsgSOSingleObject &removalMsg)
+{
+    if (!GetConfig().DestroyUsedItems())
+        return;
+        
+    auto it = m_items.find(toolId);
+    if (it == m_items.end())
+        return;
+        
+    DestroyItem(it, removalMsg);
+}
+
+Inventory::CounterSwapResult Inventory::PerformCounterSwap(uint64_t toolId, uint64_t weaponAId, uint64_t weaponBId)
+{
+    CounterSwapResult result{};
+    result.weaponAId = weaponAId;
+    result.weaponBId = weaponBId;
+    
+    auto itA = m_items.find(weaponAId);
+    auto itB = m_items.find(weaponBId);
+    
+    bool weaponsExist = (itA != m_items.end()) && (itB != m_items.end());
+    if (!weaponsExist)
+    {
+        result.status = CounterSwapStatus::WeaponMissing;
+        return result;
+    }
+    
+    CSOEconItem &weaponA = itA->second;
+    CSOEconItem &weaponB = itB->second;
+    
+    CSOEconItemAttribute *attrA = nullptr;
+    CSOEconItemAttribute *attrB = nullptr;
+    
+    for (int i = 0; i < weaponA.attribute_size(); ++i)
+    {
+        if (weaponA.attribute(i).def_index() == ItemSchema::AttributeKillEater)
+        {
+            attrA = weaponA.mutable_attribute(i);
+            break;
+        }
+    }
+    
+    for (int i = 0; i < weaponB.attribute_size(); ++i)
+    {
+        if (weaponB.attribute(i).def_index() == ItemSchema::AttributeKillEater)
+        {
+            attrB = weaponB.mutable_attribute(i);
+            break;
+        }
+    }
+    
+    bool bothHaveCounters = attrA && attrB;
+    if (!bothHaveCounters)
+    {
+        result.status = CounterSwapStatus::CounterAttributeAbsent;
+        return result;
+    }
+    
+    uint32_t valA = m_itemSchema.AttributeUint32(attrA);
+    uint32_t valB = m_itemSchema.AttributeUint32(attrB);
+    
+    m_itemSchema.SetAttributeUint32(attrA, valB);
+    m_itemSchema.SetAttributeUint32(attrB, valA);
+    
+    ConsumeToolItem(toolId, result.toolRemoval);
+    
+    ToSingleObject(result.weaponAUpdate, weaponA);
+    ToSingleObject(result.weaponBUpdate, weaponB);
+    result.status = CounterSwapStatus::Completed;
+    
+    return result;
+}
+
 uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update)
 {
     CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
