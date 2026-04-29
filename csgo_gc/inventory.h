@@ -68,6 +68,31 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
+    enum class StorageResult
+    {
+        Success,
+        CapacityExceeded,
+        ItemNotFound,
+        ContainerNotFound,
+        InvalidContainerType,
+        InternalError
+    };
+
+    struct StorageTransaction
+    {
+        CMsgSOSingleObject itemData;
+        CMsgSOSingleObject containerData;
+        EGCItemCustomizationNotification notificationType;
+        uint64_t affectedContainerId;
+        StorageResult outcome;
+        
+        bool Succeeded() const { return outcome == StorageResult::Success; }
+        bool ReachedCapacity() const { return outcome == StorageResult::CapacityExceeded; }
+    };
+
+    StorageTransaction DepositItemToStorage(uint64_t storageId, uint64_t itemId);
+    StorageTransaction WithdrawItemFromStorage(uint64_t storageId, uint64_t itemId);
+
     // returns the item id and adds the item to the provided CMsgSOMultipleObjects
     // on failure returns 0 and does nothing
     uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
@@ -122,6 +147,12 @@ private:
     {
         ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
     }
+
+    struct StorageItemPair { CSOEconItem* storage; CSOEconItem* target; };
+    StorageItemPair ResolveStorageItems(uint64_t storageId, uint64_t targetId);
+    void EmbedStorageReference(CSOEconItem &item, uint64_t storageId);
+    void StripStorageReference(CSOEconItem &item);
+    bool ModifyStorageCounter(CSOEconItem &storage, int delta);
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;

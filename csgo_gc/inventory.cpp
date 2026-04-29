@@ -1085,6 +1085,169 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     return true;
 }
 
+Inventory::StorageItemPair Inventory::ResolveStorageItems(uint64_t storageId, uint64_t targetId)
+{
+    StorageItemPair result{ nullptr, nullptr };
+    
+    auto storageIt = m_items.find(storageId);
+    auto targetIt = m_items.find(targetId);
+    
+    if (storageIt != m_items.end())
+        result.storage = &storageIt->second;
+    if (targetIt != m_items.end())
+        result.target = &targetIt->second;
+    
+    return result;
+}
+
+void Inventory::EmbedStorageReference(CSOEconItem &item, uint64_t storageId)
+{
+    auto *attrLow = item.add_attribute();
+    auto *attrHigh = item.add_attribute();
+    
+    attrLow->set_def_index(ItemSchema::AttributeCasketIdLow);
+    attrHigh->set_def_index(ItemSchema::AttributeCasketIdHigh);
+    
+    m_itemSchema.SetAttributeUint32(attrLow, storageId & 0xFFFFFFFF);
+    m_itemSchema.SetAttributeUint32(attrHigh, storageId >> 32);
+    
+    item.clear_equipped_state();
+}
+
+void Inventory::StripStorageReference(CSOEconItem &item)
+{
+    auto *attrs = item.mutable_attribute();
+    
+    for (int i = attrs->size() - 1; i >= 0; --i)
+    {
+        uint32_t idx = attrs->Get(i).def_index();
+        bool isStorageAttr = (idx == ItemSchema::AttributeCasketIdLow || 
+                              idx == ItemSchema::AttributeCasketIdHigh);
+        if (isStorageAttr)
+            attrs->DeleteSubrange(i, 1);
+    }
+}
+
+bool Inventory::ModifyStorageCounter(CSOEconItem &storage, int delta)
+{
+    int countIdx = -1, dateIdx = -1;
+    
+    for (int i = 0; i < storage.attribute_size(); ++i)
+    {
+        switch (storage.attribute(i).def_index())
+        {
+        case ItemSchema::AttributeCasketItemsCount:
+            countIdx = i;
+            break;
+        case ItemSchema::AttributeCasketModificationDate:
+            dateIdx = i;
+            break;
+        }
+    }
+    
+    if (countIdx < 0) return false;
+    
+    auto *countAttr = storage.mutable_attribute(countIdx);
+    int32_t current = static_cast<int32_t>(m_itemSchema.AttributeUint32(countAttr));
+    int32_t updated = current + delta;
+    
+    if (updated < 0 || updated > 1000)
+        return false;
+    
+    m_itemSchema.SetAttributeUint32(countAttr, updated);
+    
+    if (dateIdx >= 0)
+    {
+        auto *dateAttr = storage.mutable_attribute(dateIdx);
+        m_itemSchema.SetAttributeUint32(dateAttr, static_cast<uint32_t>(time(nullptr)));
+    }
+    
+    return true;
+}
+
+Inventory::StorageTransaction Inventory::DepositItemToStorage(uint64_t storageId, uint64_t itemId)
+{
+    StorageTransaction tx{};
+    tx.affectedContainerId = storageId;
+    
+    auto [storage, target] = ResolveStorageItems(storageId, itemId);
+    
+    if (!storage)
+    {
+        tx.outcome = StorageResult::ContainerNotFound;
+        return tx;
+    }
+    
+    if (!target)
+    {
+        tx.outcome = StorageResult::ItemNotFound;
+        return tx;
+    }
+    
+    if (storage->def_index() != ItemSchema::ItemCasket)
+    {
+        tx.outcome = StorageResult::InvalidContainerType;
+        return tx;
+    }
+    
+    if (!ModifyStorageCounter(*storage, +1))
+    {
+        tx.outcome = StorageResult::CapacityExceeded;
+        tx.notificationType = k_EGCItemCustomizationNotification_CasketTooFull;
+        return tx;
+    }
+    
+    EmbedStorageReference(*target, storageId);
+    
+    ToSingleObject(tx.itemData, *target);
+    ToSingleObject(tx.containerData, *storage);
+    tx.notificationType = k_EGCItemCustomizationNotification_CasketAdded;
+    tx.outcome = StorageResult::Success;
+    
+    return tx;
+}
+
+Inventory::StorageTransaction Inventory::WithdrawItemFromStorage(uint64_t storageId, uint64_t itemId)
+{
+    StorageTransaction tx{};
+    tx.affectedContainerId = storageId;
+    
+    auto [storage, target] = ResolveStorageItems(storageId, itemId);
+    
+    if (!storage)
+    {
+        tx.outcome = StorageResult::ContainerNotFound;
+        return tx;
+    }
+    
+    if (!target)
+    {
+        tx.outcome = StorageResult::ItemNotFound;
+        return tx;
+    }
+    
+    if (storage->def_index() != ItemSchema::ItemCasket)
+    {
+        tx.outcome = StorageResult::InvalidContainerType;
+        return tx;
+    }
+    
+    if (!ModifyStorageCounter(*storage, -1))
+    {
+        tx.outcome = StorageResult::InternalError;
+        return tx;
+    }
+    
+    StripStorageReference(*target);
+    
+    ToSingleObject(tx.itemData, *target);
+    ToSingleObject(tx.containerData, *storage);
+    tx.notificationType = k_EGCItemCustomizationNotification_CasketRemoved;
+    tx.outcome = StorageResult::Success;
+    
+    return tx;
+}
+
 uint64_t Inventory::PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update)
 {
     CSOEconItem &item = CreateItem(defIndex, ItemOriginPurchased, UnacknowledgedPurchased);
