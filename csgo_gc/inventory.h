@@ -76,8 +76,7 @@ public:
     bool TradeUp(const std::vector<uint64_t> &inputItemIds,
         std::vector<CMsgSOSingleObject> &destroyItems,
         CMsgSOSingleObject &newItem,
-            CMsgGCItemCustomizationNotification &notification,
-            CSOEconItem **outCraftedItem = nullptr);
+        CMsgGCItemCustomizationNotification &notification,
         CSOEconItem **outCraftedItem = nullptr);
 
     // returns the item id and adds the item to the provided CMsgSOMultipleObjects
@@ -141,12 +140,4 @@ private:
     uint32_t m_lastHighItemId{};
     ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;
-
-public:
-    const CSOEconItem* GetItem(uint64_t itemId) const {
-        auto it = m_items.find(itemId);
-        return it != m_items.end() ? &it->second : nullptr;
-    }
-
-    const ItemSchema& GetItemSchema() const { return m_itemSchema; }
 };

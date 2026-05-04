@@ -98,17 +98,6 @@ const CSOEconItem *Inventory::GetItem(uint64_t itemId) const
     return &it->second;
 }
 
-const CSOEconItem *Inventory::GetItem(uint64_t itemId) const
-{
-    auto it = m_items.find(itemId);
-    if (it == m_items.end())
-    {
-        return nullptr;
-    }
-
-    return &it->second;
-}
-
 CSOEconItem &Inventory::AllocateItem(uint32_t highItemId)
 {
     // Players fuck up their inventory files constantly and end up with item id collisions...
@@ -1253,7 +1242,6 @@ bool Inventory::TradeUp(const std::vector<uint64_t> &inputItemIds,
     std::vector<CMsgSOSingleObject> &destroyItems,
     CMsgSOSingleObject &newItem,
     CMsgGCItemCustomizationNotification &notification,
-    CSOEconItem **outCraftedItem)
     CSOEconItem **outCraftedItem)
 {
     if (inputItemIds.size() != 10)

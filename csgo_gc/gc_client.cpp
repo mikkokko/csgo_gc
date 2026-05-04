@@ -2,23 +2,6 @@
 #include "gc_client.h"
 #include "graffiti.h"
 #include "keyvalue.h"
-#include "steam/steam_api.h"
-
-static std::string GetLocalPlayerName()
-{
-    const char *name = nullptr;
-    if (SteamFriends())
-    {
-        name = SteamFriends()->GetPersonaName();
-    }
-
-    if (name && name[0])
-    {
-        return name;
-    }
-
-    return "Player";
-}
 
 static bool GetItemPaintKitDefIndex(const CSOEconItem &item, const ItemSchema &schema, uint32_t &paintKitDefIndex)
 {
@@ -862,7 +845,8 @@ void ClientGC::Craft(GCMessageRead &messageRead)
             const ItemInfo *itemInfo = m_inventory.GetItemSchema().ItemInfoByDefIndex(craftedItem->def_index());
             std::string itemName = itemInfo ? itemInfo->m_name : "Unknown Item";
 
-            std::string chatMessage = GetLocalPlayerName();
+            uint32_t accountId = m_steamId & 0xffffffff;
+            std::string chatMessage = "Player " + std::to_string(accountId);
             chatMessage += " has fulfilled a contract and received: ";
             chatMessage += itemName;
 
