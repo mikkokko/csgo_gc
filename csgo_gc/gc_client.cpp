@@ -2,6 +2,65 @@
 #include "gc_client.h"
 #include "graffiti.h"
 #include "keyvalue.h"
+#include "steam/steam_api.h"
+
+static std::string GetLocalPlayerName()
+{
+    const char *name = nullptr;
+    if (SteamFriends())
+    {
+        name = SteamFriends()->GetPersonaName();
+    }
+
+    if (name && name[0])
+    {
+        return name;
+    }
+
+    return "Player";
+}
+
+static bool GetItemPaintKitDefIndex(const CSOEconItem &item, const ItemSchema &schema, uint32_t &paintKitDefIndex)
+{
+    for (const CSOEconItemAttribute &attr : item.attribute())
+    {
+        if (attr.def_index() == ItemSchema::AttributeTexturePrefab)
+        {
+            paintKitDefIndex = schema.AttributeUint32(&attr);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static std::string GetItemCollectionId(const CSOEconItem &item, const ItemSchema &schema)
+{
+    uint32_t paintKitDefIndex = 0;
+    if (!GetItemPaintKitDefIndex(item, schema, paintKitDefIndex))
+    {
+        return {};
+    }
+
+    std::vector<std::string> collections;
+    if (!schema.GetCollectionsForPaintedItem(item.def_index(), paintKitDefIndex, collections))
+    {
+        return {};
+    }
+
+    std::sort(collections.begin(), collections.end());
+    return collections.front();
+}
+
+static std::string GetCollectionName(const ItemSchema &schema, std::string_view collectionId)
+{
+    if (collectionId.empty())
+    {
+        return "Unknown";
+    }
+
+    return schema.GetCollectionDisplayName(collectionId);
+}
 
 ClientGC::ClientGC(uint64_t steamId)
     : m_steamId{ steamId }
@@ -112,6 +171,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
 
         case k_EMsgGCUnlockCrate:
             UnlockCrate(messageRead);
+            break;
+
+        case k_EMsgGCCraft:
+            Craft(messageRead);
             break;
 
         case k_EMsgGCNameItem:
@@ -714,6 +777,108 @@ void ClientGC::NameBaseItem(GCMessageRead &messageRead)
     else
     {
         assert(false);
+    }
+}
+
+void ClientGC::Craft(GCMessageRead &messageRead)
+{
+    // Trade-up contract message format:
+    // int16_t recipe (-2 for trade-up)
+    // int16_t itemCount (should be 10)
+    // uint64_t itemIds[itemCount]
+    
+    int16_t recipe = static_cast<int16_t>(messageRead.ReadUint16());
+    int16_t itemCount = static_cast<int16_t>(messageRead.ReadUint16());
+    
+    if (!messageRead.IsValid())
+    {
+        Platform::Print("Parsing CMsgGCCraft header failed, ignoring\n");
+        return;
+    }
+    
+    Platform::Print("TRADE-UP CONTRACT: recipe=%d, itemCount=%d\n", recipe, itemCount);
+
+    // Trade-up recipes are -2 and 12 (remove restriction on 12)
+    if (recipe != -2 && recipe != 12)
+    {
+        Platform::Print("Unsupported craft recipe %d, ignoring\n", recipe);
+        return;
+    }
+    
+    // Read all item IDs
+    std::vector<uint64_t> inputItemIds;
+    inputItemIds.reserve(itemCount);
+
+    for (int i = 0; i < itemCount; i++)
+    {
+        uint64_t itemId = messageRead.ReadUint64();
+        if (!messageRead.IsValid())
+        {
+            Platform::Print("Parsing CMsgGCCraft item %d failed, ignoring\n", i);
+            return;
+
+        }
+        inputItemIds.push_back(itemId);
+    }
+
+    Platform::Print("Input items:\n");
+    for (uint64_t itemId : inputItemIds)
+    {
+        const CSOEconItem* item = m_inventory.GetItem(itemId);
+        if (item)
+        {
+            std::string collectionId = GetItemCollectionId(*item, m_inventory.GetItemSchema());
+            Platform::Print("  Item %llu: def_index %u, rarity %u, quality %u, collection %s (%s)\n",
+                itemId, item->def_index(), item->rarity(), item->quality(), collectionId.c_str(),
+                GetCollectionName(m_inventory.GetItemSchema(), collectionId).c_str());
+        }
+        else
+        {
+            Platform::Print("  Item %llu: not found in inventory\n", itemId);
+        }
+    }
+
+    std::vector<CMsgSOSingleObject> destroyItems;
+    CMsgSOSingleObject newItem;
+    CMsgGCItemCustomizationNotification notification;
+    CSOEconItem *craftedItem = nullptr;
+    
+    if (m_inventory.TradeUp(inputItemIds, destroyItems, newItem, notification, &craftedItem))
+    {
+        // Destroy all input items
+        for (auto &destroy : destroyItems)
+        {
+            SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
+        }
+        
+        // Create the new item
+        SendMessageToGame(true, k_ESOMsg_Create, newItem);
+        
+        // Send notification
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+
+        if (craftedItem)
+        {
+            const ItemInfo *itemInfo = m_inventory.GetItemSchema().ItemInfoByDefIndex(craftedItem->def_index());
+            std::string itemName = itemInfo ? itemInfo->m_name : "Unknown Item";
+
+            std::string chatMessage = GetLocalPlayerName();
+            chatMessage += " has fulfilled a contract and received: ";
+            chatMessage += itemName;
+
+            CMsgGCCStrike15_v2_GC2ClientTextMsg textMsg;
+            textMsg.set_id(0);
+            textMsg.set_type(0);
+            textMsg.set_payload(chatMessage);
+
+            SendMessageToGame(true, k_EMsgGCCStrike15_v2_GC2ClientTextMsg, textMsg);
+        }
+        
+        Platform::Print("Trade-up completed successfully!\n");
+    }
+    else
+    {
+        Platform::Print("Trade-up failed: input validation failed\n");
     }
 }
 

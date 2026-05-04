@@ -155,6 +155,12 @@ ItemSchema::ItemSchema()
         ParsePaintKitRarities(paintKitsRarityKey);
     }
 
+    const KeyValue *itemSetsKey = itemsGame->GetSubkey("item_sets");
+    if (itemSetsKey)
+    {
+        ParseItemSets(itemSetsKey);
+    }
+
     const KeyValue *musicDefinitionsKey = itemsGame->GetSubkey("music_definitions");
     if (musicDefinitionsKey)
     {
@@ -764,6 +770,36 @@ void ItemSchema::ParsePaintKits(const KeyValue *paintKitsKey)
     }
 }
 
+void ItemSchema::ParseItemSets(const KeyValue *itemSetsKey)
+{
+    m_itemSets.reserve(itemSetsKey->SubkeyCount());
+
+    for (const KeyValue &itemSetKey : *itemSetsKey)
+    {
+        ItemSet itemSet;
+        itemSet.name = std::string{ itemSetKey.GetString("name", itemSetKey.Name()) };
+        itemSet.isCollection = itemSetKey.GetNumber("is_collection", false);
+
+        const KeyValue *itemsKey = itemSetKey.GetSubkey("items");
+        if (itemsKey)
+        {
+            itemSet.items.reserve(itemsKey->SubkeyCount());
+            for (const KeyValue &itemKey : *itemsKey)
+            {
+                LootListItem item;
+                if (ParseLootListItem(item, itemKey.Name()))
+                {
+                    itemSet.items.push_back(item);
+                }
+            }
+        }
+
+        m_itemSets.emplace(std::piecewise_construct,
+            std::forward_as_tuple(itemSetKey.Name()),
+            std::forward_as_tuple(std::move(itemSet)));
+    }
+}
+
 void ItemSchema::ParsePaintKitRarities(const KeyValue *raritiesKey)
 {
     for (const KeyValue &key : *raritiesKey)
@@ -1039,6 +1075,17 @@ ItemInfo *ItemSchema::ItemInfoByName(std::string_view name)
     return nullptr;
 }
 
+const ItemInfo *ItemSchema::ItemInfoByDefIndex(uint32_t defIndex) const
+{
+    auto it = m_itemInfo.find(defIndex);
+    if (it == m_itemInfo.end())
+    {
+        return nullptr;
+    }
+
+    return &it->second;
+}
+
 StickerKitInfo *ItemSchema::StickerKitInfoByName(std::string_view name)
 {
     auto it = m_stickerKitInfo.find(std::string{ name });
@@ -1063,6 +1110,19 @@ PaintKitInfo *ItemSchema::PaintKitInfoByName(std::string_view name)
     return &it->second;
 }
 
+const PaintKitInfo *ItemSchema::PaintKitInfoByDefIndex(uint32_t defIndex) const
+{
+    for (const auto &pair : m_paintKitInfo)
+    {
+        if (pair.second.m_defIndex == defIndex)
+        {
+            return &pair.second;
+        }
+    }
+
+    return nullptr;
+}
+
 MusicDefinitionInfo *ItemSchema::MusicDefinitionInfoByName(std::string_view name)
 {
     auto it = m_musicDefinitionInfo.find(std::string{ name });
@@ -1073,4 +1133,128 @@ MusicDefinitionInfo *ItemSchema::MusicDefinitionInfoByName(std::string_view name
     }
 
     return &it->second;
+}
+
+bool ItemSchema::GetCollectionsForPaintedItem(uint32_t defIndex, uint32_t paintKitDefIndex,
+    std::vector<std::string> &outCollections) const
+{
+    outCollections.clear();
+
+    for (const auto &pair : m_itemSets)
+    {
+        const ItemSet &itemSet = pair.second;
+        if (!itemSet.isCollection)
+        {
+            continue;
+        }
+
+        for (const LootListItem &item : itemSet.items)
+        {
+            if (!item.itemInfo || !item.paintKitInfo)
+            {
+                continue;
+            }
+
+            if (item.itemInfo->m_defIndex == defIndex && item.paintKitInfo->m_defIndex == paintKitDefIndex)
+            {
+                outCollections.push_back(pair.first);
+                break;
+            }
+        }
+    }
+
+    return !outCollections.empty();
+}
+
+bool ItemSchema::GetCollectionsForPaintKit(uint32_t paintKitDefIndex,
+    std::vector<std::string> &outCollections) const
+{
+    outCollections.clear();
+
+    for (const auto &pair : m_itemSets)
+    {
+        const ItemSet &itemSet = pair.second;
+        if (!itemSet.isCollection)
+        {
+            continue;
+        }
+
+        for (const LootListItem &item : itemSet.items)
+        {
+            if (!item.paintKitInfo)
+            {
+                continue;
+            }
+
+            if (item.paintKitInfo->m_defIndex == paintKitDefIndex)
+            {
+                outCollections.push_back(pair.first);
+                break;
+            }
+        }
+    }
+
+    return !outCollections.empty();
+}
+
+std::string ItemSchema::GetCollectionDisplayName(std::string_view collectionName) const
+{
+    auto it = m_itemSets.find(std::string{ collectionName });
+    if (it == m_itemSets.end())
+    {
+        return std::string{ collectionName };
+    }
+
+    if (it->second.name.empty())
+    {
+        return std::string{ collectionName };
+    }
+
+    return it->second.name;
+}
+
+bool ItemSchema::GetTradeUpCandidates(std::string_view collectionName, uint32_t outputRarity,
+    std::vector<const LootListItem *> &outCandidates) const
+{
+    outCandidates.clear();
+
+    auto it = m_itemSets.find(std::string{ collectionName });
+    if (it == m_itemSets.end())
+    {
+        return false;
+    }
+
+    const ItemSet &itemSet = it->second;
+    for (const LootListItem &item : itemSet.items)
+    {
+        if (item.type != LootListItemPaintable)
+        {
+            continue;
+        }
+
+        if (!item.itemInfo || !item.paintKitInfo)
+        {
+            continue;
+        }
+
+        if (item.rarity == outputRarity)
+        {
+            outCandidates.push_back(&item);
+        }
+    }
+
+    return !outCandidates.empty();
+}
+
+uint32_t ItemSchema::GetPaintedRarity(uint32_t defIndex, uint32_t paintKitDefIndex, uint32_t fallbackRarity) const
+{
+    const ItemInfo *itemInfo = ItemInfoByDefIndex(defIndex);
+    const PaintKitInfo *paintKitInfo = PaintKitInfoByDefIndex(paintKitDefIndex);
+
+    if (!itemInfo || !paintKitInfo)
+    {
+        return fallbackRarity;
+    }
+
+    return PaintedItemRarity(itemInfo->m_rarity, paintKitInfo->m_rarity);
 }

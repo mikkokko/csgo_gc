@@ -68,6 +68,18 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
+    const CSOEconItem *GetItem(uint64_t itemId) const;
+    const ItemSchema &GetItemSchema() const { return m_itemSchema; }
+
+    // Trade-up contract: craft 10 items of same rarity into 1 item of next rarity
+    // Returns true on success, false on validation failure
+    bool TradeUp(const std::vector<uint64_t> &inputItemIds,
+        std::vector<CMsgSOSingleObject> &destroyItems,
+        CMsgSOSingleObject &newItem,
+            CMsgGCItemCustomizationNotification &notification,
+            CSOEconItem **outCraftedItem = nullptr);
+        CSOEconItem **outCraftedItem = nullptr);
+
     // returns the item id and adds the item to the provided CMsgSOMultipleObjects
     // on failure returns 0 and does nothing
     uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
@@ -129,4 +141,12 @@ private:
     uint32_t m_lastHighItemId{};
     ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;
+
+public:
+    const CSOEconItem* GetItem(uint64_t itemId) const {
+        auto it = m_items.find(itemId);
+        return it != m_items.end() ? &it->second : nullptr;
+    }
+
+    const ItemSchema& GetItemSchema() const { return m_itemSchema; }
 };
