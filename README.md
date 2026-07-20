@@ -49,6 +49,15 @@ For GUI inventory editors, see https://github.com/mikkokko/csgo_gc/issues/82. Fo
 ## Configuration
 See [csgo_gc/config.txt](examples/config.txt) for available options.
 
+## Bug reports and support
+
+**Got a crash or found a bug?**
+* **Broken csgo_gc feature?** Open an issue and follow the instructions.
+* **Game crashing or broken non-GC features?** If you are unsure if csgo_gc caused it, test the game without it installed first. If the bug still happens on a clean build, it's an issue with the game itself. **Do not report base game bugs here.** If you confirm csgo_gc is definitely causing the crash, open an issue.
+
+**Need help, want to share ideas, or self-promote?**
+Use [Discussions](https://github.com/mikkokko/csgo_gc/discussions). Do not open issues for support.
+
 ## Building
 Requirements:
 - Git
