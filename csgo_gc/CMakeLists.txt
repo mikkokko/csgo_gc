@@ -69,6 +69,8 @@ protobuf_generate(
     IMPORT_DIRS ${PROTO_DIR}
     PROTOC_OUT_DIR ${PROTOC_OUT_DIR})
 
+source_group("Protobufs" REGULAR_EXPRESSION "\\.pb\\.(cc|h)$")
+
 target_link_libraries(csgo_gc PRIVATE
     MbedTLS::mbedcrypto
     protobuf::libprotobuf-lite
