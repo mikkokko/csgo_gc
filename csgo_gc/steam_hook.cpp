@@ -24,6 +24,13 @@ struct SteamNetworkingIdentity;
 #include "networking_client.h"
 #include "networking_server.h"
 
+// glue for the old interfaces below...
+#define STEAM_METHOD_DESC(DESC) STEAM_DESC(DESC)
+#define CALL_RESULT(RESULT_TYPE) STEAM_CALL_RESULT(RESULT_TYPE)
+class ISteamMasterServerUpdater;
+class ISteamUnifiedMessages;
+typedef void (*SteamAPI_PostAPIResultInProcess_t)(SteamAPICall_t, void *, uint32, int);
+
 // UserStatsReceived_t fails with the new csgo appid, which causes gc callbacks to not run
 // to work around this, spoof user stats requests when running under this appid specifically
 // we also need to patch serverbrowser to allow for appids over 900...
@@ -130,39 +137,14 @@ public:
 static GCWrapper<ClientGC, NetworkingClient> *s_clientGC;
 static GCWrapper<ServerGC, NetworkingServer> *s_serverGC;
 
-template<size_t N>
-inline bool InterfaceMatches(const char *name, const char (&compare)[N])
-{
-    size_t length = strlen(name);
-    if (length != (N - 1))
-    {
-        return false;
-    }
-
-    // compare the full version
-    if (!memcmp(name, compare, length))
-    {
-        return true; // matches
-    }
-
-    // compare the base name without the last 3 digits
-    if (!memcmp(name, compare, length - 3))
-    {
-        Platform::Print("Got interface version %s, expecting %s\n", name, compare);
-        return false; // not a match
-    }
-
-    return false; // not a match
-}
-
 // this class sucks but we need to do it this way because
-class SteamGameCoordinatorProxy final : public ISteamGameCoordinator
+class SteamGameCoordinatorProxy final
 {
     const bool m_server;
 
 public:
-    SteamGameCoordinatorProxy(uint64_t steamId)
-        : m_server{ !steamId }
+    SteamGameCoordinatorProxy(uint64_t userSteamId)
+        : m_server{ !userSteamId }
     {
         if (m_server)
         {
@@ -172,7 +154,7 @@ public:
         else
         {
             assert(!s_clientGC);
-            s_clientGC = new GCWrapper<ClientGC, NetworkingClient>{ SteamNetworkingMessages(), steamId };
+            s_clientGC = new GCWrapper<ClientGC, NetworkingClient>{ SteamNetworkingMessages(), userSteamId };
         }
     }
 
@@ -192,7 +174,7 @@ public:
         }
     }
 
-    EGCResults SendMessage(uint32 unMsgType, const void *pubData, uint32 cubData) override
+    EGCResults SendMessage(auto, uint32 unMsgType, const void *pubData, uint32 cubData)
     {
         if (m_server)
         {
@@ -208,7 +190,7 @@ public:
         return k_EGCResultOK;
     }
 
-    bool IsMessageAvailable(uint32 *pcubMsgSize) override
+    bool IsMessageAvailable(auto, uint32 *pcubMsgSize)
     {
         if (m_server)
         {
@@ -220,7 +202,7 @@ public:
         }
     }
 
-    EGCResults RetrieveMessage(uint32 *punMsgType, void *pubDest, uint32 cubDest, uint32 *pcubMsgSize) override
+    EGCResults RetrieveMessage(auto, uint32 *punMsgType, void *pubDest, uint32 cubDest, uint32 *pcubMsgSize)
     {
         bool result;
 
@@ -251,73 +233,10 @@ public:
 constexpr SteamAPICall_t CheckSignatureCall = 0x6666666666666666;
 
 // hook so we can spoof the dll signature checks and get rid of the annoying as fuck insecure message box
-class SteamUtilsProxy final : public ISteamUtils
+class SteamUtilsProxy final
 {
-private:
-    ISteamUtils *const m_original;
-
 public:
-    SteamUtilsProxy(ISteamUtils *original)
-        : m_original{ original }
-    {
-    }
-
-    uint32 GetSecondsSinceAppActive() override
-    {
-        return m_original->GetSecondsSinceAppActive();
-    }
-
-    uint32 GetSecondsSinceComputerActive() override
-    {
-        return m_original->GetSecondsSinceComputerActive();
-    }
-
-    EUniverse GetConnectedUniverse() override
-    {
-        return m_original->GetConnectedUniverse();
-    }
-
-    uint32 GetServerRealTime() override
-    {
-        return m_original->GetServerRealTime();
-    }
-
-    const char *GetIPCountry() override
-    {
-        return m_original->GetIPCountry();
-    }
-
-    bool GetImageSize(int iImage, uint32 *pnWidth, uint32 *pnHeight) override
-    {
-        return m_original->GetImageSize(iImage, pnWidth, pnHeight);
-    }
-
-    bool GetImageRGBA(int iImage, uint8 *pubDest, int nDestBufferSize) override
-    {
-        return m_original->GetImageRGBA(iImage, pubDest, nDestBufferSize);
-    }
-
-    bool GetCSERIPPort(uint32 *unIP, uint16 *usPort) override
-    {
-        return m_original->GetCSERIPPort(unIP, usPort);
-    }
-
-    uint8 GetCurrentBatteryPower() override
-    {
-        return m_original->GetCurrentBatteryPower();
-    }
-
-    uint32 GetAppID() override
-    {
-        return m_original->GetAppID();
-    }
-
-    void SetOverlayNotificationPosition(ENotificationPosition eNotificationPosition) override
-    {
-        m_original->SetOverlayNotificationPosition(eNotificationPosition);
-    }
-
-    bool IsAPICallCompleted(SteamAPICall_t hSteamAPICall, bool *pbFailed) override
+    bool IsAPICallCompleted(auto original, SteamAPICall_t hSteamAPICall, bool *pbFailed)
     {
         if (hSteamAPICall == CheckSignatureCall)
         {
@@ -329,23 +248,23 @@ public:
             return true;
         }
 
-        return m_original->IsAPICallCompleted(hSteamAPICall, pbFailed);
+        return original(hSteamAPICall, pbFailed);
     }
 
-    ESteamAPICallFailure GetAPICallFailureReason(SteamAPICall_t hSteamAPICall) override
-    {
-        // yeah we won't get here
-        //if (hSteamAPICall == CheckSignatureCall)
-        //{
-        //    // not properly handled, shouldn't get here
-        //    assert(false);
-        //    return k_ESteamAPICallFailureNone;
-        //}
+    // yeah we won't get here
+    //ESteamAPICallFailure GetAPICallFailureReason(auto original, SteamAPICall_t hSteamAPICall)
+    //{
+    //    if (hSteamAPICall == CheckSignatureCall)
+    //    {
+    //        // not properly handled, shouldn't get here
+    //        assert(false);
+    //        return k_ESteamAPICallFailureNone;
+    //    }
+    //
+    //    return original(hSteamAPICall);
+    //}
 
-        return m_original->GetAPICallFailureReason(hSteamAPICall);
-    }
-
-    bool GetAPICallResult(SteamAPICall_t hSteamAPICall, void *pCallback, int cubCallback, int iCallbackExpected, bool *pbFailed) override
+    bool GetAPICallResult(auto original, SteamAPICall_t hSteamAPICall, void *pCallback, int cubCallback, int iCallbackExpected, bool *pbFailed)
     {
         if (hSteamAPICall == CheckSignatureCall
             && cubCallback == sizeof(CheckFileSignature_t)
@@ -362,123 +281,13 @@ public:
             return true;
         }
 
-        return m_original->GetAPICallResult(hSteamAPICall, pCallback, cubCallback, iCallbackExpected, pbFailed);
+        return original(hSteamAPICall, pCallback, cubCallback, iCallbackExpected, pbFailed);
     }
 
-    void RunFrame() override
-    {
-        m_original->RunFrame();
-    }
-
-    uint32 GetIPCCallCount() override
-    {
-        return m_original->GetIPCCallCount();
-    }
-
-    void SetWarningMessageHook(SteamAPIWarningMessageHook_t pFunction) override
-    {
-        m_original->SetWarningMessageHook(pFunction);
-    }
-
-    bool IsOverlayEnabled() override
-    {
-        return m_original->IsOverlayEnabled();
-    }
-
-    bool BOverlayNeedsPresent() override
-    {
-        return m_original->BOverlayNeedsPresent();
-    }
-
-    SteamAPICall_t CheckFileSignature([[maybe_unused]] const char *szFileName) override
+    SteamAPICall_t CheckFileSignature(auto, const char *)
     {
         // spoof this
         return CheckSignatureCall;
-    }
-
-    bool ShowGamepadTextInput(EGamepadTextInputMode eInputMode, EGamepadTextInputLineMode eLineInputMode, const char *pchDescription, uint32 unCharMax, const char *pchExistingText) override
-    {
-        return m_original->ShowGamepadTextInput(eInputMode, eLineInputMode, pchDescription, unCharMax, pchExistingText);
-    }
-
-    uint32 GetEnteredGamepadTextLength() override
-    {
-        return m_original->GetEnteredGamepadTextLength();
-    }
-
-    bool GetEnteredGamepadTextInput(char *pchText, uint32 cchText) override
-    {
-        return m_original->GetEnteredGamepadTextInput(pchText, cchText);
-    }
-
-    const char *GetSteamUILanguage() override
-    {
-        return m_original->GetSteamUILanguage();
-    }
-
-    bool IsSteamRunningInVR() override
-    {
-        return m_original->IsSteamRunningInVR();
-    }
-
-    void SetOverlayNotificationInset(int nHorizontalInset, int nVerticalInset) override
-    {
-        m_original->SetOverlayNotificationInset(nHorizontalInset, nVerticalInset);
-    }
-
-    bool IsSteamInBigPictureMode() override
-    {
-        return m_original->IsSteamInBigPictureMode();
-    }
-
-    void StartVRDashboard() override
-    {
-        m_original->StartVRDashboard();
-    }
-
-    bool IsVRHeadsetStreamingEnabled() override
-    {
-        return m_original->IsVRHeadsetStreamingEnabled();
-    }
-
-    void SetVRHeadsetStreamingEnabled(bool bEnabled) override
-    {
-        m_original->SetVRHeadsetStreamingEnabled(bEnabled);
-    }
-
-    bool IsSteamChinaLauncher() override
-    {
-        return m_original->IsSteamChinaLauncher();
-    }
-
-    bool InitFilterText(uint32 unFilterOptions) override
-    {
-        return m_original->InitFilterText(unFilterOptions);
-    }
-
-    int FilterText(ETextFilteringContext eContext, CSteamID sourceSteamID, const char *pchInputMessage, char *pchOutFilteredText, uint32 nByteSizeOutFilteredText) override
-    {
-        return m_original->FilterText(eContext, sourceSteamID, pchInputMessage, pchOutFilteredText, nByteSizeOutFilteredText);
-    }
-
-    ESteamIPv6ConnectivityState GetIPv6ConnectivityState(ESteamIPv6ConnectivityProtocol eProtocol) override
-    {
-        return m_original->GetIPv6ConnectivityState(eProtocol);
-    }
-
-    bool IsSteamRunningOnSteamDeck() override
-    {
-        return m_original->IsSteamRunningOnSteamDeck();
-    }
-
-    bool ShowFloatingGamepadTextInput(EFloatingGamepadTextInputMode eKeyboardMode, int nTextFieldXPosition, int nTextFieldYPosition, int nTextFieldWidth, int nTextFieldHeight) override
-    {
-        return m_original->ShowFloatingGamepadTextInput(eKeyboardMode, nTextFieldXPosition, nTextFieldYPosition, nTextFieldWidth, nTextFieldHeight);
-    }
-
-    void SetGameLauncherMode(bool bLauncherMode) override
-    {
-        m_original->SetGameLauncherMode(bLauncherMode);
     }
 };
 
@@ -493,17 +302,10 @@ static void QueueUserStatsCallback()
     s_userStatsReceivedCallbacks.push_back(callback);
 }
 
-class SteamUserStatsProxy : public ISteamUserStats
+class SteamUserStatsProxy final
 {
-    ISteamUserStats *const m_original;
-
 public:
-    SteamUserStatsProxy(ISteamUserStats *original)
-        : m_original{ original }
-    {
-    }
-
-    bool RequestCurrentStats() override
+    bool RequestCurrentStats(auto original)
     {
         if (!AppId::IsOriginal())
         {
@@ -512,85 +314,10 @@ public:
             return true;
         }
 
-        return m_original->RequestCurrentStats();
+        return original();
     }
 
-    bool GetStat(const char *pchName, int32 *pData) override
-    {
-        return m_original->GetStat(pchName, pData);
-    }
-
-    bool GetStat(const char *pchName, float *pData) override
-    {
-        return m_original->GetStat(pchName, pData);
-    }
-
-    bool SetStat(const char *pchName, int32 nData) override
-    {
-        return m_original->SetStat(pchName, nData);
-    }
-
-    bool SetStat(const char *pchName, float fData) override
-    {
-        return m_original->SetStat(pchName, fData);
-    }
-
-    bool UpdateAvgRateStat(const char *pchName, float flCountThisSession, double dSessionLength) override
-    {
-        return m_original->UpdateAvgRateStat(pchName, flCountThisSession, dSessionLength);
-    }
-
-    bool GetAchievement(const char *pchName, bool *pbAchieved) override
-    {
-        return m_original->GetAchievement(pchName, pbAchieved);
-    }
-
-    bool SetAchievement(const char *pchName) override
-    {
-        return m_original->SetAchievement(pchName);
-    }
-
-    bool ClearAchievement(const char *pchName) override
-    {
-        return m_original->ClearAchievement(pchName);
-    }
-
-    bool GetAchievementAndUnlockTime(const char *pchName, bool *pbAchieved, uint32 *punUnlockTime) override
-    {
-        return m_original->GetAchievementAndUnlockTime(pchName, pbAchieved, punUnlockTime);
-    }
-
-    bool StoreStats() override
-    {
-        return m_original->StoreStats();
-    }
-
-    int GetAchievementIcon(const char *pchName) override
-    {
-        return m_original->GetAchievementIcon(pchName);
-    }
-
-    const char *GetAchievementDisplayAttribute(const char *pchName, const char *pchKey) override
-    {
-        return m_original->GetAchievementDisplayAttribute(pchName, pchKey);
-    }
-
-    bool IndicateAchievementProgress(const char *pchName, uint32 nCurProgress, uint32 nMaxProgress) override
-    {
-        return m_original->IndicateAchievementProgress(pchName, nCurProgress, nMaxProgress);
-    }
-
-    uint32 GetNumAchievements() override
-    {
-        return m_original->GetNumAchievements();
-    }
-
-    const char *GetAchievementName(uint32 iAchievement) override
-    {
-        return m_original->GetAchievementName(iAchievement);
-    }
-
-    SteamAPICall_t RequestUserStats(CSteamID steamIDUser) override
+    SteamAPICall_t RequestUserStats(auto original, CSteamID steamIDUser)
     {
         if (!AppId::IsOriginal())
         {
@@ -598,181 +325,14 @@ public:
             Platform::Print("RequestUserStats not spoofed!!!\n");
         }
 
-        return m_original->RequestUserStats(steamIDUser);
-    }
-
-    bool GetUserStat(CSteamID steamIDUser, const char *pchName, int32 *pData) override
-    {
-        return m_original->GetUserStat(steamIDUser, pchName, pData);
-    }
-
-    bool GetUserStat(CSteamID steamIDUser, const char *pchName, float *pData) override
-    {
-        return m_original->GetUserStat(steamIDUser, pchName, pData);
-    }
-
-    bool GetUserAchievement(CSteamID steamIDUser, const char *pchName, bool *pbAchieved) override
-    {
-        return m_original->GetUserAchievement(steamIDUser, pchName, pbAchieved);
-    }
-
-    bool GetUserAchievementAndUnlockTime(CSteamID steamIDUser, const char *pchName, bool *pbAchieved, uint32 *punUnlockTime) override
-    {
-        return m_original->GetUserAchievementAndUnlockTime(steamIDUser, pchName, pbAchieved, punUnlockTime);
-    }
-
-    bool ResetAllStats(bool bAchievementsToo) override
-    {
-        return m_original->ResetAllStats(bAchievementsToo);
-    }
-
-    SteamAPICall_t FindOrCreateLeaderboard(const char *pchLeaderboardName,
-        ELeaderboardSortMethod eLeaderboardSortMethod,
-        ELeaderboardDisplayType eLeaderboardDisplayType) override
-    {
-        return m_original->FindOrCreateLeaderboard(pchLeaderboardName, eLeaderboardSortMethod, eLeaderboardDisplayType);
-    }
-
-    SteamAPICall_t FindLeaderboard(const char *pchLeaderboardName) override
-    {
-        return m_original->FindLeaderboard(pchLeaderboardName);
-    }
-
-    const char *GetLeaderboardName(SteamLeaderboard_t hSteamLeaderboard) override
-    {
-        return m_original->GetLeaderboardName(hSteamLeaderboard);
-    }
-
-    int GetLeaderboardEntryCount(SteamLeaderboard_t hSteamLeaderboard) override
-    {
-        return m_original->GetLeaderboardEntryCount(hSteamLeaderboard);
-    }
-
-    ELeaderboardSortMethod GetLeaderboardSortMethod(SteamLeaderboard_t hSteamLeaderboard) override
-    {
-        return m_original->GetLeaderboardSortMethod(hSteamLeaderboard);
-    }
-
-    ELeaderboardDisplayType GetLeaderboardDisplayType(SteamLeaderboard_t hSteamLeaderboard) override
-    {
-        return m_original->GetLeaderboardDisplayType(hSteamLeaderboard);
-    }
-
-    SteamAPICall_t DownloadLeaderboardEntries(SteamLeaderboard_t hSteamLeaderboard,
-        ELeaderboardDataRequest eLeaderboardDataRequest,
-        int nRangeStart,
-        int nRangeEnd) override
-    {
-        return m_original->DownloadLeaderboardEntries(hSteamLeaderboard, eLeaderboardDataRequest, nRangeStart, nRangeEnd);
-    }
-
-    SteamAPICall_t DownloadLeaderboardEntriesForUsers(SteamLeaderboard_t hSteamLeaderboard, CSteamID *prgUsers, int cUsers) override
-    {
-        return m_original->DownloadLeaderboardEntriesForUsers(hSteamLeaderboard, prgUsers, cUsers);
-    }
-
-    bool GetDownloadedLeaderboardEntry(SteamLeaderboardEntries_t hSteamLeaderboardEntries,
-        int index,
-        LeaderboardEntry_t *pLeaderboardEntry,
-        int32 *pDetails,
-        int cDetailsMax) override
-    {
-        return m_original->GetDownloadedLeaderboardEntry(hSteamLeaderboardEntries, index, pLeaderboardEntry, pDetails, cDetailsMax);
-    }
-
-    SteamAPICall_t UploadLeaderboardScore(SteamLeaderboard_t hSteamLeaderboard,
-        ELeaderboardUploadScoreMethod eLeaderboardUploadScoreMethod,
-        int32 nScore,
-        const int32 *pScoreDetails,
-        int cScoreDetailsCount) override
-    {
-        return m_original->UploadLeaderboardScore(hSteamLeaderboard, eLeaderboardUploadScoreMethod, nScore, pScoreDetails, cScoreDetailsCount);
-    }
-
-    SteamAPICall_t AttachLeaderboardUGC(SteamLeaderboard_t hSteamLeaderboard,
-        UGCHandle_t hUGC) override
-    {
-        return m_original->AttachLeaderboardUGC(hSteamLeaderboard, hUGC);
-    }
-
-    SteamAPICall_t GetNumberOfCurrentPlayers() override
-    {
-        return m_original->GetNumberOfCurrentPlayers();
-    }
-
-    SteamAPICall_t RequestGlobalAchievementPercentages() override
-    {
-        return m_original->RequestGlobalAchievementPercentages();
-    }
-
-    int GetMostAchievedAchievementInfo(char *pchName, uint32 unNameBufLen,
-        float *pflPercent, bool *pbAchieved) override
-    {
-        return m_original->GetMostAchievedAchievementInfo(pchName, unNameBufLen, pflPercent, pbAchieved);
-    }
-
-    int GetNextMostAchievedAchievementInfo(int iIteratorPrevious,
-        char *pchName,
-        uint32 unNameBufLen,
-        float *pflPercent,
-        bool *pbAchieved) override
-    {
-        return m_original->GetNextMostAchievedAchievementInfo(iIteratorPrevious, pchName, unNameBufLen, pflPercent, pbAchieved);
-    }
-
-    bool GetAchievementAchievedPercent(const char *pchName, float *pflPercent) override
-    {
-        return m_original->GetAchievementAchievedPercent(pchName, pflPercent);
-    }
-
-    SteamAPICall_t RequestGlobalStats(int nHistoryDays) override
-    {
-        return m_original->RequestGlobalStats(nHistoryDays);
-    }
-
-    bool GetGlobalStat(const char *pchStatName, int64 *pData) override
-    {
-        return m_original->GetGlobalStat(pchStatName, pData);
-    }
-
-    bool GetGlobalStat(const char *pchStatName, double *pData) override
-    {
-        return m_original->GetGlobalStat(pchStatName, pData);
-    }
-
-    int32 GetGlobalStatHistory(const char *pchStatName, int64 *pData, uint32 cubData) override
-    {
-        return m_original->GetGlobalStatHistory(pchStatName, pData, cubData);
-    }
-
-    int32 GetGlobalStatHistory(const char *pchStatName, double *pData, uint32 cubData) override
-    {
-        return m_original->GetGlobalStatHistory(pchStatName, pData, cubData);
-    }
-
-    bool GetAchievementProgressLimits(const char *pchName, int32 *pnMinProgress, int32 *pnMaxProgress) override
-    {
-        return m_original->GetAchievementProgressLimits(pchName, pnMinProgress, pnMaxProgress);
-    }
-
-    bool GetAchievementProgressLimits(const char *pchName, float *pfMinProgress, float *pfMaxProgress) override
-    {
-        return m_original->GetAchievementProgressLimits(pchName, pfMinProgress, pfMaxProgress);
+        return original(steamIDUser);
     }
 };
 
-class SteamGameServerProxy final : public ISteamGameServer
+class SteamGameServerProxy final
 {
-private:
-    ISteamGameServer *m_original;
-
 public:
-    SteamGameServerProxy(ISteamGameServer *original)
-        : m_original{ original }
-    {
-    }
-
-    bool InitGameServer(uint32 unIP, uint16 usGamePort, uint16 usQueryPort, uint32 unFlags, AppId_t nGameAppId, const char *pchVersionString) override
+    bool InitGameServer(auto original, uint32 unIP, uint16 usGamePort, uint16 usQueryPort, uint32 unFlags, AppId_t nGameAppId, const char *pchVersionString)
     {
         // no longer present in steamworks sdk
         constexpr uint32 k_unServerFlagSecure = 2;
@@ -786,117 +346,19 @@ public:
         // i recall this wasn't used for anything important, but check anyway
         assert(nGameAppId == AppId::GetOverride());
 
-        if (m_original->InitGameServer(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString))
+        if (original(unIP, usGamePort, usQueryPort, unFlags, nGameAppId, pchVersionString))
         {
             // add the csgo_gc gametag
-            m_original->SetGameTags("csgo_gc");
+            // FIXME: can't do this with steamproxygen!!!
+            // why was this done? won't SetGameTags get called immediately after init anyway?
+            //m_original->SetGameTags("csgo_gc");
             return true;
         }
 
         return false;
     }
 
-    void SetProduct(const char *pszProduct) override
-    {
-        m_original->SetProduct(pszProduct);
-    }
-
-    void SetGameDescription(const char *pszGameDescription) override
-    {
-        m_original->SetGameDescription(pszGameDescription);
-    }
-
-    void SetModDir(const char *pszModDir) override
-    {
-        m_original->SetModDir(pszModDir);
-    }
-
-    void SetDedicatedServer(bool bDedicated) override
-    {
-        m_original->SetDedicatedServer(bDedicated);
-    }
-
-    void LogOn(const char *pszToken) override
-    {
-        m_original->LogOn(pszToken);
-    }
-
-    void LogOnAnonymous() override
-    {
-        m_original->LogOnAnonymous();
-    }
-
-    void LogOff() override
-    {
-        m_original->LogOff();
-    }
-
-    bool BLoggedOn() override
-    {
-        return m_original->BLoggedOn();
-    }
-
-    bool BSecure() override
-    {
-        return m_original->BSecure();
-    }
-
-    CSteamID GetSteamID() override
-    {
-        return m_original->GetSteamID();
-    }
-
-    bool WasRestartRequested() override
-    {
-        return m_original->WasRestartRequested();
-    }
-
-    void SetMaxPlayerCount(int cPlayersMax) override
-    {
-        m_original->SetMaxPlayerCount(cPlayersMax);
-    }
-
-    void SetBotPlayerCount(int cBotplayers) override
-    {
-        m_original->SetBotPlayerCount(cBotplayers);
-    }
-
-    void SetServerName(const char *pszServerName) override
-    {
-        m_original->SetServerName(pszServerName);
-    }
-
-    void SetMapName(const char *pszMapName) override
-    {
-        m_original->SetMapName(pszMapName);
-    }
-
-    void SetPasswordProtected(bool bPasswordProtected) override
-    {
-        m_original->SetPasswordProtected(bPasswordProtected);
-    }
-
-    void SetSpectatorPort(uint16 unSpectatorPort) override
-    {
-        m_original->SetSpectatorPort(unSpectatorPort);
-    }
-
-    void SetSpectatorServerName(const char *pszSpectatorServerName) override
-    {
-        m_original->SetSpectatorServerName(pszSpectatorServerName);
-    }
-
-    void ClearAllKeyValues() override
-    {
-        m_original->ClearAllKeyValues();
-    }
-
-    void SetKeyValue(const char *pKey, const char *pValue) override
-    {
-        m_original->SetKeyValue(pKey, pValue);
-    }
-
-    void SetGameTags(const char *pchGameTags) override
+    void SetGameTags(auto original, const char *pchGameTags)
     {
         std::string tags = pchGameTags;
 
@@ -909,32 +371,12 @@ public:
             tags.append("csgo_gc");
         }
 
-        m_original->SetGameTags(tags.c_str());
+        original(tags.c_str());
     }
 
-    void SetGameData(const char *pchGameData) override
+    EBeginAuthSessionResult BeginAuthSession(auto original, const void *pAuthTicket, int cbAuthTicket, CSteamID steamID)
     {
-        m_original->SetGameData(pchGameData);
-    }
-
-    void SetRegion(const char *pszRegion) override
-    {
-        m_original->SetRegion(pszRegion);
-    }
-
-    void SetAdvertiseServerActive(bool bActive) override
-    {
-        m_original->SetAdvertiseServerActive(bActive);
-    }
-
-    HAuthTicket GetAuthSessionTicket(void *pTicket, int cbMaxTicket, uint32 *pcbTicket) override
-    {
-        return m_original->GetAuthSessionTicket(pTicket, cbMaxTicket, pcbTicket);
-    }
-
-    EBeginAuthSessionResult BeginAuthSession(const void *pAuthTicket, int cbAuthTicket, CSteamID steamID) override
-    {
-        EBeginAuthSessionResult result = m_original->BeginAuthSession(pAuthTicket, cbAuthTicket, steamID);
+        EBeginAuthSessionResult result = original(pAuthTicket, cbAuthTicket, steamID);
         if (s_serverGC && result == k_EBeginAuthSessionResultOK)
         {
             s_serverGC->m_networking.ClientConnected(steamID.ConvertToUint64(), pAuthTicket, cbAuthTicket);
@@ -943,7 +385,7 @@ public:
         return result;
     }
 
-    void EndAuthSession(CSteamID steamID) override
+    void EndAuthSession(auto original, CSteamID steamID)
     {
         if (s_serverGC)
         {
@@ -953,168 +395,16 @@ public:
             s_serverGC->m_gc.PostToGC(GCEvent::ClientSOCacheUnsubscribe, steamID.ConvertToUint64(), nullptr, 0);
         }
 
-        m_original->EndAuthSession(steamID);
-    }
-
-    void CancelAuthTicket(HAuthTicket hAuthTicket) override
-    {
-        m_original->CancelAuthTicket(hAuthTicket);
-    }
-
-    EUserHasLicenseForAppResult UserHasLicenseForApp(CSteamID steamID, AppId_t appID) override
-    {
-        return m_original->UserHasLicenseForApp(steamID, appID);
-    }
-
-    bool RequestUserGroupStatus(CSteamID steamIDUser, CSteamID steamIDGroup) override
-    {
-        return m_original->RequestUserGroupStatus(steamIDUser, steamIDGroup);
-    }
-
-    void GetGameplayStats() override
-    {
-        m_original->GetGameplayStats();
-    }
-
-    SteamAPICall_t GetServerReputation() override
-    {
-        return m_original->GetServerReputation();
-    }
-
-    SteamIPAddress_t GetPublicIP() override
-    {
-        return m_original->GetPublicIP();
-    }
-
-    bool HandleIncomingPacket(const void *pData, int cbData, uint32 srcIP, uint16 srcPort) override
-    {
-        return m_original->HandleIncomingPacket(pData, cbData, srcIP, srcPort);
-    }
-
-    int GetNextOutgoingPacket(void *pOut, int cbMaxOut, uint32 *pNetAdr, uint16 *pPort) override
-    {
-        return m_original->GetNextOutgoingPacket(pOut, cbMaxOut, pNetAdr, pPort);
-    }
-
-    SteamAPICall_t AssociateWithClan(CSteamID steamIDClan) override
-    {
-        return m_original->AssociateWithClan(steamIDClan);
-    }
-
-    SteamAPICall_t ComputeNewPlayerCompatibility(CSteamID steamIDNewPlayer) override
-    {
-        return m_original->ComputeNewPlayerCompatibility(steamIDNewPlayer);
-    }
-
-    bool SendUserConnectAndAuthenticate_DEPRECATED(uint32 unIPClient, const void *pvAuthBlob, uint32 cubAuthBlobSize, CSteamID *pSteamIDUser) override
-    {
-        return m_original->SendUserConnectAndAuthenticate_DEPRECATED(unIPClient, pvAuthBlob, cubAuthBlobSize, pSteamIDUser);
-    }
-
-    CSteamID CreateUnauthenticatedUserConnection() override
-    {
-        return m_original->CreateUnauthenticatedUserConnection();
-    }
-
-    void SendUserDisconnect_DEPRECATED(CSteamID steamIDUser) override
-    {
-        m_original->SendUserDisconnect_DEPRECATED(steamIDUser);
-    }
-
-    bool BUpdateUserData(CSteamID steamIDUser, const char *pchPlayerName, uint32 uScore) override
-    {
-        return m_original->BUpdateUserData(steamIDUser, pchPlayerName, uScore);
-    }
-
-    void SetMasterServerHeartbeatInterval_DEPRECATED(int iHeartbeatInterval) override
-    {
-        m_original->SetMasterServerHeartbeatInterval_DEPRECATED(iHeartbeatInterval);
-    }
-
-    void ForceMasterServerHeartbeat_DEPRECATED() override
-    {
-        m_original->ForceMasterServerHeartbeat_DEPRECATED();
+        original(steamID);
     }
 };
 
-class SteamUserProxy : public ISteamUser
+class SteamUserProxy final
 {
-    ISteamUser *m_original;
-
 public:
-    SteamUserProxy(ISteamUser *original)
-        : m_original{ original }
+    HAuthTicket GetAuthSessionTicket(auto original, void *pTicket, int cbMaxTicket, uint32 *pcbTicket)
     {
-    }
-
-    HSteamUser GetHSteamUser() override
-    {
-        return m_original->GetHSteamUser();
-    }
-
-    bool BLoggedOn() override
-    {
-        return m_original->BLoggedOn();
-    }
-
-    CSteamID GetSteamID() override
-    {
-        return m_original->GetSteamID();
-    }
-
-    int InitiateGameConnection_DEPRECATED(void *pAuthBlob, int cbMaxAuthBlob, CSteamID steamIDGameServer, uint32 unIPServer, uint16 usPortServer, bool bSecure) override
-    {
-        return m_original->InitiateGameConnection_DEPRECATED(pAuthBlob, cbMaxAuthBlob, steamIDGameServer, unIPServer, usPortServer, bSecure);
-    }
-
-    void TerminateGameConnection_DEPRECATED(uint32 unIPServer, uint16 usPortServer) override
-    {
-        m_original->TerminateGameConnection_DEPRECATED(unIPServer, usPortServer);
-    }
-
-    void TrackAppUsageEvent(CGameID gameID, int eAppUsageEvent, const char *pchExtraInfo) override
-    {
-        m_original->TrackAppUsageEvent(gameID, eAppUsageEvent, pchExtraInfo);
-    }
-
-    bool GetUserDataFolder(char *pchBuffer, int cubBuffer) override
-    {
-        return m_original->GetUserDataFolder(pchBuffer, cubBuffer);
-    }
-
-    void StartVoiceRecording() override
-    {
-        m_original->StartVoiceRecording();
-    }
-
-    void StopVoiceRecording() override
-    {
-        m_original->StopVoiceRecording();
-    }
-
-    EVoiceResult GetAvailableVoice(uint32 *pcbCompressed, uint32 *pcbUncompressed_Deprecated, uint32 nUncompressedVoiceDesiredSampleRate_Deprecated) override
-    {
-        return m_original->GetAvailableVoice(pcbCompressed, pcbUncompressed_Deprecated, nUncompressedVoiceDesiredSampleRate_Deprecated);
-    }
-
-    EVoiceResult GetVoice(bool bWantCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, bool bWantUncompressed_Deprecated, void *pUncompressedDestBuffer_Deprecated, uint32 cbUncompressedDestBufferSize_Deprecated, uint32 *nUncompressBytesWritten_Deprecated, uint32 nUncompressedVoiceDesiredSampleRate_Deprecated) override
-    {
-        return m_original->GetVoice(bWantCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten, bWantUncompressed_Deprecated, pUncompressedDestBuffer_Deprecated, cbUncompressedDestBufferSize_Deprecated, nUncompressBytesWritten_Deprecated, nUncompressedVoiceDesiredSampleRate_Deprecated);
-    }
-
-    EVoiceResult DecompressVoice(const void *pCompressed, uint32 cbCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, uint32 nDesiredSampleRate) override
-    {
-        return m_original->DecompressVoice(pCompressed, cbCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten, nDesiredSampleRate);
-    }
-
-    uint32 GetVoiceOptimalSampleRate() override
-    {
-        return m_original->GetVoiceOptimalSampleRate();
-    }
-
-    HAuthTicket GetAuthSessionTicket(void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity) override
-    {
-        HAuthTicket ticket = m_original->GetAuthSessionTicket(pTicket, cbMaxTicket, pcbTicket, pSteamNetworkingIdentity);
+        HAuthTicket ticket = original(pTicket, cbMaxTicket, pcbTicket);
         if (s_clientGC && ticket != k_HAuthTicketInvalid)
         {
             s_clientGC->m_networking.SetAuthTicket(ticket, pTicket, *pcbTicket);
@@ -1123,112 +413,31 @@ public:
         return ticket;
     }
 
-    EBeginAuthSessionResult BeginAuthSession(const void *pAuthTicket, int cbAuthTicket, CSteamID steamID) override
+    HAuthTicket GetAuthSessionTicket(auto original, void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity)
     {
-        return m_original->BeginAuthSession(pAuthTicket, cbAuthTicket, steamID);
+        HAuthTicket ticket = original(pTicket, cbMaxTicket, pcbTicket, pSteamNetworkingIdentity);
+        if (s_clientGC && ticket != k_HAuthTicketInvalid)
+        {
+            s_clientGC->m_networking.SetAuthTicket(ticket, pTicket, *pcbTicket);
+        }
+
+        return ticket;
     }
 
-    void EndAuthSession(CSteamID steamID) override
-    {
-        m_original->EndAuthSession(steamID);
-    }
-
-    void CancelAuthTicket(HAuthTicket hAuthTicket) override
+    void CancelAuthTicket(auto original, HAuthTicket hAuthTicket)
     {
         if (s_clientGC)
         {
             s_clientGC->m_networking.ClearAuthTicket(hAuthTicket);
         }
 
-        m_original->CancelAuthTicket(hAuthTicket);
-    }
-
-    EUserHasLicenseForAppResult UserHasLicenseForApp(CSteamID steamID, AppId_t appID) override
-    {
-        return m_original->UserHasLicenseForApp(steamID, appID);
-    }
-
-    bool BIsBehindNAT() override
-    {
-        return m_original->BIsBehindNAT();
-    }
-
-    void AdvertiseGame(CSteamID steamIDGameServer, uint32 unIPServer, uint16 usPortServer) override
-    {
-        m_original->AdvertiseGame(steamIDGameServer, unIPServer, usPortServer);
-    }
-
-    SteamAPICall_t RequestEncryptedAppTicket(void *pDataToInclude, int cbDataToInclude) override
-    {
-        return m_original->RequestEncryptedAppTicket(pDataToInclude, cbDataToInclude);
-    }
-
-    bool GetEncryptedAppTicket(void *pTicket, int cbMaxTicket, uint32 *pcbTicket) override
-    {
-        return m_original->GetEncryptedAppTicket(pTicket, cbMaxTicket, pcbTicket);
-    }
-
-    int GetGameBadgeLevel(int nSeries, bool bFoil) override
-    {
-        return m_original->GetGameBadgeLevel(nSeries, bFoil);
-    }
-
-    int GetPlayerSteamLevel() override
-    {
-        return m_original->GetPlayerSteamLevel();
-    }
-
-    SteamAPICall_t RequestStoreAuthURL(const char *pchRedirectURL) override
-    {
-        return m_original->RequestStoreAuthURL(pchRedirectURL);
-    }
-
-    bool BIsPhoneVerified() override
-    {
-        return m_original->BIsPhoneVerified();
-    }
-
-    bool BIsTwoFactorEnabled() override
-    {
-        return m_original->BIsTwoFactorEnabled();
-    }
-
-    bool BIsPhoneIdentifying() override
-    {
-        return m_original->BIsPhoneIdentifying();
-    }
-
-    bool BIsPhoneRequiringVerification() override
-    {
-        return m_original->BIsPhoneRequiringVerification();
-    }
-
-    SteamAPICall_t GetMarketEligibility() override
-    {
-        return m_original->GetMarketEligibility();
-    }
-
-    SteamAPICall_t GetDurationControl() override
-    {
-        return m_original->GetDurationControl();
-    }
-
-    bool BSetDurationControlOnlineState(EDurationControlOnlineState eNewState) override
-    {
-        return m_original->BSetDurationControlOnlineState(eNewState);
+        original(hAuthTicket);
     }
 };
 
-class SteamMatchmakingServersProxy : public ISteamMatchmakingServers
+class SteamMatchmakingServersProxy final
 {
-    ISteamMatchmakingServers *m_original;
-
 public:
-    SteamMatchmakingServersProxy(ISteamMatchmakingServers *original)
-        : m_original{ original }
-    {
-    }
-
     static MatchMakingKeyValuePair_t *ModifyFilters(MatchMakingKeyValuePair_t *pchFilters, uint32 nFilters, std::vector<MatchMakingKeyValuePair_t> &buffer)
     {
         buffer.reserve(nFilters + 1);
@@ -1242,206 +451,283 @@ public:
         return buffer.data();
     }
 
-    HServerListRequest RequestInternetServerList(AppId_t iApp,
+    HServerListRequest RequestInternetServerList(auto original,
+        AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
-        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+        ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
 
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
-        return m_original->RequestInternetServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+        return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestLANServerList(AppId_t iApp,
-        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+    HServerListRequest RequestLANServerList(auto original,
+        AppId_t iApp,
+        ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
 
-        return m_original->RequestLANServerList(iApp, pRequestServersResponse);
+        return original(iApp, pRequestServersResponse);
     }
 
-    HServerListRequest RequestFriendsServerList(AppId_t iApp,
+    HServerListRequest RequestFriendsServerList(auto original,
+        AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
-        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+        ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
 
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
-        return m_original->RequestFriendsServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+        return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestFavoritesServerList(AppId_t iApp,
+    HServerListRequest RequestFavoritesServerList(auto original,
+        AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
-        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+        ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
 
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
-        return m_original->RequestFavoritesServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+        return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestHistoryServerList(AppId_t iApp,
+    HServerListRequest RequestHistoryServerList(auto original,
+        AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
-        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+        ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
 
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
-        return m_original->RequestHistoryServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
+        return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestSpectatorServerList(AppId_t iApp,
+    HServerListRequest RequestSpectatorServerList(auto original,
+        AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
-        ISteamMatchmakingServerListResponse *pRequestServersResponse) override
+        ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
 
         std::vector<MatchMakingKeyValuePair_t> buffer;
         MatchMakingKeyValuePair_t *filters = ModifyFilters(*ppchFilters, nFilters, buffer);
-        return m_original->RequestSpectatorServerList(iApp, &filters, buffer.size(), pRequestServersResponse);
-    }
-
-    void ReleaseRequest(HServerListRequest hServerListRequest) override
-    {
-        m_original->ReleaseRequest(hServerListRequest);
-    }
-
-    gameserveritem_t *GetServerDetails(HServerListRequest hRequest, int iServer) override
-    {
-        return m_original->GetServerDetails(hRequest, iServer);
-    }
-
-    void CancelQuery(HServerListRequest hRequest) override
-    {
-        m_original->CancelQuery(hRequest);
-    }
-
-    void RefreshQuery(HServerListRequest hRequest) override
-    {
-        m_original->RefreshQuery(hRequest);
-    }
-
-    bool IsRefreshing(HServerListRequest hRequest) override
-    {
-        return m_original->IsRefreshing(hRequest);
-    }
-
-    int GetServerCount(HServerListRequest hRequest) override
-    {
-        return m_original->GetServerCount(hRequest);
-    }
-
-    void RefreshServer(HServerListRequest hRequest, int iServer) override
-    {
-        m_original->RefreshServer(hRequest, iServer);
-    }
-
-    HServerQuery PingServer(uint32 unIP, uint16 usPort, ISteamMatchmakingPingResponse *pRequestServersResponse) override
-    {
-        return m_original->PingServer(unIP, usPort, pRequestServersResponse);
-    }
-
-    HServerQuery PlayerDetails(uint32 unIP, uint16 usPort, ISteamMatchmakingPlayersResponse *pRequestServersResponse) override
-    {
-        return m_original->PlayerDetails(unIP, usPort, pRequestServersResponse);
-    }
-
-    HServerQuery ServerRules(uint32 unIP, uint16 usPort, ISteamMatchmakingRulesResponse *pRequestServersResponse) override
-    {
-        return m_original->ServerRules(unIP, usPort, pRequestServersResponse);
-    }
-
-    void CancelServerQuery(HServerQuery hServerQuery) override
-    {
-        m_original->CancelServerQuery(hServerQuery);
+        return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 };
 
-template<typename Interface, typename Proxy, typename... Args>
-inline Interface *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
+// now generate the proxy glue...
+#include <proxy/steamgamecoordinatorproxy001.h>
+#include <proxy/steamgameserverproxy010.h>
+#include <proxy/steamgameserverproxy011.h>
+#include <proxy/steamgameserverproxy012.h>
+#include <proxy/steamgameserverproxy013.h>
+#include <proxy/steamgameserverproxy014.h>
+#include <proxy/steammatchmakingserversproxy002.h>
+#include <proxy/steamuserproxy014.h>
+#include <proxy/steamuserproxy015.h>
+#include <proxy/steamuserproxy016.h>
+#include <proxy/steamuserproxy017.h>
+#include <proxy/steamuserproxy018.h>
+#include <proxy/steamuserproxy019.h>
+#include <proxy/steamuserproxy020.h>
+#include <proxy/steamuserproxy021.h>
+#include <proxy/steamuserproxy022.h>
+#include <proxy/steamuserstatsproxy009.h>
+#include <proxy/steamuserstatsproxy010.h>
+#include <proxy/steamuserstatsproxy011.h>
+#include <proxy/steamuserstatsproxy012.h>
+#include <proxy/steamutilsproxy005.h>
+#include <proxy/steamutilsproxy006.h>
+#include <proxy/steamutilsproxy007.h>
+#include <proxy/steamutilsproxy008.h>
+#include <proxy/steamutilsproxy009.h>
+#include <proxy/steamutilsproxy010.h>
+
+static ISteamClient *s_actualSteamClient;
+
+template<typename Proxy, typename... Args>
+inline Proxy *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
 {
     if (!pointer)
     {
         pointer = std::make_unique<Proxy>(std::forward<Args>(args)...);
     }
 
-    return static_cast<Interface *>(pointer.get());
+    return pointer.get();
+}
+
+static uint64_t GetUserSteamId(HSteamPipe pipe, HSteamUser user)
+{
+    if (!user)
+    {
+        // no associated user
+        return 0;
+    }
+
+    if (pipe == SteamGameServer_GetHSteamPipe())
+    {
+        // it's a gameserver, not an individual
+        return 0;
+    }
+
+    ISteamUser *interface = s_actualSteamClient->GetISteamUser(user, pipe, STEAMUSER_INTERFACE_VERSION);
+    if (!interface)
+    {
+        Platform::Error("Could not get %s", STEAMUSER_INTERFACE_VERSION);
+    }
+
+    CSteamID steamId = interface->GetSteamID();
+    assert(steamId.IsValid());
+    return steamId.ConvertToUint64();
+}
+
+static bool VersionNameIs(const char *version, const char *prefix)
+{
+    size_t prefixLength = strlen(prefix);
+    if (!strncmp(version, prefix, prefixLength))
+    {
+        if (isdigit(static_cast<unsigned char>(version[prefixLength])))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool VersionNumberIs(const char *version, const char *suffix)
+{
+    return std::string_view{ version }.ends_with(suffix);
 }
 
 class SteamInterfaceProxy
 {
 public:
-    SteamInterfaceProxy(HSteamPipe pipe)
-        : m_pipe{ pipe }
+    SteamInterfaceProxy(HSteamPipe pipe, HSteamUser user)
+        : m_steamPipe{ pipe }
+        , m_steamUser{ user }
     {
     }
 
     void *GetInterface(const char *version, void *original)
     {
-        if (InterfaceMatches(version, STEAMGAMECOORDINATOR_INTERFACE_VERSION))
+        auto it = m_interfaces.find(version);
+        if (it != m_interfaces.end())
         {
-            // pass 0 as steamid for servers so the wrapper knows it's for a server
-            uint64_t steamId = 0;
-
-            if (SteamGameServer_GetHSteamPipe() != m_pipe)
-            {
-                steamId = SteamUser()->GetSteamID().ConvertToUint64();
-            }
-
-            return GetOrCreate<ISteamGameCoordinator>(m_steamGameCoordinator, steamId);
-        }
-        else if (InterfaceMatches(version, STEAMUTILS_INTERFACE_VERSION))
-        {
-            return GetOrCreate<ISteamUtils>(m_steamUtils, static_cast<ISteamUtils *>(original));
-        }
-        else if (InterfaceMatches(version, STEAMUSERSTATS_INTERFACE_VERSION))
-        {
-            return GetOrCreate<ISteamUserStats>(m_steamUserStats, static_cast<ISteamUserStats *>(original));
-        }
-        else if (InterfaceMatches(version, STEAMGAMESERVER_INTERFACE_VERSION))
-        {
-            return GetOrCreate<ISteamGameServer>(m_steamGameServer, static_cast<ISteamGameServer *>(original));
-        }
-        else if (InterfaceMatches(version, STEAMUSER_INTERFACE_VERSION))
-        {
-            return GetOrCreate<ISteamUser>(m_steamUser, static_cast<ISteamUser *>(original));
-        }
-        else if (InterfaceMatches(version, STEAMMATCHMAKINGSERVERS_INTERFACE_VERSION))
-        {
-            return GetOrCreate<ISteamMatchmakingServers>(m_steamMatchmakingServers, static_cast<ISteamMatchmakingServers *>(original));
+            return it->second.interface;
         }
 
+        // create the interface thunk and shared data on-demand
+#define PROXY_INTERFACE(base, number, ...) \
+    if (VersionNumberIs(version, #number)) \
+    { \
+        auto *proxy = new base##Proxy##number{ static_cast<I##base##number *>(original), GetOrCreate(m_proxy##base, ##__VA_ARGS__) }; \
+        void *interface = static_cast<I##base##number *>(proxy); \
+        m_interfaces.emplace(version, InterfaceProxy{ interface, std::unique_ptr<void, void (*)(void *)>(proxy, [](void *p) { delete static_cast<base##Proxy##number *>(p); }) }); \
+        return interface; \
+    }
+
+        if (VersionNameIs(version, "SteamGameCoordinator"))
+        {
+            PROXY_INTERFACE(SteamGameCoordinator, 001, GetUserSteamId(m_steamPipe, m_steamUser));
+            Platform::Error("Can't hook %s", version);
+        }
+
+        if (VersionNameIs(version, "SteamGameServer"))
+        {
+            PROXY_INTERFACE(SteamGameServer, 010);
+            PROXY_INTERFACE(SteamGameServer, 011);
+            PROXY_INTERFACE(SteamGameServer, 012);
+            PROXY_INTERFACE(SteamGameServer, 013);
+            PROXY_INTERFACE(SteamGameServer, 014);
+            Platform::Error("Can't hook %s", version);
+        }
+
+        if (VersionNameIs(version, "SteamMatchMakingServers"))
+        {
+            PROXY_INTERFACE(SteamMatchmakingServers, 002);
+            Platform::Error("Can't hook %s", version);
+        }
+
+        if (VersionNameIs(version, "SteamUser"))
+        {
+            PROXY_INTERFACE(SteamUser, 014);
+            PROXY_INTERFACE(SteamUser, 015);
+            PROXY_INTERFACE(SteamUser, 016);
+            PROXY_INTERFACE(SteamUser, 017);
+            PROXY_INTERFACE(SteamUser, 018);
+            PROXY_INTERFACE(SteamUser, 019);
+            PROXY_INTERFACE(SteamUser, 020);
+            PROXY_INTERFACE(SteamUser, 021);
+            PROXY_INTERFACE(SteamUser, 022);
+            Platform::Error("Can't hook %s", version);
+        }
+
+        if (VersionNameIs(version, "STEAMUSERSTATS_INTERFACE_VERSION"))
+        {
+            PROXY_INTERFACE(SteamUserStats, 009);
+            PROXY_INTERFACE(SteamUserStats, 010);
+            PROXY_INTERFACE(SteamUserStats, 011);
+            PROXY_INTERFACE(SteamUserStats, 012);
+            Platform::Error("Can't hook %s", version);
+        }
+
+        if (VersionNameIs(version, "SteamUtils"))
+        {
+            PROXY_INTERFACE(SteamUtils, 005);
+            PROXY_INTERFACE(SteamUtils, 006);
+            PROXY_INTERFACE(SteamUtils, 007);
+            PROXY_INTERFACE(SteamUtils, 008);
+            PROXY_INTERFACE(SteamUtils, 009);
+            PROXY_INTERFACE(SteamUtils, 010);
+            Platform::Error("Can't hook %s", version);
+        }
+#undef PROXY_INTERFACE
+
+        // not proxied
         return nullptr;
     }
 
 private:
-    const HSteamPipe m_pipe;
+    struct InterfaceProxy
+    {
+        void *interface;
+        std::unique_ptr<void, void (*)(void *)> owner;
+    };
 
-    std::unique_ptr<SteamGameCoordinatorProxy> m_steamGameCoordinator;
-    std::unique_ptr<SteamUtilsProxy> m_steamUtils;
-    std::unique_ptr<SteamUserStatsProxy> m_steamUserStats;
-    std::unique_ptr<SteamGameServerProxy> m_steamGameServer;
-    std::unique_ptr<SteamUserProxy> m_steamUser;
-    std::unique_ptr<SteamMatchmakingServersProxy> m_steamMatchmakingServers;
+    HSteamPipe m_steamPipe;
+    HSteamUser m_steamUser;
+
+    // steam interface thunks
+    std::unordered_map<std::string, InterfaceProxy> m_interfaces;
+
+    // version agnostic proxy data
+    std::unique_ptr<SteamGameCoordinatorProxy> m_proxySteamGameCoordinator;
+    std::unique_ptr<SteamUtilsProxy> m_proxySteamUtils;
+    std::unique_ptr<SteamUserStatsProxy> m_proxySteamUserStats;
+    std::unique_ptr<SteamGameServerProxy> m_proxySteamGameServer;
+    std::unique_ptr<SteamUserProxy> m_proxySteamUser;
+    std::unique_ptr<SteamMatchmakingServersProxy> m_proxySteamMatchmakingServers;
 };
 
-class SteamClientProxy : public ISteamClient
+class SteamClientProxy final
 {
-    ISteamClient *m_original{};
-    std::unordered_map<uint64_t, SteamInterfaceProxy> m_proxies;
+    std::map<uint64_t, SteamInterfaceProxy> m_proxies;
 
-    uint64_t ProxyKey(HSteamPipe pipe, HSteamUser user)
+    uint64_t ProxyKey(uint32_t pipe, uint32_t user)
     {
-        return static_cast<uint64_t>(pipe) | (static_cast<uint64_t>(user) << 32);
+        return static_cast<uint64_t>(user) | (static_cast<uint64_t>(pipe) << 32);
     }
 
     SteamInterfaceProxy &GetProxy(HSteamPipe pipe, HSteamUser user, [[maybe_unused]] bool allowNoUser)
@@ -1449,64 +735,29 @@ class SteamClientProxy : public ISteamClient
         assert(pipe);
         assert(user || allowNoUser);
 
-        auto result = m_proxies.try_emplace(ProxyKey(pipe, user), pipe);
+        auto result = m_proxies.try_emplace(ProxyKey(pipe, user), pipe, user);
         return result.first->second;
     }
 
-    void RemoveProxy(HSteamPipe pipe, HSteamUser user)
-    {
-        auto it = m_proxies.find(ProxyKey(pipe, user));
-        if (it != m_proxies.end())
-        {
-            m_proxies.erase(it);
-        }
-        else
-        {
-            assert(false);
-        }
-    }
-
 public:
-    void SetOriginal(ISteamClient *original)
-    {
-        assert(!m_original || m_original == original);
-        m_original = original;
-    }
-
     ~SteamClientProxy()
     {
         // debug schizo
         assert(m_proxies.empty());
     }
 
-    HSteamPipe CreateSteamPipe() override
+    bool BReleaseSteamPipe(auto original, HSteamPipe hSteamPipe)
     {
-        return m_original->CreateSteamPipe();
+        auto lo = m_proxies.lower_bound(ProxyKey(hSteamPipe, 0));
+        auto hi = m_proxies.upper_bound(ProxyKey(hSteamPipe, std::numeric_limits<uint32_t>::max()));
+        m_proxies.erase(lo, hi);
+        return original(hSteamPipe);
     }
 
-    bool BReleaseSteamPipe(HSteamPipe hSteamPipe) override
+    void ReleaseUser(auto original, HSteamPipe hSteamPipe, HSteamUser hUser)
     {
-        // remove proxies not tied to a specific user, e.g. ISteamUtils
-        RemoveProxy(hSteamPipe, 0);
-
-        return m_original->BReleaseSteamPipe(hSteamPipe);
-    }
-
-    HSteamUser ConnectToGlobalUser(HSteamPipe hSteamPipe) override
-    {
-        return m_original->ConnectToGlobalUser(hSteamPipe);
-    }
-
-    HSteamUser CreateLocalUser(HSteamPipe *phSteamPipe, EAccountType eAccountType) override
-    {
-        return m_original->CreateLocalUser(phSteamPipe, eAccountType);
-    }
-
-    void ReleaseUser(HSteamPipe hSteamPipe, HSteamUser hUser) override
-    {
-        RemoveProxy(hSteamPipe, hUser);
-
-        m_original->ReleaseUser(hSteamPipe, hUser);
+        m_proxies.erase(ProxyKey(hSteamPipe, hUser));
+        original(hSteamPipe, hUser);
     }
 
     template<typename T>
@@ -1517,197 +768,57 @@ public:
         return result ? result : original;
     }
 
-    // temp macro
-#define PROXY_INTERFACE(func, user, pipe, version, ...) ProxyInterface(m_original->func(user, pipe, version), user, pipe, version, ##__VA_ARGS__)
-
-    ISteamUser *GetISteamUser(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
+    ISteamUser *GetISteamUser(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
-        return PROXY_INTERFACE(GetISteamUser, hSteamUser, hSteamPipe, pchVersion);
+        return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    ISteamGameServer *GetISteamGameServer(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
+    ISteamGameServer *GetISteamGameServer(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
-        return PROXY_INTERFACE(GetISteamGameServer, hSteamUser, hSteamPipe, pchVersion);
+        return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    void SetLocalIPBinding(const SteamIPAddress_t &unIP, uint16 usPort) override
+    ISteamUtils *GetISteamUtils(auto original, HSteamPipe hSteamPipe, const char *pchVersion)
     {
-        m_original->SetLocalIPBinding(unIP, usPort);
+        return ProxyInterface(original(hSteamPipe, pchVersion), 0, hSteamPipe, pchVersion, true);
     }
 
-    ISteamFriends *GetISteamFriends(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
+    ISteamMatchmakingServers *GetISteamMatchmakingServers(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
-        return PROXY_INTERFACE(GetISteamFriends, hSteamUser, hSteamPipe, pchVersion);
+        return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    ISteamUtils *GetISteamUtils(HSteamPipe hSteamPipe, const char *pchVersion) override
+    void *GetISteamGenericInterface(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
-        return ProxyInterface(m_original->GetISteamUtils(hSteamPipe, pchVersion), 0, hSteamPipe, pchVersion, true);
+        return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion, true);
     }
 
-    ISteamMatchmaking *GetISteamMatchmaking(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
+    ISteamUserStats *GetISteamUserStats(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
-        return PROXY_INTERFACE(GetISteamMatchmaking, hSteamUser, hSteamPipe, pchVersion);
+        return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    ISteamMatchmakingServers *GetISteamMatchmakingServers(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamMatchmakingServers, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    void *GetISteamGenericInterface(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamGenericInterface, hSteamUser, hSteamPipe, pchVersion, true);
-    }
-
-    ISteamUserStats *GetISteamUserStats(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamUserStats, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamGameServerStats *GetISteamGameServerStats(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamGameServerStats, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamApps *GetISteamApps(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamApps, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamNetworking *GetISteamNetworking(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamNetworking, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamRemoteStorage *GetISteamRemoteStorage(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamRemoteStorage, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamScreenshots *GetISteamScreenshots(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamScreenshots, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamGameSearch *GetISteamGameSearch(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamGameSearch, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    void RunFrame() override
-    {
-        m_original->RunFrame();
-    }
-
-    uint32 GetIPCCallCount() override
-    {
-        return m_original->GetIPCCallCount();
-    }
-
-    void SetWarningMessageHook(SteamAPIWarningMessageHook_t pFunction) override
-    {
-        m_original->SetWarningMessageHook(pFunction);
-    }
-
-    bool BShutdownIfAllPipesClosed() override
-    {
-        return m_original->BShutdownIfAllPipesClosed();
-    }
-
-    ISteamHTTP *GetISteamHTTP(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamHTTP, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    void *DEPRECATED_GetISteamUnifiedMessages(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(DEPRECATED_GetISteamUnifiedMessages, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamController *GetISteamController(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamController, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamUGC *GetISteamUGC(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamUGC, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamAppList *GetISteamAppList(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamAppList, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamMusic *GetISteamMusic(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamMusic, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamMusicRemote *GetISteamMusicRemote(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamMusicRemote, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamHTMLSurface *GetISteamHTMLSurface(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamHTMLSurface, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    void DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess(void (*func)()) override
-    {
-        m_original->DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess(func);
-    }
-
-    void DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess(void (*func)()) override
-    {
-        m_original->DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess(func);
-    }
-
-    void Set_SteamAPI_CCheckCallbackRegisteredInProcess(SteamAPI_CheckCallbackRegistered_t func) override
-    {
-        m_original->Set_SteamAPI_CCheckCallbackRegisteredInProcess(func);
-    }
-
-    ISteamInventory *GetISteamInventory(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamInventory, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamVideo *GetISteamVideo(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamVideo, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamParentalSettings *GetISteamParentalSettings(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamParentalSettings, hSteamuser, hSteamPipe, pchVersion);
-    }
-
-    ISteamInput *GetISteamInput(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamInput, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamParties *GetISteamParties(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamParties, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    ISteamRemotePlay *GetISteamRemotePlay(HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion) override
-    {
-        return PROXY_INTERFACE(GetISteamRemotePlay, hSteamUser, hSteamPipe, pchVersion);
-    }
-
-    void DestroyAllInterfaces() override
+    void DestroyAllInterfaces(auto original)
     {
         m_proxies.clear();
-        m_original->DestroyAllInterfaces();
+        original();
     }
 };
 
 static SteamClientProxy s_steamClientProxy;
+
+// steamclient proxy glue
+#include <proxy/steamclientproxy010.h>
+#include <proxy/steamclientproxy011.h>
+#include <proxy/steamclientproxy012.h>
+#include <proxy/steamclientproxy013.h>
+#include <proxy/steamclientproxy014.h>
+#include <proxy/steamclientproxy015.h>
+#include <proxy/steamclientproxy016.h>
+#include <proxy/steamclientproxy017.h>
+#include <proxy/steamclientproxy018.h>
+#include <proxy/steamclientproxy019.h>
+#include <proxy/steamclientproxy020.h>
 
 static void *(*Og_CreateInterface)(const char *, int *errorCode);
 
@@ -1715,10 +826,28 @@ static void *Hk_CreateInterface(const char *name, int *errorCode)
 {
     void *result = Og_CreateInterface(name, errorCode);
 
-    if (InterfaceMatches(name, STEAMCLIENT_INTERFACE_VERSION))
+    if (VersionNameIs(name, "SteamClient"))
     {
-        s_steamClientProxy.SetOriginal(static_cast<ISteamClient *>(result));
-        return &s_steamClientProxy;
+        // this assumes the original pointer won't change, which it shouln't
+#define CHECK_STEAMCLIENT(version) \
+    if (VersionNumberIs(name, #version)) \
+    { \
+        static SteamClientProxy##version proxy{ static_cast<ISteamClient##version *>(result), &s_steamClientProxy }; \
+        return static_cast<ISteamClient##version *>(&proxy); \
+    }
+        CHECK_STEAMCLIENT(020)
+        CHECK_STEAMCLIENT(019)
+        CHECK_STEAMCLIENT(018)
+        CHECK_STEAMCLIENT(017)
+        CHECK_STEAMCLIENT(016)
+        CHECK_STEAMCLIENT(015)
+        CHECK_STEAMCLIENT(014)
+        CHECK_STEAMCLIENT(013)
+        CHECK_STEAMCLIENT(012)
+        CHECK_STEAMCLIENT(011)
+        CHECK_STEAMCLIENT(010)
+#undef CHECK_STEAMCLIENT
+        Platform::Error("Can't hook %s", name);
     }
 
     return result;
@@ -1819,18 +948,25 @@ public:
     // runs callbacks matching id immediately
     void RunCallback(bool server, int id, void *param)
     {
-        for (const CallbackHook &hook : m_hooks)
+        // ported over the schizo list even though csgo_gc doesn't hook such
+        // callbacks (ones removing/inserting callbacks during the dispatch)
+        for (auto it = m_hooks.begin(); it != m_hooks.end();)
         {
+            auto next = std::next(it);
+
+            const CallbackHook &hook = *it;
             bool serverCallback = static_cast<CallbackAccessor *>(hook.callback)->IsGameServer();
             if (server == serverCallback && hook.id == id)
             {
                 hook.callback->Run(param);
             }
+
+            it = next;
         }
     }
 
 private:
-    std::vector<CallbackHook> m_hooks;
+    std::list<CallbackHook> m_hooks;
 };
 
 static CallbackHooks s_callbackHooks;
@@ -2067,7 +1203,21 @@ void SteamHookInstall(bool dedicated)
         Platform::Error("Could not get steamclient factory");
     }
 
+    // see if we should write funchook logs to file
+    if (GetConfig().GetLogOutput() == LogOutputFile)
+    {
+        // same file as gc logs... both will open, append, and close so it's fine
+        funchook_set_debug_file("gc_log.txt");
+    }
+
     INLINE_HOOK(CreateInterface);
+
+    // get the actual latest steamclient instance
+    s_actualSteamClient = static_cast<ISteamClient *>(Og_CreateInterface(STEAMCLIENT_INTERFACE_VERSION, nullptr));
+    if (!s_actualSteamClient)
+    {
+        Platform::Error("Could not get %s", STEAMCLIENT_INTERFACE_VERSION);
+    }
 
     // steam api hooks for gc callbacks
     INLINE_HOOK(SteamAPI_RegisterCallback);

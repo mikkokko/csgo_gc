@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(csgo_gc)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(IS_32BIT ON)

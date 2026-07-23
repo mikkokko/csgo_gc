@@ -6,6 +6,7 @@
 #include <atomic>
 #include <charconv>
 #include <condition_variable>
+#include <list>
 #include <optional>
 #include <queue>
 #include <random>
