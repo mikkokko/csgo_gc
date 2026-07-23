@@ -2,8 +2,10 @@
 #include "graffiti.h"
 #include "platform.h"
 
-#include <openssl/evp.h>
-#include <openssl/x509.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/md.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
 
 namespace Graffiti
 {
@@ -76,42 +78,53 @@ static const uint8_t PrivateKeyGC[] = {
     0xA4, 0xFE, 0xAA, 0x65, 0xF3, 0x73, 0x95, 0x97
 };
 
-static EVP_PKEY *s_privateKey;
+static bool s_initialized;
+static mbedtls_pk_context s_privateKey;
+static mbedtls_ctr_drbg_context s_ctrDrbg;
+static mbedtls_entropy_context s_entropy;
 
 void Initialize()
 {
-    if (s_privateKey)
+    if (s_initialized)
     {
-        // already patched
         return;
     }
 
-    const uint8_t *p = PrivateKeyGC;
-    s_privateKey = d2i_PrivateKey(EVP_PKEY_RSA, nullptr, &p, sizeof(PrivateKeyGC));
-    if (!s_privateKey)
+    mbedtls_pk_init(&s_privateKey);
+    mbedtls_entropy_init(&s_entropy);
+    mbedtls_ctr_drbg_init(&s_ctrDrbg);
+
+    if (mbedtls_ctr_drbg_seed(&s_ctrDrbg, mbedtls_entropy_func, &s_entropy, nullptr, 0) != 0)
+    {
+        assert(false);
+        return;
+    }
+
+    if (mbedtls_pk_parse_key(&s_privateKey, PrivateKeyGC, sizeof(PrivateKeyGC), nullptr, 0, mbedtls_ctr_drbg_random, &s_ctrDrbg) != 0)
     {
         assert(false);
         return;
     }
 
     uint8_t publicKey[sizeof(PublicKeyValve)];
-    uint8_t *out = publicKey;
-    int pubkeySize = i2d_PUBKEY(s_privateKey, &out);
-    if (pubkeySize != sizeof(publicKey))
+    int ret = mbedtls_pk_write_pubkey_der(&s_privateKey, publicKey, sizeof(publicKey));
+    if (ret != sizeof(PublicKeyValve))
     {
         assert(false);
         return;
     }
 
-    if (!Platform::PatchGraffitiPublicKey("client", PublicKeyValve, publicKey, sizeof(publicKey)))
+    if (!Platform::PatchGraffitiPublicKey("client", PublicKeyValve, publicKey, sizeof(PublicKeyValve)))
     {
         Platform::Print("Failed to patch graffiti public key in client! Graffiti will not work\n");
     }
 
-    if (!Platform::PatchGraffitiPublicKey("server", PublicKeyValve, publicKey, sizeof(publicKey)))
+    if (!Platform::PatchGraffitiPublicKey("server", PublicKeyValve, publicKey, sizeof(PublicKeyValve)))
     {
         Platform::Print("Failed to patch graffiti public key in server! Graffiti will not work\n");
     }
+
+    s_initialized = true;
 }
 
 template<typename T>
@@ -159,7 +172,7 @@ static void BuildBufferToSign(std::vector<uint8_t> &buffer, const PlayerDecalDig
 
 bool SignMessage(PlayerDecalDigitalSignature &message)
 {
-    if (!s_privateKey)
+    if (!s_initialized)
     {
         return false;
     }
@@ -167,23 +180,22 @@ bool SignMessage(PlayerDecalDigitalSignature &message)
     std::vector<uint8_t> bufferToSign;
     BuildBufferToSign(bufferToSign, message);
 
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    uint8_t hash[20];
+    if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), bufferToSign.data(), bufferToSign.size(), hash) != 0)
+    {
+        return false;
+    }
 
-    EVP_PKEY_CTX *pctx;
-    EVP_DigestSignInit(ctx, &pctx, EVP_sha1(), nullptr, s_privateKey);
-    EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PADDING);
-
+    uint8_t signature[128];
     size_t signatureLength;
-    EVP_DigestSign(ctx, nullptr, &signatureLength, bufferToSign.data(), bufferToSign.size());
+    if (mbedtls_pk_sign(&s_privateKey, MBEDTLS_MD_SHA1, hash, sizeof(hash), signature, sizeof(signature), &signatureLength, mbedtls_ctr_drbg_random, &s_ctrDrbg) != 0)
+    {
+        return false;
+    }
 
-    std::string signature;
-    signature.resize(signatureLength);
-    EVP_DigestSign(ctx, reinterpret_cast<uint8_t *>(signature.data()), &signatureLength, bufferToSign.data(), bufferToSign.size());
-    signature.resize(signatureLength);
+    assert(signatureLength == sizeof(signature));
 
-    EVP_MD_CTX_free(ctx);
-
-    message.set_signature(signature);
+    message.mutable_signature()->assign(reinterpret_cast<char *>(signature), signatureLength);
     return true;
 }
 

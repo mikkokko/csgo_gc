@@ -1,6 +1,6 @@
 project(csgo_gc)
 
-find_package(OpenSSL CONFIG REQUIRED)
+find_package(MbedTLS CONFIG REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
 
 # funchook and its deps get pulled in via FetchContent
@@ -70,7 +70,7 @@ protobuf_generate(
     PROTOC_OUT_DIR ${PROTOC_OUT_DIR})
 
 target_link_libraries(csgo_gc PRIVATE
-    OpenSSL::Crypto
+    MbedTLS::mbedcrypto
     protobuf::libprotobuf-lite
     funchook-static
     steam_api)
