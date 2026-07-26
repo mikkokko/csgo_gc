@@ -31,6 +31,11 @@ class ISteamMasterServerUpdater;
 class ISteamUnifiedMessages;
 typedef void (*SteamAPI_PostAPIResultInProcess_t)(SteamAPICall_t, void *, uint32, int);
 
+static ISteamClient *s_actualSteamClient;
+
+// FIXME: this can be factored out!!! legacy trauma for global gc insstances
+static HSteamPipe s_serverSteamPipe;
+
 // UserStatsReceived_t fails with the new csgo appid, which causes gc callbacks to not run
 // to work around this, spoof user stats requests when running under this appid specifically
 // we also need to patch serverbrowser to allow for appids over 900...
@@ -137,24 +142,66 @@ public:
 static GCWrapper<ClientGC, NetworkingClient> *s_clientGC;
 static GCWrapper<ServerGC, NetworkingServer> *s_serverGC;
 
+// clunky!!! we need access to this for... some reason
+// fetched when s_serverGC is initalized, nulled when it's destroyed
+static ISteamGameServer *s_steamGameServer;
+
+static uint64_t GetUserSteamId(HSteamPipe pipe, HSteamUser user)
+{
+    ISteamUser *interface = s_actualSteamClient->GetISteamUser(user, pipe, STEAMUSER_INTERFACE_VERSION);
+    if (!interface)
+    {
+        Platform::Error("Could not get %s", STEAMUSER_INTERFACE_VERSION);
+    }
+
+    CSteamID steamId = interface->GetSteamID();
+    assert(steamId.IsValid());
+    return steamId.ConvertToUint64();
+}
+
+static ISteamNetworkingMessages *GetSteamNetworkingMessages(HSteamPipe pipe, HSteamUser user)
+{
+    void *interface = s_actualSteamClient->GetISteamGenericInterface(user, pipe, STEAMNETWORKINGMESSAGES_INTERFACE_VERSION);
+    if (!interface)
+    {
+        Platform::Error("Could not get %s", STEAMNETWORKINGMESSAGES_INTERFACE_VERSION);
+    }
+
+    return static_cast<ISteamNetworkingMessages *>(interface);
+}
+
+static ISteamGameServer *GetSteamGameServer(HSteamPipe pipe, HSteamUser user)
+{
+    ISteamGameServer *interface = s_actualSteamClient->GetISteamGameServer(user, pipe, STEAMGAMESERVER_INTERFACE_VERSION);
+    if (!interface)
+    {
+        Platform::Error("Could not get %s", STEAMGAMESERVER_INTERFACE_VERSION);
+    }
+
+    return interface;
+}
+
 // this class sucks but we need to do it this way because
 class SteamGameCoordinatorProxy final
 {
     const bool m_server;
 
 public:
-    SteamGameCoordinatorProxy(uint64_t userSteamId)
-        : m_server{ !userSteamId }
+    SteamGameCoordinatorProxy(HSteamPipe pipe, HSteamUser user)
+        : m_server{ pipe == s_serverSteamPipe }
     {
         if (m_server)
         {
             assert(!s_serverGC);
-            s_serverGC = new GCWrapper<ServerGC, NetworkingServer>{ SteamGameServerNetworkingMessages() };
+            s_serverGC = new GCWrapper<ServerGC, NetworkingServer>{ GetSteamNetworkingMessages(pipe, user) };
+
+            assert(!s_steamGameServer);
+            s_steamGameServer = GetSteamGameServer(pipe, user);
         }
         else
         {
             assert(!s_clientGC);
-            s_clientGC = new GCWrapper<ClientGC, NetworkingClient>{ SteamNetworkingMessages(), userSteamId };
+            s_clientGC = new GCWrapper<ClientGC, NetworkingClient>{ GetSteamNetworkingMessages(pipe, user), GetUserSteamId(pipe, user) };
         }
     }
 
@@ -165,6 +212,9 @@ public:
             assert(s_serverGC);
             delete s_serverGC;
             s_serverGC = nullptr;
+
+            assert(s_steamGameServer);
+            s_steamGameServer = nullptr;
         }
         else
         {
@@ -547,14 +597,13 @@ public:
 #include <proxy/steamuserstatsproxy010.h>
 #include <proxy/steamuserstatsproxy011.h>
 #include <proxy/steamuserstatsproxy012.h>
+#include <proxy/steamutilsproxy002.h>
 #include <proxy/steamutilsproxy005.h>
 #include <proxy/steamutilsproxy006.h>
 #include <proxy/steamutilsproxy007.h>
 #include <proxy/steamutilsproxy008.h>
 #include <proxy/steamutilsproxy009.h>
 #include <proxy/steamutilsproxy010.h>
-
-static ISteamClient *s_actualSteamClient;
 
 template<typename Proxy, typename... Args>
 inline Proxy *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
@@ -565,31 +614,6 @@ inline Proxy *GetOrCreate(std::unique_ptr<Proxy> &pointer, Args &&...args)
     }
 
     return pointer.get();
-}
-
-static uint64_t GetUserSteamId(HSteamPipe pipe, HSteamUser user)
-{
-    if (!user)
-    {
-        // no associated user
-        return 0;
-    }
-
-    if (pipe == SteamGameServer_GetHSteamPipe())
-    {
-        // it's a gameserver, not an individual
-        return 0;
-    }
-
-    ISteamUser *interface = s_actualSteamClient->GetISteamUser(user, pipe, STEAMUSER_INTERFACE_VERSION);
-    if (!interface)
-    {
-        Platform::Error("Could not get %s", STEAMUSER_INTERFACE_VERSION);
-    }
-
-    CSteamID steamId = interface->GetSteamID();
-    assert(steamId.IsValid());
-    return steamId.ConvertToUint64();
 }
 
 static bool VersionNameIs(const char *version, const char *prefix)
@@ -640,7 +664,7 @@ public:
 
         if (VersionNameIs(version, "SteamGameCoordinator"))
         {
-            PROXY_INTERFACE(SteamGameCoordinator, 001, GetUserSteamId(m_steamPipe, m_steamUser));
+            PROXY_INTERFACE(SteamGameCoordinator, 001, m_steamPipe, m_steamUser);
             Platform::Error("Can't hook %s", version);
         }
 
@@ -685,6 +709,10 @@ public:
 
         if (VersionNameIs(version, "SteamUtils"))
         {
+            // old csgo builds fetch SteamUtils with a stale version...
+            // technically no need to handle this, but do it for completeness sake
+            PROXY_INTERFACE(SteamUtils, 002);
+
             PROXY_INTERFACE(SteamUtils, 005);
             PROXY_INTERFACE(SteamUtils, 006);
             PROXY_INTERFACE(SteamUtils, 007);
@@ -748,10 +776,27 @@ public:
 
     bool BReleaseSteamPipe(auto original, HSteamPipe hSteamPipe)
     {
+        if (hSteamPipe == s_serverSteamPipe)
+        {
+            s_serverSteamPipe = 0;
+        }
+
         auto lo = m_proxies.lower_bound(ProxyKey(hSteamPipe, 0));
         auto hi = m_proxies.upper_bound(ProxyKey(hSteamPipe, std::numeric_limits<uint32_t>::max()));
         m_proxies.erase(lo, hi);
         return original(hSteamPipe);
+    }
+
+    HSteamUser CreateLocalUser(auto original, HSteamPipe *phSteamPipe, EAccountType eAccountType)
+    {
+        HSteamUser user = original(phSteamPipe, eAccountType);
+        if (user && (eAccountType == k_EAccountTypeGameServer || eAccountType == k_EAccountTypeAnonGameServer))
+        {
+            assert(!s_serverSteamPipe && *phSteamPipe);
+            s_serverSteamPipe = *phSteamPipe;
+        }
+
+        return user;
     }
 
     void ReleaseUser(auto original, HSteamPipe hSteamPipe, HSteamUser hUser)
@@ -820,7 +865,9 @@ static SteamClientProxy s_steamClientProxy;
 #include <proxy/steamclientproxy019.h>
 #include <proxy/steamclientproxy020.h>
 
-static void *(*Og_CreateInterface)(const char *, int *errorCode);
+using CreateInterface_t = void *(*)(const char *, int *);
+
+static CreateInterface_t Og_CreateInterface;
 
 static void *Hk_CreateInterface(const char *name, int *errorCode)
 {
@@ -1070,7 +1117,8 @@ static void Hk_SteamGameServer_RunCallbacks()
     {
         // only run server gc when logged on as an attempt to more accurately mimic real gc behaviour
         // FIXME: does csgo handle CMsgConnectionStatus?
-        if (!SteamGameServer()->BLoggedOn())
+        assert(s_steamGameServer);
+        if (!s_steamGameServer->BLoggedOn())
         {
             return;
         }
@@ -1141,29 +1189,73 @@ static void HookCreate(const char *name, void *target, void *hook, void **bridge
     }
 }
 
-#define INLINE_HOOK(a) HookCreate(#a, reinterpret_cast<void *>(a), reinterpret_cast<void *>(Hk_##a), reinterpret_cast<void **>(&Og_##a));
+#define INLINE_HOOK(a) HookCreate(#a, reinterpret_cast<void *>(p##a), reinterpret_cast<void *>(Hk_##a), reinterpret_cast<void **>(&Og_##a));
 
-static bool InitializeSteamAPI(bool dedicated)
+// this is a huge fucking mess, but such is the life of a multiversion steam hook guy
+
+static bool InitializeSteamAPI(void *steamApi, bool dedicated)
 {
     if (dedicated)
     {
-        return SteamGameServer_Init(0, 0, STEAMGAMESERVER_QUERY_PORT_SHARED, eServerModeNoAuthentication, "1.38.7.9");
+        using NewInit_t = decltype(SteamInternal_GameServer_Init) *;
+        // who knows which variant this dll provides??? this should be the safest choice
+        using OldInit_t = bool (*)(uint32, uint16, uint16, uint16, EServerMode, const char *);
+
+        // try the new entry point first
+        auto newInit = reinterpret_cast<NewInit_t>(Platform::GetSymbol(steamApi, "SteamInternal_GameServer_Init"));
+        if (newInit)
+        {
+            return newInit(0, 0, 0, STEAMGAMESERVER_QUERY_PORT_SHARED, eServerModeNoAuthentication, "1.38.7.9");
+        }
+
+        auto oldInit = reinterpret_cast<OldInit_t>(Platform::GetSymbol(steamApi, "SteamGameServer_Init"));
+        if (oldInit)
+        {
+            return oldInit(0, 0, 0, STEAMGAMESERVER_QUERY_PORT_SHARED, eServerModeNoAuthentication, "1.38.7.9");
+        }
+
+        Platform::Error("Could not get SteamGameServer_Init");
     }
     else
     {
-        return SteamAPI_Init();
+        // i think SteamAPI_InitEx is a thing in newer SDKs... not relevant for csgo though
+        using Init_t = decltype(SteamAPI_Init) *;
+
+        auto init = reinterpret_cast<Init_t>(Platform::GetSymbol(steamApi, "SteamAPI_Init"));
+        if (init)
+        {
+            return init();
+        }
+
+        Platform::Error("Could not get SteamAPI_Init");
     }
 }
 
-static void ShutdownSteamAPI(bool dedicated)
+static void ShutdownSteamAPI(void *steamApi, bool dedicated)
 {
     if (dedicated)
     {
-        SteamGameServer_Shutdown();
+        using Shutdown_t = decltype(SteamGameServer_Shutdown) *;
+
+        auto shutdown = reinterpret_cast<Shutdown_t>(Platform::GetSymbol(steamApi, "SteamGameServer_Shutdown"));
+        if (shutdown)
+        {
+            return shutdown();
+        }
+
+        Platform::Error("Could not get SteamGameServer_Shutdown");
     }
     else
     {
-        SteamAPI_Shutdown();
+        using Shutdown_t = decltype(SteamAPI_Shutdown) *;
+
+        auto shutdown = reinterpret_cast<Shutdown_t>(Platform::GetSymbol(steamApi, "SteamAPI_Shutdown"));
+        if (shutdown)
+        {
+            return shutdown();
+        }
+
+        Platform::Error("Could not get SteamAPI_Shutdown");
     }
 }
 
@@ -1175,8 +1267,15 @@ void SteamHookInstall(bool dedicated)
     // no need to write steam_appid.txt, the env var takes precedence
     Platform::SetEnvVar("SteamAppId", std::to_string(AppId::GetOverride()).c_str());
 
+    // load steam api and don't free it so our hooks persist
+    void *steamApi = Platform::LoadDynamicLibrary(STEAM_API_LIB);
+    if (!steamApi)
+    {
+        Platform::Error("Could not load steam_api");
+    }
+
     // this is bit of a clusterfuck
-    if (!InitializeSteamAPI(dedicated))
+    if (!InitializeSteamAPI(steamApi, dedicated))
     {
         // people might not understand what "app 4465480" means, but they
         // already had a hard time understanding this error in general so it's fine
@@ -1194,13 +1293,26 @@ void SteamHookInstall(bool dedicated)
     }
 
     // decrement reference count
-    ShutdownSteamAPI(dedicated);
+    ShutdownSteamAPI(steamApi, dedicated);
 
-    // load steamclient
-    void *CreateInterface = Platform::SteamClientFactory(steamClientPath);
-    if (!CreateInterface)
+    // load steamclient and don't free it so our hooks persist
+    void *steamClient = Platform::LoadDynamicLibrary(steamClientPath);
+    if (!steamClient)
+    {
+        Platform::Error("Could not load steamclient");
+    }
+
+    auto pCreateInterface = static_cast<CreateInterface_t>(Platform::GetSymbol(steamClient, "CreateInterface"));
+    if (!pCreateInterface)
     {
         Platform::Error("Could not get steamclient factory");
+    }
+
+    // get the actual latest steamclient instance, gets used if we want to actually use any steam interfaces
+    s_actualSteamClient = static_cast<ISteamClient *>(pCreateInterface(STEAMCLIENT_INTERFACE_VERSION, nullptr));
+    if (!s_actualSteamClient)
+    {
+        Platform::Error("Could not get %s", STEAMCLIENT_INTERFACE_VERSION);
     }
 
     // see if we should write funchook logs to file
@@ -1210,18 +1322,36 @@ void SteamHookInstall(bool dedicated)
         funchook_set_debug_file("gc_log.txt");
     }
 
+    // hook for steamclient proxy
     INLINE_HOOK(CreateInterface);
 
-    // get the actual latest steamclient instance
-    s_actualSteamClient = static_cast<ISteamClient *>(Og_CreateInterface(STEAMCLIENT_INTERFACE_VERSION, nullptr));
-    if (!s_actualSteamClient)
-    {
-        Platform::Error("Could not get %s", STEAMCLIENT_INTERFACE_VERSION);
+#define GET_STEAM_API_FUNC_CHECKED(name) \
+    void *p##name = Platform::GetSymbol(steamApi, #name); \
+    if (!p##name) \
+    { \
+        Platform::Error("Could not get %s", #name); \
     }
+    GET_STEAM_API_FUNC_CHECKED(SteamAPI_RegisterCallback);
+    GET_STEAM_API_FUNC_CHECKED(SteamAPI_UnregisterCallback);
+    GET_STEAM_API_FUNC_CHECKED(SteamAPI_RunCallbacks);
+    GET_STEAM_API_FUNC_CHECKED(SteamGameServer_RunCallbacks);
+#undef GET_STEAM_API_FUNC_CHECKED
 
     // steam api hooks for gc callbacks
     INLINE_HOOK(SteamAPI_RegisterCallback);
     INLINE_HOOK(SteamAPI_UnregisterCallback);
     INLINE_HOOK(SteamAPI_RunCallbacks);
     INLINE_HOOK(SteamGameServer_RunCallbacks);
+}
+
+// these are here for the networking code, just bounce off the trampolines
+
+S_API void S_CALLTYPE SteamAPI_RegisterCallback(class CCallbackBase *pCallback, int iCallback)
+{
+    return Og_SteamAPI_RegisterCallback(pCallback, iCallback);
+}
+
+S_API void S_CALLTYPE SteamAPI_UnregisterCallback(class CCallbackBase *pCallback)
+{
+    return Og_SteamAPI_UnregisterCallback(pCallback);
 }

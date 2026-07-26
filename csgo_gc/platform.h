@@ -17,9 +17,12 @@ void Print(const char *format, ...);
 // windows we stick utf16 to it and utf8 on other platforms
 bool SteamClientPath(void *buffer, size_t bufferSize);
 
-// load steamclient from the provided path, increment its refcount
-// and get a pointer to the factory function (exported symbol CreateInterface)
-void *SteamClientFactory(const void *pathBuffer);
+// load a dynamic library from the provided path and increment its refcount
+// note that the path is UTF-16 on windows and UTF-8 on the other ones
+void *LoadDynamicLibrary(const void *pathBuffer);
+
+// GetProcAddress/dlsym
+void *GetSymbol(void *handle, const char *symbol);
 
 // set an envar to the specified value even if it's already set
 void SetEnvVar(const char *name, const char *value);
