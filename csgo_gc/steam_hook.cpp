@@ -1302,7 +1302,7 @@ void SteamHookInstall(bool dedicated)
         Platform::Error("Could not load steamclient");
     }
 
-    auto pCreateInterface = static_cast<CreateInterface_t>(Platform::GetSymbol(steamClient, "CreateInterface"));
+    auto pCreateInterface = reinterpret_cast<CreateInterface_t>(Platform::GetSymbol(steamClient, "CreateInterface"));
     if (!pCreateInterface)
     {
         Platform::Error("Could not get steamclient factory");
