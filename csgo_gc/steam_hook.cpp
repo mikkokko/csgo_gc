@@ -901,7 +901,6 @@ static void *Hk_CreateInterface(const char *name, int *errorCode)
         CHECK_STEAMCLIENT(010)
 #undef CHECK_STEAMCLIENT
         Platform::Print("Can't hook %s\n", name);
-        return nullptr;
     }
 
     return result;
