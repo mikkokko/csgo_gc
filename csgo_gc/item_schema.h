@@ -104,6 +104,13 @@ struct LootList
     bool isUnusual{};
 };
 
+struct ItemSet
+{
+    std::string name;
+    bool isCollection{};
+    std::vector<LootListItem> items;
+};
+
 class ItemSchema
 {
 public:
@@ -130,6 +137,19 @@ public:
 
     // item creation: id and account id not set, needs to be done by the caller
     bool CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const;
+
+    // trade-up helpers
+    const ItemInfo *ItemInfoByDefIndex(uint32_t defIndex) const;
+    const PaintKitInfo *PaintKitInfoByDefIndex(uint32_t defIndex) const;
+    bool GetCollectionsForPaintedItem(uint32_t defIndex, uint32_t paintKitDefIndex,
+        std::vector<std::string> &outCollections) const;
+    bool GetCollectionsForPaintKit(uint32_t paintKitDefIndex,
+        std::vector<std::string> &outCollections) const;
+    std::string GetCollectionDisplayName(std::string_view collectionName) const;
+    bool GetTradeUpCandidates(std::string_view collectionName, uint32_t outputRarity,
+        std::vector<const LootListItem *> &outCandidates) const;
+    uint32_t GetPaintedRarity(uint32_t defIndex, uint32_t paintKitDefIndex, uint32_t fallbackRarity) const;
+
 
 public:
     // these could be parsed from the item schema but reduce code complexity by hardcoding them
@@ -233,6 +253,7 @@ private:
     void ParsePaintKits(const KeyValue *paintKitsKey);
     void ParsePaintKitRarities(const KeyValue *raritiesKey);
     void ParseMusicDefinitions(const KeyValue *musicDefinitionsKey);
+    void ParseItemSets(const KeyValue *itemSetsKey);
     void ParseLootLists(const KeyValue *lootListsKey, bool unusual);
     void ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey);
 
@@ -251,6 +272,8 @@ private:
     std::unordered_map<std::string, PaintKitInfo> m_paintKitInfo;
     std::unordered_map<std::string, MusicDefinitionInfo> m_musicDefinitionInfo;
     std::unordered_map<std::string, LootList> m_lootLists;
+
+    std::unordered_map<std::string, ItemSet> m_itemSets;
 
     std::unordered_map<uint32_t, const LootList &> m_revolvingLootLists;
 };
