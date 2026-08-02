@@ -96,6 +96,18 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             StorePurchaseFinalize(messageRead);
             break;
 
+        case k_EMsgGCCasketItemLoadContents:
+            ProcessStorageInspect(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemAdd:
+            ProcessStorageDeposit(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemExtract:
+            ProcessStorageWithdraw(messageRead);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n",
                 MessageName(messageRead.TypeUnmasked()));
@@ -746,4 +758,66 @@ void ClientGC::RemoveItemName(GCMessageRead &messageRead)
     {
         assert(false);
     }
+}
+
+void ClientGC::DispatchStorageResult(const Inventory::StorageTransaction &tx)
+{
+    using SR = Inventory::StorageResult;
+    
+    switch (tx.outcome)
+    {
+    case SR::Success:
+    case SR::CapacityExceeded:
+        {
+            CMsgGCItemCustomizationNotification notice;
+            notice.set_request(tx.notificationType);
+            notice.add_item_id(tx.affectedContainerId);
+            
+            if (tx.Succeeded())
+            {
+                SendMessageToGame(false, k_ESOMsg_Update, tx.itemData);
+                SendMessageToGame(false, k_ESOMsg_Update, tx.containerData);
+            }
+            SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notice);
+        }
+        break;
+        
+    case SR::ContainerNotFound:
+    case SR::ItemNotFound:
+    case SR::InvalidContainerType:
+    case SR::InternalError:
+        break;
+    }
+}
+
+void ClientGC::ProcessStorageInspect(GCMessageRead &messageRead)
+{
+    CMsgCasketItem msg;
+    if (!messageRead.ReadProtobuf(msg))
+        return;
+
+    CMsgGCItemCustomizationNotification notice;
+    notice.set_request(k_EGCItemCustomizationNotification_CasketContents);
+    notice.add_item_id(msg.casket_item_id());
+    SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notice);
+}
+
+void ClientGC::ProcessStorageDeposit(GCMessageRead &messageRead)
+{
+    CMsgCasketItem msg;
+    if (!messageRead.ReadProtobuf(msg))
+        return;
+    
+    auto tx = m_inventory.DepositItemToStorage(msg.casket_item_id(), msg.item_item_id());
+    DispatchStorageResult(tx);
+}
+
+void ClientGC::ProcessStorageWithdraw(GCMessageRead &messageRead)
+{
+    CMsgCasketItem msg;
+    if (!messageRead.ReadProtobuf(msg))
+        return;
+    
+    auto tx = m_inventory.WithdrawItemFromStorage(msg.casket_item_id(), msg.item_item_id());
+    DispatchStorageResult(tx);
 }
