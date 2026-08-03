@@ -40,6 +40,9 @@ private:
     void NameBaseItem(GCMessageRead &messageRead);
     void RemoveItemName(GCMessageRead &messageRead);
 
+    void HandleCounterSwapRequest(GCMessageRead &messageRead);
+    void BroadcastSwapOutcome(const Inventory::CounterSwapResult &outcome);
+
     void BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &message);
     void BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,
         const CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &matchmakingHello);

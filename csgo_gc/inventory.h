@@ -68,6 +68,28 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
+    enum class CounterSwapStatus
+    {
+        Completed,
+        ToolMissing,
+        WeaponMissing,
+        CounterAttributeAbsent
+    };
+
+    struct CounterSwapResult
+    {
+        CounterSwapStatus status;
+        CMsgSOSingleObject toolRemoval;
+        CMsgSOSingleObject weaponAUpdate;
+        CMsgSOSingleObject weaponBUpdate;
+        uint64_t weaponAId;
+        uint64_t weaponBId;
+        
+        bool IsValid() const { return status == CounterSwapStatus::Completed; }
+    };
+
+    CounterSwapResult PerformCounterSwap(uint64_t toolId, uint64_t weaponAId, uint64_t weaponBId);
+
     // returns the item id and adds the item to the provided CMsgSOMultipleObjects
     // on failure returns 0 and does nothing
     uint64_t PurchaseItem(uint32_t defIndex, std::vector<CMsgSOSingleObject> &update);
@@ -122,6 +144,9 @@ private:
     {
         ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
     }
+
+    uint32_t* GetKillCounterPtr(CSOEconItem &weapon);
+    void ConsumeToolItem(uint64_t toolId, CMsgSOSingleObject &removalMsg);
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
