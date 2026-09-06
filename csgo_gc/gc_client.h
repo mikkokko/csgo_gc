@@ -36,6 +36,7 @@ private:
 
     void DeleteItem(GCMessageRead &messageRead);
     void UnlockCrate(GCMessageRead &messageRead);
+    void Craft(GCMessageRead &messageRead);
     void NameItem(GCMessageRead &messageRead);
     void NameBaseItem(GCMessageRead &messageRead);
     void RemoveItemName(GCMessageRead &messageRead);
