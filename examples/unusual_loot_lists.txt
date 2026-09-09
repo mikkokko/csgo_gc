@@ -263,9 +263,9 @@
 	"[gs_karam_autotronic]weapon_knife_karambit"		"1"
 	"[cu_karam_lore]weapon_knife_karambit"		"1"
 	"[cu_karam_stonewash]weapon_knife_karambit"		"1"
-	"[gs_m9_bay_autotronic]weapon_knife_karambit"		"1"
-	"[cu_m9_bay_lore]weapon_knife_karambit"		"1"
-	"[cu_m9_bay_stonewash]weapon_knife_karambit"		"1"
+	"[gs_m9_bay_autotronic]weapon_knife_m9_bayonet"		"1"
+	"[cu_m9_bay_lore]weapon_knife_m9_bayonet"		"1"
+	"[cu_m9_bay_stonewash]weapon_knife_m9_bayonet"		"1"
 }
 "community_case_15_unusual"
 {

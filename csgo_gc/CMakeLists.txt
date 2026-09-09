@@ -1,5 +1,25 @@
 project(csgo_gc)
 
+find_package(MbedTLS CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
+
+# funchook and its deps get pulled in via FetchContent
+# FIXME: consider alternatives!!! funchook is no longer
+# maintained, and our hooks won't work reliably on x86_64
+# macOS when using it
+include(FetchContent)
+set(FETCHCONTENT_QUIET FALSE)
+
+option(FUNCHOOK_BUILD_SHARED "build shared library" OFF)
+option(FUNCHOOK_BUILD_TESTS "Build tests" OFF)
+option(FUNCHOOK_INSTALL "Install Funchook" OFF)
+
+FetchContent_Declare(funchook
+	GIT_REPOSITORY https://github.com/kubo/funchook
+	GIT_SHALLOW TRUE)
+
+FetchContent_MakeAvailable(funchook)
+
 add_library(csgo_gc SHARED
     appid.cpp
     case_opening.cpp
@@ -34,15 +54,27 @@ else()
     target_compile_options(csgo_gc PRIVATE -Wall -Wextra)
 endif()
 
-file(GLOB PROTOBUFS ../protobufs/*.cc)
-target_include_directories(csgo_gc PRIVATE ../protobufs)
-target_sources(csgo_gc PRIVATE ${PROTOBUFS})
-source_group("Protobufs" FILES ${PROTOBUFS})
+set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../protobufs)
+file(GLOB PROTOS ${PROTO_DIR}/*.proto)
+set(PROTOC_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+target_include_directories(csgo_gc PRIVATE ${PROTOC_OUT_DIR})
+
+# bruhhhhhh
+file(MAKE_DIRECTORY ${PROTOC_OUT_DIR})
+
+protobuf_generate(
+    TARGET csgo_gc
+    PROTOS ${PROTOS}
+    IMPORT_DIRS ${PROTO_DIR}
+    PROTOC_OUT_DIR ${PROTOC_OUT_DIR})
+
+source_group("Protobufs" REGULAR_EXPRESSION "\\.pb\\.(cc|h)$")
 
 target_link_libraries(csgo_gc PRIVATE
-    cryptopp
+    MbedTLS::mbedcrypto
+    protobuf::libprotobuf-lite
     funchook-static
-    libprotobuf-lite
     steam_api)
 
 # apple message box

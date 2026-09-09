@@ -7,3 +7,4 @@ PointerAlignment: Right
 SortIncludes: false
 SpaceAfterTemplateKeyword: false
 SpaceBeforeCpp11BracedList: false
+SpaceInEmptyBraces: Block

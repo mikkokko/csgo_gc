@@ -50,25 +50,23 @@ For GUI inventory editors, see https://github.com/mikkokko/csgo_gc/issues/82. Fo
 ## Configuration
 See [csgo_gc/config.txt](examples/config.txt) for available options.
 
+## Bug reports and support
+
+**Got a crash or found a bug?**
+* **Broken csgo_gc feature?** Open an issue and follow the instructions.
+* **Game crashing or broken non-GC features?** If you are unsure if csgo_gc caused it, test the game without it installed first. If the bug still happens on a clean build, it's an issue with the game itself. **Do not report base game bugs here.** If you confirm csgo_gc is definitely causing the crash, open an issue.
+
+**Need help, want to share ideas, or self-promote?**
+Use [Discussions](https://github.com/mikkokko/csgo_gc/discussions). Do not open issues for support.
+
 ## Building
 Requirements:
 - Git
+- vcpkg
 - CMake 3.20 or newer
 - C++ compiler with C++17 support (VS 2017 or later, Clang 5 or later, GCC 7 or later)
 
-The game is 32-bit on Windows so you need to build as 32-bit:
-
-`cmake -A Win32 -B build`
-
-Linux dedicated servers are also 32-bit:
-
-`cmake -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -B build`
-
-On macOS, you need to build for x86_64 instead of arm64:
-
-`cmake -DCMAKE_OSX_ARCHITECTURES=x86_64 -DFUNCHOOK_CPU=x86 -B build`
-
-For Linux clients you don't have to specify any additional options.
+See [the continuous build workflow](.github/workflows/build.yml) for details.
 
 ## License
 This project is licensed under the 2-Clause BSD License. See [LICENSE.md](LICENSE.md) for details.
@@ -76,9 +74,3 @@ This project is licensed under the 2-Clause BSD License. See [LICENSE.md](LICENS
 ## Credits
 * **Mikko Kokko** - Author
 * **Theeto** - Code reused from the predecessor project, unusual loot lists
-
-## Third party dependencies
-- [Crypto++](https://github.com/weidai11/cryptopp) ([Boost Software License](https://github.com/weidai11/cryptopp/blob/master/License.txt))
-- [funchook](https://github.com/kubo/funchook) ([GPL v2 with Classpath Exception](https://github.com/kubo/funchook/blob/master/LICENSE))
-- [diStorm3](https://github.com/gdabah/distorm) ([3-Clause BSD License](https://github.com/gdabah/distorm/blob/master/COPYING))
-- [protobuf](https://github.com/protocolbuffers/protobuf) ([3-Clause BSD License](https://github.com/protocolbuffers/protobuf/blob/main/LICENSE))

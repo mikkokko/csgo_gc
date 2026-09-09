@@ -72,19 +72,15 @@ bool SteamClientPath(void *buffer, size_t bufferSize)
     return (result > 0 && result < bufferSize);
 }
 
-void *SteamClientFactory(const void *pathBuffer)
+void *LoadDynamicLibrary(const void *pathBuffer)
 {
-    HMODULE steamclient = LoadLibraryExW(
-        reinterpret_cast<const wchar_t *>(pathBuffer),
-        nullptr,
-        LOAD_WITH_ALTERED_SEARCH_PATH);
+    const wchar_t *path = reinterpret_cast<const wchar_t *>(pathBuffer);
+    return LoadLibraryExW(path, nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+}
 
-    if (!steamclient)
-    {
-        return nullptr;
-    }
-
-    return GetProcAddress(steamclient, "CreateInterface");
+void *GetSymbol(void *handle, const char *symbol)
+{
+    return GetProcAddress(static_cast<HMODULE>(handle), symbol);
 }
 
 void SetEnvVar(const char *name, const char *value)

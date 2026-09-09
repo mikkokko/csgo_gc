@@ -1,0 +1,86 @@
+name: "Bug report"
+description: "Report a bug, crash, or unexpected behavior in the project."
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, make sure your issue isn't caused by modded game files, outdated builds, or a **base game bug** that happens even without csgo_gc installed.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: "Pre-submission checklist"
+      options:
+        - label: "I have searched both OPEN and CLOSED issues and confirmed this isn't a duplicate."
+          required: true
+        - label: "I checked the README and confirmed this is NOT already listed as an unimplemented feature."
+          required: true
+        - label: "I am using the LATEST version on a CLEAN, UNMODIFIED game build (no mods, altered shared libraries, etc.)."
+          required: true
+        - label: "I have tested without csgo_gc installed and confirmed this bug DOES NOT happen on the vanilla game."
+          required: true
+        - label: "I am using an officially supported setup (csgo_legacy branch or standalone app)."
+          required: true
+
+  - type: dropdown
+    id: build_type
+    attributes:
+      label: "Game version"
+      description: "Select which version you are running."
+      options:
+        - "Standalone app (4465480)"
+        - "csgo_legacy branch (730)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "What happened?"
+      description: "Describe the bug or unexpected behavior, and what you expected to happen instead."
+      placeholder: "I expected X to happen when Y, but instead Z happened..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: "Steps to Reproduce"
+      description: "Exact steps to trigger the bug/behavior."
+      placeholder: |
+        1. Open the inventory '...'
+        2. Trigger action '...'
+        3. See error / unexpected behavior
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: "Environment & OS details"
+      description: "Operating system, architecture, etc."
+      placeholder: "e.g. macOS 26, x86_64"
+    validations:
+      required: true
+
+  - type: textarea
+    id: gc_log
+    attributes:
+      label: "Log output (gc_log.txt)"
+      description: 'If applicable: set `"log_output"  "1"` in `csgo_gc/config.txt`, reproduce the issue, and paste or drag-and-drop `gc_log.txt` here.'
+      placeholder: "Paste contents of gc_log.txt here..."
+
+  - type: textarea
+    id: crash_diagnostics
+    attributes:
+      label: "Core dumps / minidumps / stack traces"
+      description: "If the application crashed: paste gdb backtraces, stack traces, or drag-and-drop core dump / minidump files here."
+      placeholder: "Paste gdb backtrace or drag-and-drop dump files..."
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: "Additional context"
+      description: "Config files, screenshots, or extra details."
