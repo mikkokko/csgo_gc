@@ -1085,7 +1085,6 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     return true;
 }
 
-// Changed per feedback: added FindItem helper used by CasketItemAdd / CasketItemExtract
 CSOEconItem *Inventory::FindItem(uint64_t itemId)
 {
     auto it = m_items.find(itemId);
@@ -1096,7 +1095,6 @@ CSOEconItem *Inventory::FindItem(uint64_t itemId)
     return nullptr;
 }
 
-// Changed per feedback: made static free function, inlined from former EmbedStorageReference method
 static void EmbedStorageReference(ItemSchema &itemSchema, CSOEconItem &item, uint64_t storageId)
 {
     auto *attrLow = item.add_attribute();
@@ -1111,8 +1109,6 @@ static void EmbedStorageReference(ItemSchema &itemSchema, CSOEconItem &item, uin
     item.clear_equipped_state();
 }
 
-// Changed per feedback, use iterators to streamline removal like RemoveStickerAttributes does,
-// made static free function per mikko's suggestion
 static void StripStorageReference(CSOEconItem &item)
 {
     auto *attrs = item.mutable_attribute();
@@ -1131,8 +1127,6 @@ static void StripStorageReference(CSOEconItem &item)
     }
 }
 
-// Changed per feedback: renamed from ModifyStorageCounter, store pointers instead of indices,
-// assert(false) when count attribute is missing, assert(updated >= 0) per feedback
 bool Inventory::IncrementCasketItemsCount(CSOEconItem &storage, int delta)
 {
     CSOEconItemAttribute *countAttr = nullptr;
@@ -1178,9 +1172,6 @@ bool Inventory::IncrementCasketItemsCount(CSOEconItem &storage, int delta)
     return true;
 }
 
-// Changed per feedback: renamed from DepositItemToStorage to match message name k_EMsgGCCasketItemAdd,
-// switched to out-param style for consistency with other inventory class functions,
-// assert(false) on error paths that should never happen with a valid item schema and valid game messages
 bool Inventory::CasketItemAdd(uint64_t casketId,
     uint64_t itemId,
     CMsgSOSingleObject &modifyCasket,
@@ -1225,9 +1216,6 @@ bool Inventory::CasketItemAdd(uint64_t casketId,
     return true;
 }
 
-// Changed per feedback: renamed from WithdrawItemFromStorage to match message name k_EMsgGCCasketItemExtract,
-// switched to out-param style for consistency with other inventory class functions,
-// assert(false) on error paths that should never happen with a valid item schema and valid game messages
 bool Inventory::CasketItemExtract(uint64_t casketId,
     uint64_t itemId,
     CMsgSOSingleObject &modifyCasket,
