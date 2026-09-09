@@ -101,12 +101,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             break;
 
         case k_EMsgGCCasketItemAdd:
-            // Changed per feedback: handler name consistency with message name
             ProcessCasketItemAdd(messageRead);
             break;
 
         case k_EMsgGCCasketItemExtract:
-            // Changed per feedback: handler name consistency with message name
             ProcessCasketItemExtract(messageRead);
             break;
 
@@ -762,12 +760,6 @@ void ClientGC::RemoveItemName(GCMessageRead &messageRead)
     }
 }
 
-// Changed per feedback, DispatchStorageResult inlined into its 2 call sites (CasketItemAdd /
-// CasketItemExtract) so i removed this function
-
-// Changed per feedback, renamed ProcessStorageInspect -> ProcessCasketItemLoadContents for
-// handler name consistency with k_EMsgGCCasketItemLoadContents; renamed msg -> message;
-// added curly braces for single-statement if; log parse error like other handlers :)
 void ClientGC::ProcessCasketItemLoadContents(GCMessageRead &messageRead)
 {
     CMsgCasketItem message;
@@ -783,9 +775,6 @@ void ClientGC::ProcessCasketItemLoadContents(GCMessageRead &messageRead)
     SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
 }
 
-// Changed per feedback: renamed ProcessStorageDeposit -> ProcessCasketItemAdd for handler name
-// consistency with k_EMsgGCCasketItemAdd; renamed msg -> message; added curly braces for
-// single-statement if; log parse error like other handlers; inlined DispatchStorageResult
 void ClientGC::ProcessCasketItemAdd(GCMessageRead &messageRead)
 {
     CMsgCasketItem message;
@@ -815,9 +804,6 @@ void ClientGC::ProcessCasketItemAdd(GCMessageRead &messageRead)
     }
 }
 
-// Changed per feedback: renamed ProcessStorageWithdraw -> ProcessCasketItemExtract for handler
-// name consistency with k_EMsgGCCasketItemExtract; renamed msg -> message; added curly braces
-// for single-statement if; log parse error like other handlers; inlined DispatchStorageResult
 void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
 {
     CMsgCasketItem message;
