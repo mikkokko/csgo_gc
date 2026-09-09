@@ -68,9 +68,6 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
-    // Changed per feedback, replaced StorageResult enum + StorageTransaction struct with
-    // out-param style matching the other inventory class functions, renamed functions to match
-    // message names (CasketItemAdd / CasketItemExtract), added FindItem helper.
     bool CasketItemAdd(uint64_t casketId,
         uint64_t itemId,
         CMsgSOSingleObject &modifyCasket,
@@ -141,7 +138,6 @@ private:
         ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
     }
 
-    // Changed per feedback: renamed ModifyStorageCounter -> IncrementCasketItemsCount for clarity
     bool IncrementCasketItemsCount(CSOEconItem &storage, int delta);
 
     const uint64_t m_steamId;
