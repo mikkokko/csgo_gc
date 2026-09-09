@@ -40,7 +40,6 @@ private:
     void NameBaseItem(GCMessageRead &messageRead);
     void RemoveItemName(GCMessageRead &messageRead);
 
-    // Changed per feedback renamed to match message names, removed DispatchStorageResult (inlined)
     void ProcessCasketItemLoadContents(GCMessageRead &messageRead);
     void ProcessCasketItemAdd(GCMessageRead &messageRead);
     void ProcessCasketItemExtract(GCMessageRead &messageRead);
