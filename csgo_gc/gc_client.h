@@ -40,10 +40,10 @@ private:
     void NameBaseItem(GCMessageRead &messageRead);
     void RemoveItemName(GCMessageRead &messageRead);
 
-    void ProcessStorageInspect(GCMessageRead &messageRead);
-    void ProcessStorageDeposit(GCMessageRead &messageRead);
-    void ProcessStorageWithdraw(GCMessageRead &messageRead);
-    void DispatchStorageResult(const Inventory::StorageTransaction &tx);
+    // Changed per feedback renamed to match message names, removed DispatchStorageResult (inlined)
+    void ProcessCasketItemLoadContents(GCMessageRead &messageRead);
+    void ProcessCasketItemAdd(GCMessageRead &messageRead);
+    void ProcessCasketItemExtract(GCMessageRead &messageRead);
 
     void BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &message);
     void BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,

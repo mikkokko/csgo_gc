@@ -68,30 +68,20 @@ public:
         CMsgSOSingleObject &destroy,
         CMsgGCItemCustomizationNotification &notification);
 
-    enum class StorageResult
-    {
-        Success,
-        CapacityExceeded,
-        ItemNotFound,
-        ContainerNotFound,
-        InvalidContainerType,
-        InternalError
-    };
+    // Changed per feedback, replaced StorageResult enum + StorageTransaction struct with
+    // out-param style matching the other inventory class functions, renamed functions to match
+    // message names (CasketItemAdd / CasketItemExtract), added FindItem helper.
+    bool CasketItemAdd(uint64_t casketId,
+        uint64_t itemId,
+        CMsgSOSingleObject &modifyCasket,
+        CMsgSOSingleObject &modifyItem,
+        CMsgGCItemCustomizationNotification &notification);
 
-    struct StorageTransaction
-    {
-        CMsgSOSingleObject itemData;
-        CMsgSOSingleObject containerData;
-        EGCItemCustomizationNotification notificationType;
-        uint64_t affectedContainerId;
-        StorageResult outcome;
-        
-        bool Succeeded() const { return outcome == StorageResult::Success; }
-        bool ReachedCapacity() const { return outcome == StorageResult::CapacityExceeded; }
-    };
-
-    StorageTransaction DepositItemToStorage(uint64_t storageId, uint64_t itemId);
-    StorageTransaction WithdrawItemFromStorage(uint64_t storageId, uint64_t itemId);
+    bool CasketItemExtract(uint64_t casketId,
+        uint64_t itemId,
+        CMsgSOSingleObject &modifyCasket,
+        CMsgSOSingleObject &modifyItem,
+        CMsgGCItemCustomizationNotification &notification);
 
     // returns the item id and adds the item to the provided CMsgSOMultipleObjects
     // on failure returns 0 and does nothing
@@ -107,6 +97,9 @@ private:
     // create a new item of a specific type
     CSOEconItem &CreateItem(const CSOEconItem &copyFrom);
     CSOEconItem &CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType);
+
+    // find an existing item by id, returns nullptr if not found
+    CSOEconItem *FindItem(uint64_t itemId);
 
     void ReadFromFile();
     void ReadItem(const KeyValue &itemKey, CSOEconItem &item) const;
@@ -148,11 +141,8 @@ private:
         ToSingleObject(message, SOTypeDefaultEquippedDefinitionInstanceClient, object);
     }
 
-    struct StorageItemPair { CSOEconItem* storage; CSOEconItem* target; };
-    StorageItemPair ResolveStorageItems(uint64_t storageId, uint64_t targetId);
-    void EmbedStorageReference(CSOEconItem &item, uint64_t storageId);
-    void StripStorageReference(CSOEconItem &item);
-    bool ModifyStorageCounter(CSOEconItem &storage, int delta);
+    // Changed per feedback: renamed ModifyStorageCounter -> IncrementCasketItemsCount for clarity
+    bool IncrementCasketItemsCount(CSOEconItem &storage, int delta);
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;

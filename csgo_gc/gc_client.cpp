@@ -97,15 +97,17 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             break;
 
         case k_EMsgGCCasketItemLoadContents:
-            ProcessStorageInspect(messageRead);
+            ProcessCasketItemLoadContents(messageRead);
             break;
 
         case k_EMsgGCCasketItemAdd:
-            ProcessStorageDeposit(messageRead);
+            // Changed per feedback: handler name consistency with message name
+            ProcessCasketItemAdd(messageRead);
             break;
 
         case k_EMsgGCCasketItemExtract:
-            ProcessStorageWithdraw(messageRead);
+            // Changed per feedback: handler name consistency with message name
+            ProcessCasketItemExtract(messageRead);
             break;
 
         default:
@@ -760,64 +762,83 @@ void ClientGC::RemoveItemName(GCMessageRead &messageRead)
     }
 }
 
-void ClientGC::DispatchStorageResult(const Inventory::StorageTransaction &tx)
+// Changed per feedback, DispatchStorageResult inlined into its 2 call sites (CasketItemAdd /
+// CasketItemExtract) so i removed this function
+
+// Changed per feedback, renamed ProcessStorageInspect -> ProcessCasketItemLoadContents for
+// handler name consistency with k_EMsgGCCasketItemLoadContents; renamed msg -> message;
+// added curly braces for single-statement if; log parse error like other handlers :)
+void ClientGC::ProcessCasketItemLoadContents(GCMessageRead &messageRead)
 {
-    using SR = Inventory::StorageResult;
-    
-    switch (tx.outcome)
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
     {
-    case SR::Success:
-    case SR::CapacityExceeded:
+        Platform::Print("Parsing CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgGCItemCustomizationNotification notification;
+    notification.set_request(k_EGCItemCustomizationNotification_CasketContents);
+    notification.add_item_id(message.casket_item_id());
+    SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+}
+
+// Changed per feedback: renamed ProcessStorageDeposit -> ProcessCasketItemAdd for handler name
+// consistency with k_EMsgGCCasketItemAdd; renamed msg -> message; added curly braces for
+// single-statement if; log parse error like other handlers; inlined DispatchStorageResult
+void ClientGC::ProcessCasketItemAdd(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject modifyCasket, modifyItem;
+    CMsgGCItemCustomizationNotification notification;
+
+    if (m_inventory.CasketItemAdd(message.casket_item_id(), message.item_item_id(),
+            modifyCasket, modifyItem, notification))
+    {
+        SendMessageToGame(false, k_ESOMsg_Update, modifyItem);
+        SendMessageToGame(false, k_ESOMsg_Update, modifyCasket);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        // capacity exceeded: notification was already set up by CasketItemAdd
+        if (notification.has_request())
         {
-            CMsgGCItemCustomizationNotification notice;
-            notice.set_request(tx.notificationType);
-            notice.add_item_id(tx.affectedContainerId);
-            
-            if (tx.Succeeded())
-            {
-                SendMessageToGame(false, k_ESOMsg_Update, tx.itemData);
-                SendMessageToGame(false, k_ESOMsg_Update, tx.containerData);
-            }
-            SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notice);
+            SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
         }
-        break;
-        
-    case SR::ContainerNotFound:
-    case SR::ItemNotFound:
-    case SR::InvalidContainerType:
-    case SR::InternalError:
-        break;
     }
 }
 
-void ClientGC::ProcessStorageInspect(GCMessageRead &messageRead)
+// Changed per feedback: renamed ProcessStorageWithdraw -> ProcessCasketItemExtract for handler
+// name consistency with k_EMsgGCCasketItemExtract; renamed msg -> message; added curly braces
+// for single-statement if; log parse error like other handlers; inlined DispatchStorageResult
+void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
 {
-    CMsgCasketItem msg;
-    if (!messageRead.ReadProtobuf(msg))
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgCasketItem failed, ignoring\n");
         return;
+    }
 
-    CMsgGCItemCustomizationNotification notice;
-    notice.set_request(k_EGCItemCustomizationNotification_CasketContents);
-    notice.add_item_id(msg.casket_item_id());
-    SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notice);
-}
+    CMsgSOSingleObject modifyCasket, modifyItem;
+    CMsgGCItemCustomizationNotification notification;
 
-void ClientGC::ProcessStorageDeposit(GCMessageRead &messageRead)
-{
-    CMsgCasketItem msg;
-    if (!messageRead.ReadProtobuf(msg))
-        return;
-    
-    auto tx = m_inventory.DepositItemToStorage(msg.casket_item_id(), msg.item_item_id());
-    DispatchStorageResult(tx);
-}
-
-void ClientGC::ProcessStorageWithdraw(GCMessageRead &messageRead)
-{
-    CMsgCasketItem msg;
-    if (!messageRead.ReadProtobuf(msg))
-        return;
-    
-    auto tx = m_inventory.WithdrawItemFromStorage(msg.casket_item_id(), msg.item_item_id());
-    DispatchStorageResult(tx);
+    if (m_inventory.CasketItemExtract(message.casket_item_id(), message.item_item_id(),
+            modifyCasket, modifyItem, notification))
+    {
+        SendMessageToGame(false, k_ESOMsg_Update, modifyItem);
+        SendMessageToGame(false, k_ESOMsg_Update, modifyCasket);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        assert(false);
+    }
 }
