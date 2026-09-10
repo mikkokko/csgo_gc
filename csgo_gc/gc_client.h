@@ -40,6 +40,10 @@ private:
     void NameBaseItem(GCMessageRead &messageRead);
     void RemoveItemName(GCMessageRead &messageRead);
 
+    void ProcessCasketItemLoadContents(GCMessageRead &messageRead);
+    void ProcessCasketItemAdd(GCMessageRead &messageRead);
+    void ProcessCasketItemExtract(GCMessageRead &messageRead);
+
     void BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &message);
     void BuildClientWelcome(CMsgClientWelcome &message, const CMsgCStrike15Welcome &csWelcome,
         const CMsgGCCStrike15_v2_MatchmakingGC2ClientHello &matchmakingHello);

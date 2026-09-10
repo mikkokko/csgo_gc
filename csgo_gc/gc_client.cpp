@@ -96,6 +96,18 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             StorePurchaseFinalize(messageRead);
             break;
 
+        case k_EMsgGCCasketItemLoadContents:
+            ProcessCasketItemLoadContents(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemAdd:
+            ProcessCasketItemAdd(messageRead);
+            break;
+
+        case k_EMsgGCCasketItemExtract:
+            ProcessCasketItemExtract(messageRead);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message %s\n",
                 MessageName(messageRead.TypeUnmasked()));
@@ -740,6 +752,75 @@ void ClientGC::RemoveItemName(GCMessageRead &messageRead)
             SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
         }
 
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        assert(false);
+    }
+}
+
+void ClientGC::ProcessCasketItemLoadContents(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgGCItemCustomizationNotification notification;
+    notification.set_request(k_EGCItemCustomizationNotification_CasketContents);
+    notification.add_item_id(message.casket_item_id());
+    SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+}
+
+void ClientGC::ProcessCasketItemAdd(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject modifyCasket, modifyItem;
+    CMsgGCItemCustomizationNotification notification;
+
+    if (m_inventory.CasketItemAdd(message.casket_item_id(), message.item_item_id(),
+            modifyCasket, modifyItem, notification))
+    {
+        SendMessageToGame(false, k_ESOMsg_Update, modifyItem);
+        SendMessageToGame(false, k_ESOMsg_Update, modifyCasket);
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+    }
+    else
+    {
+        // capacity exceeded: notification was already set up by CasketItemAdd
+        if (notification.has_request())
+        {
+            SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+        }
+    }
+}
+
+void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
+{
+    CMsgCasketItem message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::Print("Parsing CMsgCasketItem failed, ignoring\n");
+        return;
+    }
+
+    CMsgSOSingleObject modifyCasket, modifyItem;
+    CMsgGCItemCustomizationNotification notification;
+
+    if (m_inventory.CasketItemExtract(message.casket_item_id(), message.item_item_id(),
+            modifyCasket, modifyItem, notification))
+    {
+        SendMessageToGame(false, k_ESOMsg_Update, modifyItem);
+        SendMessageToGame(false, k_ESOMsg_Update, modifyCasket);
         SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
     }
     else
