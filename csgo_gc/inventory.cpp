@@ -193,6 +193,43 @@ void Inventory::ReadFromFile()
     }
 }
 
+static void SetCustomNameAttribute(const ItemSchema &itemSchema, CSOEconItem &item, std::string_view name)
+{
+    // go over all of them just in case...
+    for (auto attrib = item.mutable_attribute()->begin(); attrib != item.mutable_attribute()->end();)
+    {
+        if (attrib->def_index() == ItemSchema::AttributeCustomName)
+        {
+            attrib = item.mutable_attribute()->erase(attrib);
+        }
+        else
+        {
+            attrib++;
+        }
+    }
+
+    if (name.size())
+    {
+        CSOEconItemAttribute *nameAttribute = item.add_attribute();
+        nameAttribute->set_def_index(ItemSchema::AttributeCustomName);
+        itemSchema.SetAttributeString(nameAttribute, name);
+    }
+}
+
+static std::string GetCustomNameAttribute(const ItemSchema &itemSchema, const CSOEconItem &item)
+{
+    for (int i = 0; i < item.attribute_size(); i++)
+    {
+        const CSOEconItemAttribute &attrib = item.attribute(i);
+        if (attrib.def_index() == ItemSchema::AttributeCustomName)
+        {
+            return itemSchema.AttributeString(&attrib);
+        }
+    }
+
+    return {};
+}
+
 void Inventory::ReadItem(const KeyValue &itemKey, CSOEconItem &item) const
 {
     // id and account_id were set by CreateItem
@@ -204,12 +241,6 @@ void Inventory::ReadItem(const KeyValue &itemKey, CSOEconItem &item) const
     item.set_quality(itemKey.GetNumber<uint32_t>("quality"));
     item.set_flags(itemKey.GetNumber<uint32_t>("flags"));
     item.set_origin(itemKey.GetNumber<uint32_t>("origin"));
-
-    std::string_view name = itemKey.GetString("custom_name");
-    if (name.size())
-    {
-        item.set_custom_name(std::string{ name });
-    }
 
     // std::string_view desc = itemKey.GetString("custom_desc");
     // if (desc.size())
@@ -232,6 +263,16 @@ void Inventory::ReadItem(const KeyValue &itemKey, CSOEconItem &item) const
             uint32_t defIndex = FromString<uint32_t>(attributeKey.Name());
             attribute->set_def_index(defIndex);
             m_itemSchema.SetAttributeString(attribute, attributeKey.String());
+        }
+    }
+
+    // if no attribute name was provided, check the old custom_name field
+    if (GetCustomNameAttribute(m_itemSchema, item).empty())
+    {
+        std::string_view name = itemKey.GetString("custom_name");
+        if (name.size())
+        {
+            SetCustomNameAttribute(m_itemSchema, item, name);
         }
     }
 
@@ -286,7 +327,7 @@ void Inventory::WriteItem(KeyValue &itemKey, const CSOEconItem &item) const
     itemKey.AddNumber("flags", item.flags());
     itemKey.AddNumber("origin", item.origin());
 
-    itemKey.AddString("custom_name", item.custom_name());
+    // itemKey.AddString("custom_name", item.custom_name());
     // itemKey.AddString("custom_desc", item.custom_desc());
 
     itemKey.AddNumber("in_use", item.in_use());
@@ -574,7 +615,7 @@ void Inventory::ItemToPreviewDataBlock(const CSOEconItem &item, CEconItemPreview
     block.set_defindex(item.def_index());
     block.set_rarity(item.rarity());
     block.set_quality(item.quality());
-    block.set_customname(item.custom_name());
+    block.set_customname(GetCustomNameAttribute(m_itemSchema, item));
     block.set_inventory(item.inventory());
     block.set_origin(item.origin());
 
@@ -986,6 +1027,23 @@ bool Inventory::IncrementKillCountAttribute(uint64_t itemId, uint32_t amount, CM
     return false;
 }
 
+// FIXME: make this usabe elsewhere as well...
+static std::pair<CSOEconItemAttribute *, bool> GetOrAddAttribute(CSOEconItem &item, uint32_t defIndex)
+{
+    for (int i = 0; i < item.attribute_size(); i++)
+    {
+        CSOEconItemAttribute *attribute = item.mutable_attribute(i);
+        if (attribute->def_index() == defIndex)
+        {
+            return { attribute, false };
+        }
+    }
+
+    CSOEconItemAttribute *attribute = item.add_attribute();
+    attribute->set_def_index(defIndex);
+    return { attribute, true };
+}
+
 bool Inventory::NameItem(uint64_t nameTagId,
     uint64_t itemId,
     std::string_view name,
@@ -1000,11 +1058,26 @@ bool Inventory::NameItem(uint64_t nameTagId,
         return false;
     }
 
-    it->second.mutable_custom_name()->assign(name);
+    CSOEconItem &item = it->second;
 
-    ToSingleObject(update, it->second);
+    SetCustomNameAttribute(m_itemSchema, item, name);
 
-    if (GetConfig().DestroyUsedItems())
+    // caskets get updated here...
+    if (item.def_index() == ItemSchema::ItemCasket)
+    {
+        auto [count, addedCount] = GetOrAddAttribute(item, ItemSchema::AttributeCasketItemsCount);
+        if (addedCount)
+        {
+            m_itemSchema.SetAttributeUint32(count, 0);
+        }
+
+        auto [date, addedDate] = GetOrAddAttribute(item, ItemSchema::AttributeCasketModificationDate);
+        m_itemSchema.SetAttributeUint32(date, static_cast<uint32_t>(time(nullptr)));
+    }
+
+    ToSingleObject(update, item);
+
+    if (nameTagId && GetConfig().DestroyUsedItems())
     {
         auto tag = m_items.find(nameTagId);
         if (tag == m_items.end())
@@ -1016,7 +1089,7 @@ bool Inventory::NameItem(uint64_t nameTagId,
         DestroyItem(tag, destroy);
     }
 
-    notification.add_item_id(it->second.id());
+    notification.add_item_id(item.id());
     notification.set_request(k_EGCItemCustomizationNotification_NameItem);
 
     return true;
@@ -1031,7 +1104,7 @@ bool Inventory::NameBaseItem(uint64_t nameTagId,
 {
     CSOEconItem &item = CreateItem(defIndex, ItemOriginBaseItem, UnacknowledgedInvalid);
 
-    item.mutable_custom_name()->assign(name);
+    SetCustomNameAttribute(m_itemSchema, item, name);
 
     ToSingleObject(create, item);
 
@@ -1074,7 +1147,7 @@ bool Inventory::RemoveItemName(uint64_t itemId,
     }
     else
     {
-        it->second.mutable_custom_name()->clear();
+        SetCustomNameAttribute(m_itemSchema, it->second, std::string_view{});
 
         notification.add_item_id(it->second.id());
         notification.set_request(k_EGCItemCustomizationNotification_RemoveItemName);
@@ -1095,6 +1168,8 @@ CSOEconItem *Inventory::FindItem(uint64_t itemId)
     return nullptr;
 }
 
+// FIXME: on save/restore, do we want to strip the low bits and add them back???
+// currently serialized inventories with caskets will break when loaded on another steamid
 static void EmbedStorageReference(ItemSchema &itemSchema, CSOEconItem &item, uint64_t storageId)
 {
     auto *attrLow = item.add_attribute();

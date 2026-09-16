@@ -190,6 +190,25 @@ ItemSchema::ItemSchema()
     }
 }
 
+static std::string DecodeAttributeString(std::string_view data)
+{
+    CAttribute_String attribute;
+    if (!attribute.ParseFromString(data))
+    {
+        assert(false);
+        return {};
+    }
+
+    return attribute.value();
+}
+
+static std::string EncodeAttributeString(std::string_view string)
+{
+    CAttribute_String attribute;
+    attribute.set_value(string);
+    return attribute.SerializeAsString();
+}
+
 float ItemSchema::AttributeFloat(const CSOEconItemAttribute *attribute) const
 {
     auto it = m_attributeInfo.find(attribute->def_index());
@@ -208,7 +227,7 @@ float ItemSchema::AttributeFloat(const CSOEconItemAttribute *attribute) const
         return *reinterpret_cast<const uint32_t *>(attribute->value_bytes().data());
 
     case AttributeType::String:
-        return FromString<float>(attribute->value_bytes());
+        return FromString<float>(DecodeAttributeString(attribute->value_bytes()));
 
     default:
         assert(false);
@@ -234,7 +253,7 @@ uint32_t ItemSchema::AttributeUint32(const CSOEconItemAttribute *attribute) cons
         return *reinterpret_cast<const uint32_t *>(attribute->value_bytes().data());
 
     case AttributeType::String:
-        return FromString<uint32_t>(attribute->value_bytes());
+        return FromString<uint32_t>(DecodeAttributeString(attribute->value_bytes()));
 
     default:
         assert(false);
@@ -260,7 +279,7 @@ std::string ItemSchema::AttributeString(const CSOEconItemAttribute *attribute) c
         return std::to_string(*reinterpret_cast<const uint32_t *>(attribute->value_bytes().data()));
 
     case AttributeType::String:
-        return attribute->value_bytes();
+        return DecodeAttributeString(attribute->value_bytes());
 
     default:
         assert(false);
@@ -295,7 +314,7 @@ bool ItemSchema::SetAttributeFloat(CSOEconItemAttribute *attribute, float value)
     case AttributeType::String:
     {
         std::string convert = std::to_string(value);
-        attribute->set_value_bytes(std::move(convert));
+        attribute->set_value_bytes(EncodeAttributeString(convert));
         break;
     }
 
@@ -334,7 +353,7 @@ bool ItemSchema::SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t va
     case AttributeType::String:
     {
         std::string convert = std::to_string(value);
-        attribute->set_value_bytes(std::move(convert));
+        attribute->set_value_bytes(EncodeAttributeString(convert));
         break;
     }
 
@@ -373,7 +392,7 @@ bool ItemSchema::SetAttributeString(CSOEconItemAttribute *attribute, std::string
 
     case AttributeType::String:
     {
-        attribute->set_value_bytes(value.data(), value.size());
+        attribute->set_value_bytes(EncodeAttributeString(value));
         break;
     }
 
