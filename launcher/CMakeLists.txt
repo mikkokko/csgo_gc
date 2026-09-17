@@ -20,6 +20,18 @@ function(launcher_target NAME DEDICATED)
         target_link_libraries(${NAME} PRIVATE "-framework Foundation")
     endif()
 
+    # try to get the linux client to use tcmalloc
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT IS_32BIT)
+        add_library(tcmalloc_stub SHARED EXCLUDE_FROM_ALL tcmalloc_stub.cpp)
+
+        set_target_properties(tcmalloc_stub PROPERTIES OUTPUT_NAME tcmalloc_minimal SOVERSION 0)
+
+        target_link_libraries(${NAME} PRIVATE
+            "-Wl,--push-state,--no-as-needed"
+            tcmalloc_stub
+            "-Wl,--pop-state")
+    endif()
+
     if (DEDICATED)
         target_compile_definitions(${NAME} PRIVATE DEDICATED)
     endif()

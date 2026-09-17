@@ -10,6 +10,9 @@ if (CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(IS_32BIT ON)
 endif()
 
+# shouldn't need this
+set(CMAKE_SKIP_RPATH TRUE)
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     if (IS_32BIT)
         set(GC_LIB_DIR ".")
