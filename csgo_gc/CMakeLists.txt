@@ -20,7 +20,7 @@ FetchContent_Declare(funchook
 
 FetchContent_MakeAvailable(funchook)
 
-add_library(csgo_gc SHARED
+add_library(csgo_gc STATIC
     appid.cpp
     case_opening.cpp
     config.cpp
@@ -82,9 +82,3 @@ if (APPLE)
     target_link_libraries(csgo_gc PRIVATE "-framework Foundation")
 endif()
 
-if (OUTDIR)
-    add_custom_command(TARGET csgo_gc POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE:csgo_gc>
-        ${OUTDIR}/csgo_gc/${GC_LIB_DIR}/$<TARGET_FILE_NAME:csgo_gc>)
-endif()

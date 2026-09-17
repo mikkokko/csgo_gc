@@ -40,7 +40,10 @@ function(launcher_target NAME DEDICATED)
         GC_LIB_DIR="${GC_LIB_DIR}"
         GC_LIB_SUFFIX="${GC_LIB_SUFFIX}"
         GC_LIB_EXTENSION="${CMAKE_SHARED_LIBRARY_SUFFIX}")
-    
+
+    # this is now statically linked
+    target_link_libraries(${NAME} PRIVATE csgo_gc)
+
     if (OUTDIR)
         add_custom_command(TARGET ${NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy

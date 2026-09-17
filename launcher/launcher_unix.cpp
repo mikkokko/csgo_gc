@@ -17,7 +17,9 @@
 #endif
 
 typedef int (*LauncherMain_t)(int argc, char **argv);
-typedef void (*InstallGC_t)(bool dedicated);
+
+// csgo_gc/main.cpp
+void InstallGC(bool dedicated);
 
 static void ErrorMessageBox(const char *format, ...)
 {
@@ -77,15 +79,6 @@ int main(int argc, char **argv)
     const char *modulePath = "bin/" GC_LIB_DIR "/" LAUNCHER_LIB GC_LIB_SUFFIX GC_LIB_EXTENSION;
     LauncherMain_t LauncherMain = (LauncherMain_t)LoadModuleAndFindSymbol(modulePath, SYMBOL_NAME);
     if (!LauncherMain)
-    {
-        // LoadModuleAndFindSymbol told us why
-        return 1;
-    }
-
-    modulePath = "csgo_gc/" GC_LIB_DIR "/"
-                 "csgo_gc" GC_LIB_EXTENSION;
-    InstallGC_t InstallGC = (InstallGC_t)LoadModuleAndFindSymbol(modulePath, "InstallGC");
-    if (!InstallGC)
     {
         // LoadModuleAndFindSymbol told us why
         return 1;

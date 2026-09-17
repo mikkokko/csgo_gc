@@ -62,7 +62,8 @@ static bool UseNewLauncherMain(const void *prologue)
 #endif
 }
 
-typedef void (*InstallGC_t)(bool dedicated);
+// csgo_gc/main.cpp
+void InstallGC(bool dedicated);
 
 static void ErrorMessageBox(const wchar_t *format, ...)
 {
@@ -164,16 +165,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     _snwprintf_s(modulePath, std::size(modulePath), L"%ls\\bin\\" GC_LIB_DIR "\\" LAUNCHER_LIB GC_LIB_SUFFIX GC_LIB_EXTENSION, baseDir);
     void *LauncherMain = LoadModuleAndFindSymbol(modulePath, SYMBOL_NAME);
     if (!LauncherMain)
-    {
-        // LoadModuleAndFindSymbol told us why
-        return 1;
-    }
-
-    _snwprintf_s(modulePath, std::size(modulePath), L"%ls\\csgo_gc\\" GC_LIB_DIR "\\"
-                                                    "csgo_gc" GC_LIB_EXTENSION,
-        baseDir);
-    InstallGC_t InstallGC = (InstallGC_t)LoadModuleAndFindSymbol(modulePath, "InstallGC");
-    if (!InstallGC)
     {
         // LoadModuleAndFindSymbol told us why
         return 1;
