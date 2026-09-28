@@ -14,7 +14,22 @@
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
+#include <variant>
 #include <vector>
+
+template<typename Enum>
+    requires std::is_enum_v<Enum>
+[[nodiscard]] constexpr std::underlying_type_t<Enum> FromEnum(Enum value) noexcept
+{
+    return static_cast<std::underlying_type_t<Enum>>(value);
+}
+
+template<typename Enum>
+    requires std::is_enum_v<Enum>
+[[nodiscard]] constexpr Enum ToEnum(std::underlying_type_t<Enum> value) noexcept
+{
+    return static_cast<Enum>(value);
+}
 
 // might as well
 #include "base_gcmessages.pb.h"

@@ -26,7 +26,6 @@ public:
     KeyValueParser(std::string_view str)
         : m_ptr{ str.begin() }
         , m_end{ str.end() }
-        , m_lineNumber{ 1 }
     {
     }
 
@@ -46,26 +45,26 @@ public:
                 break;
             }
 
-            if (*m_ptr == '\n')
-            {
-                m_lineNumber++;
-            }
-
             m_ptr++;
         }
 
-        if (m_ptr[0] != '/' || m_ptr[1] != '/')
+        if (m_ptr + 1 >= m_end || m_ptr[0] != '/' || m_ptr[1] != '/')
         {
             return true;
         }
 
         m_ptr += 2;
 
-        while (*m_ptr != '\n')
+        while (true)
         {
             if (IsEndOfFile())
             {
                 return false;
+            }
+
+            if (*m_ptr == '\n')
+            {
+                break;
             }
 
             m_ptr++;
@@ -87,7 +86,10 @@ public:
 
         size_t length = m_ptr - start;
 
-        m_ptr++; // skip the end quote
+        if (!IsEndOfFile())
+        {
+            m_ptr++; // skip the end quote
+        }
 
         return { &start[0], length };
     }
@@ -109,9 +111,6 @@ private:
 
     std::string_view::const_iterator m_ptr;
     std::string_view::const_iterator m_end;
-
-    // for error reports
-    int m_lineNumber;
 };
 
 std::string LoadFile(const char *path)

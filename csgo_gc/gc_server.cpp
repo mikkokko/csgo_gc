@@ -125,7 +125,7 @@ static bool RemoveUnequippedItems(CMsgSOCacheSubscribed &message, int &itemCount
             continue;
         }
 
-        for (auto obj = it->mutable_object_data()->begin(); obj != it->mutable_object_data()->end(); )
+        for (auto obj = it->mutable_object_data()->begin(); obj != it->mutable_object_data()->end();)
         {
             CSOEconItem item;
             if (!item.ParseFromString(*obj) || !item.equipped_state_size())

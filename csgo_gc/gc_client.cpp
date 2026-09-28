@@ -192,6 +192,30 @@ void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
     PostToHost(HostEvent::Message, messageWrite.TypeMasked(), messageWrite.Data(), messageWrite.Size());
 }
 
+void ClientGC::SendInventoryChangeMessages(bool sendToGameServer, const InventoryChangeMessages &result)
+{
+    for (const CMsgSOSingleObject &destroyed : result.destroyed)
+    {
+        SendMessageToGame(sendToGameServer, k_ESOMsg_Destroy, destroyed);
+    }
+
+    for (const CMsgSOSingleObject &created : result.created)
+    {
+        SendMessageToGame(sendToGameServer, k_ESOMsg_Create, created);
+    }
+
+    if (result.updated.objects_modified_size())
+    {
+        SendMessageToGame(sendToGameServer, k_ESOMsg_UpdateMultiple, result.updated);
+    }
+
+    if (result.notification.has_request())
+    {
+        // never sent to the gameserver
+        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, result.notification);
+    }
+}
+
 constexpr uint32_t MakeAddress(uint32_t v1, uint32_t v2, uint32_t v3, uint32_t v4)
 {
     return v4 | (v3 << 8) | (v2 << 16) | (v1 << 24);
@@ -319,16 +343,8 @@ void ClientGC::AdjustItemEquippedState(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOMultipleObjects update;
-    if (!m_inventory.EquipItem(message.item_id(), message.new_class(), message.new_slot(), update))
-    {
-        // no change
-        assert(false);
-        return;
-    }
-
-    // let the gameserver know, too
-    SendMessageToGame(true, k_ESOMsg_UpdateMultiple, update);
+    InventoryChangeMessages messages = m_inventory.EquipItem(message.item_id(), message.new_class(), message.new_slot());
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::ClientPlayerDecalSign(GCMessageRead &messageRead)
@@ -358,17 +374,8 @@ void ClientGC::UseItemRequest(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject destroy;
-    CMsgSOMultipleObjects updateMultiple;
-    CMsgGCItemCustomizationNotification notification;
-
-    if (m_inventory.UseItem(message.item_id(), destroy, updateMultiple, notification))
-    {
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-        SendMessageToGame(true, k_ESOMsg_UpdateMultiple, updateMultiple);
-
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
+    InventoryChangeMessages messages = m_inventory.UseItem(message.item_id());
+    SendInventoryChangeMessages(true, messages);
 }
 
 static void AddressString(uint32_t ip, uint32_t port, char *buffer, size_t bufferSize)
@@ -416,22 +423,16 @@ void ClientGC::SetItemPositions(GCMessageRead &messageRead)
     std::vector<CMsgItemAcknowledged> acknowledgements;
     acknowledgements.reserve(message.item_positions_size());
 
-    CMsgSOMultipleObjects update;
-    if (m_inventory.SetItemPositions(message, acknowledgements, update))
-    {
-        for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
-        {
-            // send these to the server only
-            GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
-            PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
-        }
+    InventoryChangeMessages messages = m_inventory.SetItemPositions(message, acknowledgements);
 
-        SendMessageToGame(true, k_ESOMsg_UpdateMultiple, update);
-    }
-    else
+    for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
     {
-        assert(false);
+        // send these to the server only
+        GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
+        PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
     }
+
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
@@ -445,15 +446,8 @@ void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
 
     assert(message.event_type() == 0);
 
-    CMsgSOSingleObject update;
-    if (m_inventory.IncrementKillCountAttribute(message.item_id(), message.amount(), update))
-    {
-        SendMessageToGame(true, k_ESOMsg_Update, update);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.IncrementKillCountAttribute(message.item_id(), message.amount());
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::ApplySticker(GCMessageRead &messageRead)
@@ -467,48 +461,18 @@ void ClientGC::ApplySticker(GCMessageRead &messageRead)
 
     assert(!message.item_item_id() != !message.baseitem_defidx());
 
-    CMsgSOSingleObject update, destroy;
-    CMsgGCItemCustomizationNotification notification;
-
+    InventoryChangeMessages messages;
     if (!message.sticker_item_id())
     {
         // scrape
-        if (m_inventory.ScrapeSticker(message, update, destroy, notification))
-        {
-            if (destroy.has_type_id())
-            {
-                // destroying a default item
-                SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-            }
-
-            if (update.has_type_id())
-            {
-                // if the item got removed (handled above), nothing gets updated
-                SendMessageToGame(true, k_ESOMsg_Update, update);
-            }
-
-            if (notification.has_request())
-            {
-                // might get a k_EGCItemCustomizationNotification_RemoveSticker
-                SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-            }
-        }
-        else
-        {
-            assert(false);
-        }
-    }
-    else if (m_inventory.ApplySticker(message, update, destroy, notification))
-    {
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-        SendMessageToGame(true, k_ESOMsg_Update, update);
-
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
+        messages = m_inventory.ScrapeSticker(message);
     }
     else
     {
-        assert(false);
+        messages = m_inventory.ApplySticker(message);
     }
+
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
@@ -553,26 +517,18 @@ void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
 
     assert(!m_transactionId);
     m_transactionId = transactionId;
-    m_transactionItemIds.reserve(message.line_items_size()); // rough approx
 
-    // inventory update response
-    std::vector<CMsgSOSingleObject> inventoryUpdate;
+    std::vector<uint32_t> purchasedDefIndexes;
 
     for (const auto &item : message.line_items())
     {
         for (uint32_t i = 0; i < item.quantity(); i++)
         {
-            uint64_t itemId = m_inventory.PurchaseItem(item.item_def_id(), inventoryUpdate);
-            if (!itemId)
-            {
-                assert(false);
-            }
-            else
-            {
-                m_transactionItemIds.push_back(itemId);
-            }
+            purchasedDefIndexes.push_back(item.item_def_id());
         }
     }
+
+    InventoryChangeMessages messages = m_inventory.PurchaseItems(purchasedDefIndexes, m_transactionItemIds);
 
     char url[128]; // url doesn't matter, but it needs to be set
     snprintf(url, sizeof(url), "https://checkout.steampowered.com/checkout/approvetxn/%llu/?returnurl=steam", transactionId);
@@ -585,11 +541,7 @@ void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
 
     SendMessageToGame(false, k_EMsgGCStorePurchaseInitResponse, response, messageRead.JobId());
 
-    // FIXME: why would the server care???
-    for (auto &newItem : inventoryUpdate)
-    {
-        SendMessageToGame(true, k_ESOMsg_Create, newItem);
-    }
+    SendInventoryChangeMessages(true, messages);
 
     // this will run the steam callback
     PostToHost(HostEvent::MicroTransactionResponse, 0, nullptr, 0);
@@ -625,16 +577,8 @@ void ClientGC::DeleteItem(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject destroyed;
-    if (m_inventory.RemoveItem(itemId, destroyed))
-    {
-        // mikkotodo what does the server want to know
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroyed);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.RemoveItem(itemId);
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::UnlockCrate(GCMessageRead &messageRead)
@@ -649,28 +593,8 @@ void ClientGC::UnlockCrate(GCMessageRead &messageRead)
 
     Platform::Print("CASE OPENING %llu with %llu\n", crateId, keyId);
 
-    CMsgSOSingleObject destroyCrate, destroyKey, newItem;
-    CMsgGCItemCustomizationNotification notification;
-
-    if (m_inventory.UnlockCrate(
-            crateId,
-            keyId,
-            destroyCrate,
-            destroyKey,
-            newItem,
-            notification))
-    {
-        // mikkotodo what does the server want to know
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroyCrate);
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroyKey);
-        SendMessageToGame(true, k_ESOMsg_Create, newItem);
-
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.UnlockCrate(crateId, keyId);
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::NameItem(GCMessageRead &messageRead)
@@ -686,19 +610,8 @@ void ClientGC::NameItem(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject update, destroy;
-    CMsgGCItemCustomizationNotification notification;
-    if (m_inventory.NameItem(nameTagId, itemId, name, update, destroy, notification))
-    {
-        SendMessageToGame(true, k_ESOMsg_Update, update);
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.NameItem(nameTagId, itemId, name);
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::NameBaseItem(GCMessageRead &messageRead)
@@ -714,19 +627,8 @@ void ClientGC::NameBaseItem(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject create, destroy;
-    CMsgGCItemCustomizationNotification notification;
-    if (m_inventory.NameBaseItem(nameTagId, defIndex, name, create, destroy, notification))
-    {
-        SendMessageToGame(true, k_ESOMsg_Create, create);
-        SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.NameBaseItem(nameTagId, defIndex, name);
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::RemoveItemName(GCMessageRead &messageRead)
@@ -738,26 +640,8 @@ void ClientGC::RemoveItemName(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject update, destroy;
-    CMsgGCItemCustomizationNotification notification;
-    if (m_inventory.RemoveItemName(itemId, update, destroy, notification))
-    {
-        if (update.has_type_id())
-        {
-            SendMessageToGame(true, k_ESOMsg_Update, update);
-        }
-
-        if (destroy.has_type_id())
-        {
-            SendMessageToGame(true, k_ESOMsg_Destroy, destroy);
-        }
-
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.RemoveItemName(itemId);
+    SendInventoryChangeMessages(true, messages);
 }
 
 void ClientGC::ProcessCasketItemLoadContents(GCMessageRead &messageRead)
@@ -784,24 +668,8 @@ void ClientGC::ProcessCasketItemAdd(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject modifyCasket, modifyItem;
-    CMsgGCItemCustomizationNotification notification;
-
-    if (m_inventory.CasketItemAdd(message.casket_item_id(), message.item_item_id(),
-            modifyCasket, modifyItem, notification))
-    {
-        SendMessageToGame(false, k_ESOMsg_Update, modifyItem);
-        SendMessageToGame(false, k_ESOMsg_Update, modifyCasket);
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
-    else
-    {
-        // capacity exceeded: notification was already set up by CasketItemAdd
-        if (notification.has_request())
-        {
-            SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-        }
-    }
+    InventoryChangeMessages messages = m_inventory.CasketItemAdd(message.casket_item_id(), message.item_item_id());
+    SendInventoryChangeMessages(false, messages);
 }
 
 void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
@@ -813,18 +681,6 @@ void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
         return;
     }
 
-    CMsgSOSingleObject modifyCasket, modifyItem;
-    CMsgGCItemCustomizationNotification notification;
-
-    if (m_inventory.CasketItemExtract(message.casket_item_id(), message.item_item_id(),
-            modifyCasket, modifyItem, notification))
-    {
-        SendMessageToGame(false, k_ESOMsg_Update, modifyItem);
-        SendMessageToGame(false, k_ESOMsg_Update, modifyCasket);
-        SendMessageToGame(false, k_EMsgGCItemCustomizationNotification, notification);
-    }
-    else
-    {
-        assert(false);
-    }
+    InventoryChangeMessages messages = m_inventory.CasketItemExtract(message.casket_item_id(), message.item_item_id());
+    SendInventoryChangeMessages(false, messages);
 }

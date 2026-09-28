@@ -49,7 +49,7 @@ GCConfig::GCConfig()
         for (const KeyValue &subkey : *rarityWeights)
         {
             RarityWeight weight;
-            weight.rarity = FromString<uint32_t>(subkey.Name());
+            weight.rarity = ToEnum<Rarity>(FromString<uint32_t>(subkey.Name()));
             weight.weight = FromString<float>(subkey.String());
             m_rarityWeights.push_back(weight);
         }
@@ -63,7 +63,7 @@ GCConfig::GCConfig()
     m_xp = config.GetNumber("player_cur_xp", m_xp);
 }
 
-float GCConfig::GetRarityWeight(uint32_t rarity) const
+float GCConfig::GetRarityWeight(Rarity rarity) const
 {
     for (const RarityWeight &weight : m_rarityWeights)
     {

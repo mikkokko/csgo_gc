@@ -30,6 +30,8 @@ add_library(csgo_gc STATIC
     gc_shared.cpp
     graffiti.cpp
     inventory.cpp
+    inventory_modify.cpp
+    item.cpp
     item_schema.cpp
     keyvalue.cpp
     main.cpp

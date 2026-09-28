@@ -1,9 +1,12 @@
 #pragma once
 
 #include "gc_const_csgo.h"
+#include "item_schema_const.h"
 
 class KeyValue;
 class Random;
+
+struct ItemDesc;
 
 enum class AttributeType
 {
@@ -23,12 +26,12 @@ public:
 class ItemInfo
 {
 public:
-    explicit ItemInfo(uint32_t defIndex);
+    explicit ItemInfo(ItemDefIndex defIndex);
 
-    uint32_t m_defIndex;
+    ItemDefIndex m_defIndex;
     std::string m_name;
-    uint32_t m_rarity;
-    uint32_t m_quality;
+    Rarity m_rarity;
+    Quality m_quality;
     uint32_t m_level;
     uint32_t m_supplyCrateSeries; // cases only
 
@@ -44,7 +47,7 @@ public:
     explicit PaintKitInfo(const KeyValue &key);
 
     uint32_t m_defIndex;
-    uint32_t m_rarity;
+    Rarity m_rarity;
     float m_minFloat;
     float m_maxFloat;
 };
@@ -55,7 +58,7 @@ public:
     explicit StickerKitInfo(const KeyValue &key);
 
     uint32_t m_defIndex;
-    uint32_t m_rarity;
+    Rarity m_rarity;
 };
 
 class MusicDefinitionInfo
@@ -79,7 +82,7 @@ enum LootListItemType
 struct LootListItem
 {
     // for case opening: returns RarityUnusual for items of unusual quality
-    uint32_t CaseRarity() const;
+    Rarity CaseRarity() const;
 
     const ItemInfo *itemInfo{};
     LootListItemType type{ LootListItemNoAttribute };
@@ -91,8 +94,8 @@ struct LootListItem
 
     // might differ from those specified in itemInfo
     // (based on paint kits, stattrak etc.)
-    uint32_t rarity{};
-    uint32_t quality{};
+    Rarity rarity{};
+    Quality quality{};
 };
 
 struct LootList
@@ -116,122 +119,21 @@ public:
     bool SetAttributeFloat(CSOEconItemAttribute *attribute, float value) const;
     bool SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const;
     bool SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const;
+    AttributeType GetAttributeType(AttributeDefIndex defIndex) const;
 
     // for case opening
-    const LootList *GetCrateLootList(uint32_t crateDefIndex) const;
+    const LootList *GetCrateLootList(ItemDefIndex crateDefIndex) const;
 
     // for case opening FIXME: do we want to keep this here???
-    bool CreateItemFromLootListItem(Random &random,
+    bool ItemDescForLootListItem(Random &random,
         const LootListItem &lootListItem,
         bool statTrak,
         ItemOrigin origin,
         UnacknowledgedType unacknowledgedType,
-        CSOEconItem &item) const;
+        ItemDesc &desc) const;
 
-    // item creation: id and account id not set, needs to be done by the caller
-    bool CreateItem(uint32_t defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, CSOEconItem &econItem) const;
-
-public:
-    // these could be parsed from the item schema but reduce code complexity by hardcoding them
-    enum Rarity
-    {
-        RarityDefault = 0,
-        RarityCommon = 1,
-        RarityUncommon = 2,
-        RarityRare = 3,
-        RarityMythical = 4,
-        RarityLegendary = 5,
-        RarityAncient = 6,
-        RarityImmortal = 7,
-
-        RarityUnusual = 99
-    };
-
-    enum Quality
-    {
-        QualityNormal = 0,
-        QualityGenuine = 1,
-        QualityVintage = 2,
-        QualityUnusual = 3,
-        QualityUnique = 4,
-        QualityCommunity = 5,
-        QualityDeveloper = 6,
-        QualitySelfmade = 7,
-        QualityCustomized = 8,
-        QualityStrange = 9,
-        QualityCompleted = 10,
-        QualityHaunted = 11,
-        QualityTournament = 12
-    };
-
-    enum GraffitiTint
-    {
-        GraffitiTintMin = 1,
-        GraffitiTintMax = 19
-    };
-
-    enum LoadoutSlot
-    {
-        LoadoutSlotGraffiti = 56
-    };
-
-    enum Item
-    {
-        ItemCasket = 1201,
-        ItemSticker = 1209,
-        ItemMusicKit = 1314,
-        ItemSpray = 1348,
-        ItemSprayPaint = 1349,
-        ItemPatch = 4609
-    };
-
-    enum Attribute
-    {
-        AttributeTexturePrefab = 6,
-        AttributeTextureSeed = 7,
-        AttributeTextureWear = 8,
-        AttributeKillEater = 80,
-        AttributeKillEaterScoreType = 81,
-
-        AttributeCustomName = 111,
-
-        // ugh
-        AttributeStickerId0 = 113,
-        AttributeStickerWear0 = 114,
-        AttributeStickerScale0 = 115,
-        AttributeStickerRotation0 = 116,
-        AttributeStickerId1 = 117,
-        AttributeStickerWear1 = 118,
-        AttributeStickerScale1 = 119,
-        AttributeStickerRotation1 = 120,
-        AttributeStickerId2 = 121,
-        AttributeStickerWear2 = 122,
-        AttributeStickerScale2 = 123,
-        AttributeStickerRotation2 = 124,
-        AttributeStickerId3 = 125,
-        AttributeStickerWear3 = 126,
-        AttributeStickerScale3 = 127,
-        AttributeStickerRotation3 = 128,
-        AttributeStickerId4 = 129,
-        AttributeStickerWear4 = 130,
-        AttributeStickerScale4 = 131,
-        AttributeStickerRotation4 = 132,
-        AttributeStickerId5 = 133,
-        AttributeStickerWear5 = 134,
-        AttributeStickerScale5 = 135,
-        AttributeStickerRotation5 = 136,
-
-        AttributeMusicId = 166,
-        AttributeQuestId = 168,
-
-        AttributeSpraysRemaining = 232,
-        AttributeSprayTintId = 233,
-
-        AttributeCasketItemsCount = 270,
-        AttributeCasketModificationDate = 271,
-        AttributeCasketIdLow = 272,
-        AttributeCasketIdHigh = 273,
-    };
+    // item creation
+    bool GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, ItemDesc &desc) const;
 
 private:
     void ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey);
@@ -252,8 +154,8 @@ private:
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
     MusicDefinitionInfo *MusicDefinitionInfoByName(std::string_view name);
 
-    std::unordered_map<uint32_t, ItemInfo> m_itemInfo;
-    std::unordered_map<uint32_t, AttributeInfo> m_attributeInfo;
+    std::unordered_map<ItemDefIndex, ItemInfo> m_itemInfo;
+    std::unordered_map<AttributeDefIndex, AttributeInfo> m_attributeInfo;
 
     std::unordered_map<std::string, StickerKitInfo> m_stickerKitInfo;
     std::unordered_map<std::string, PaintKitInfo> m_paintKitInfo;
