@@ -22,7 +22,7 @@ private:
     void SendMessageToGame(bool sendToGameServer, uint32_t type,
         const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
-    void SendInventoryChangeMessages(bool sendToGameServer, const InventoryChangeMessages &messages);
+    void SendInventoryChangeMessages(const InventoryChangeMessages &messages);
 
     void OnClientHello(GCMessageRead &messageRead);
     void AdjustItemEquippedState(GCMessageRead &messageRead);

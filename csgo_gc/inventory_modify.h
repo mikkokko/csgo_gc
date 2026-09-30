@@ -11,6 +11,12 @@ enum class ItemChangeType
     Destroyed
 };
 
+struct ItemChange
+{
+    ItemChangeType type;
+    bool gameServerDirty;
+};
+
 enum class AttributeIncrement
 {
     Ok,
@@ -33,8 +39,8 @@ public:
     InventoryModify &operator=(InventoryModify &&) = delete;
 
     // manual bookkeeping
-    void MarkItemCreated(uint32_t highId);
-    void MarkItemDestroyed(uint32_t highId);
+    void MarkItemCreated(uint32_t highId, bool gameServerDirty);
+    void MarkItemDestroyed(uint32_t highId, bool gameServerDirty);
     void MarkDefaultEquipChanged(const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip);
 
     // for setting item positions...
@@ -54,11 +60,11 @@ public:
     void RemoveItemEquips(Item &item);
     bool RemoveItemEquip(Item &item, uint32_t classId, uint32_t slotId);
 
-    std::unordered_map<uint32_t, ItemChangeType> m_itemChanges;
+    std::unordered_map<uint32_t, ItemChange> m_itemChanges;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquipChanges;
 
 private:
-    void MarkUpdatedInternal(uint32_t highId);
+    void MarkUpdatedInternal(uint32_t highId, bool gameServerDirty);
 
     const Inventory &m_inventory;
 };

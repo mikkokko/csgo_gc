@@ -61,13 +61,16 @@ InventoryChangeMessages Inventory::BuildChangeMessages(
     {
         uint64_t itemId = ComposeItemId(AccountId(), highId);
 
-        if (change == ItemChangeType::Destroyed)
+        if (change.type == ItemChangeType::Destroyed)
         {
             assert(!FindItem(itemId));
 
             CSOEconItem econItem;
             econItem.set_id(itemId);
-            ToSingleObject(messages.destroyed.emplace_back(), SOTypeItem, econItem);
+
+            SingleObject &object = messages.destroyed.emplace_back();
+            object.sendToGameServer = change.gameServerDirty;
+            ToSingleObject(object.proto, SOTypeItem, econItem);
             continue;
         }
 
@@ -81,19 +84,27 @@ InventoryChangeMessages Inventory::BuildChangeMessages(
         CSOEconItem econItem;
         item->ToCSOEconItem(econItem, AccountId(), m_itemSchema);
 
-        if (change == ItemChangeType::Created)
+        if (change.type == ItemChangeType::Created)
         {
-            ToSingleObject(messages.created.emplace_back(), SOTypeItem, econItem);
+            SingleObject &object = messages.created.emplace_back();
+            object.sendToGameServer = change.gameServerDirty;
+            ToSingleObject(object.proto, SOTypeItem, econItem);
         }
         else
         {
-            AddToMultipleObjects(messages.updated, SOTypeItem, econItem);
+            AddToMultipleObjects(messages.updatedClient, SOTypeItem, econItem);
+
+            if (change.gameServerDirty)
+            {
+                AddToMultipleObjects(messages.updatedGameServer, SOTypeItem, econItem);
+            }
         }
     }
 
     for (const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip : modify.m_defaultEquipChanges)
     {
-        AddToMultipleObjects(messages.updated, SOTypeDefaultEquippedDefinitionInstanceClient, defaultEquip);
+        AddToMultipleObjects(messages.updatedClient, SOTypeDefaultEquippedDefinitionInstanceClient, defaultEquip);
+        AddToMultipleObjects(messages.updatedGameServer, SOTypeDefaultEquippedDefinitionInstanceClient, defaultEquip);
     }
 
     if (customizationType.has_value())
@@ -203,7 +214,7 @@ Item &Inventory::CreateItem(InventoryModify &modify, const ItemDesc &desc)
     auto [it, inserted] = m_items.try_emplace(itemId, highId, desc);
     assert(inserted);
 
-    modify.MarkItemCreated(highId);
+    modify.MarkItemCreated(highId, it->second.HasEquips());
 
     return it->second;
 }
@@ -909,12 +920,16 @@ void Inventory::UnequipItem(InventoryModify &modify, uint32_t classId, uint32_t 
 
 bool Inventory::DestroyItemById(InventoryModify &modify, uint64_t itemId)
 {
-    if (!m_items.erase(itemId))
+    auto it = m_items.find(itemId);
+    if (it == m_items.end())
     {
         return false;
     }
 
-    modify.MarkItemDestroyed(itemId >> 32);
+    bool hadEquips = it->second.HasEquips();
+    m_items.erase(it);
+
+    modify.MarkItemDestroyed(itemId >> 32, hadEquips);
     return true;
 }
 

@@ -192,21 +192,28 @@ void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
     PostToHost(HostEvent::Message, messageWrite.TypeMasked(), messageWrite.Data(), messageWrite.Size());
 }
 
-void ClientGC::SendInventoryChangeMessages(bool sendToGameServer, const InventoryChangeMessages &result)
+void ClientGC::SendInventoryChangeMessages(const InventoryChangeMessages &result)
 {
-    for (const CMsgSOSingleObject &destroyed : result.destroyed)
+    for (const SingleObject &destroyed : result.destroyed)
     {
-        SendMessageToGame(sendToGameServer, k_ESOMsg_Destroy, destroyed);
+        SendMessageToGame(destroyed.sendToGameServer, k_ESOMsg_Destroy, destroyed.proto);
     }
 
-    for (const CMsgSOSingleObject &created : result.created)
+    for (const SingleObject &created : result.created)
     {
-        SendMessageToGame(sendToGameServer, k_ESOMsg_Create, created);
+        SendMessageToGame(created.sendToGameServer, k_ESOMsg_Create, created.proto);
     }
 
-    if (result.updated.objects_modified_size())
+    if (result.updatedClient.objects_modified_size())
     {
-        SendMessageToGame(sendToGameServer, k_ESOMsg_UpdateMultiple, result.updated);
+        GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedClient };
+        PostToHost(HostEvent::Message, messageWrite.TypeMasked(), messageWrite.Data(), messageWrite.Size());
+    }
+
+    if (result.updatedGameServer.objects_modified_size())
+    {
+        GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedGameServer };
+        PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
     }
 
     if (result.notification.has_request())
@@ -344,7 +351,7 @@ void ClientGC::AdjustItemEquippedState(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.EquipItem(message.item_id(), message.new_class(), message.new_slot());
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::ClientPlayerDecalSign(GCMessageRead &messageRead)
@@ -375,7 +382,7 @@ void ClientGC::UseItemRequest(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.UseItem(message.item_id());
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 static void AddressString(uint32_t ip, uint32_t port, char *buffer, size_t bufferSize)
@@ -432,7 +439,7 @@ void ClientGC::SetItemPositions(GCMessageRead &messageRead)
         PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
     }
 
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
@@ -447,7 +454,7 @@ void ClientGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     assert(message.event_type() == 0);
 
     InventoryChangeMessages messages = m_inventory.IncrementKillCountAttribute(message.item_id(), message.amount());
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::ApplySticker(GCMessageRead &messageRead)
@@ -472,7 +479,7 @@ void ClientGC::ApplySticker(GCMessageRead &messageRead)
         messages = m_inventory.ApplySticker(message);
     }
 
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
@@ -541,7 +548,7 @@ void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
 
     SendMessageToGame(false, k_EMsgGCStorePurchaseInitResponse, response, messageRead.JobId());
 
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 
     // this will run the steam callback
     PostToHost(HostEvent::MicroTransactionResponse, 0, nullptr, 0);
@@ -578,7 +585,7 @@ void ClientGC::DeleteItem(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.RemoveItem(itemId);
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::UnlockCrate(GCMessageRead &messageRead)
@@ -594,7 +601,7 @@ void ClientGC::UnlockCrate(GCMessageRead &messageRead)
     Platform::Print("CASE OPENING %llu with %llu\n", crateId, keyId);
 
     InventoryChangeMessages messages = m_inventory.UnlockCrate(crateId, keyId);
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::NameItem(GCMessageRead &messageRead)
@@ -611,7 +618,7 @@ void ClientGC::NameItem(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.NameItem(nameTagId, itemId, name);
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::NameBaseItem(GCMessageRead &messageRead)
@@ -628,7 +635,7 @@ void ClientGC::NameBaseItem(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.NameBaseItem(nameTagId, defIndex, name);
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::RemoveItemName(GCMessageRead &messageRead)
@@ -641,7 +648,7 @@ void ClientGC::RemoveItemName(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.RemoveItemName(itemId);
-    SendInventoryChangeMessages(true, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::ProcessCasketItemLoadContents(GCMessageRead &messageRead)
@@ -669,7 +676,7 @@ void ClientGC::ProcessCasketItemAdd(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.CasketItemAdd(message.casket_item_id(), message.item_item_id());
-    SendInventoryChangeMessages(false, messages);
+    SendInventoryChangeMessages(messages);
 }
 
 void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
@@ -682,5 +689,5 @@ void ClientGC::ProcessCasketItemExtract(GCMessageRead &messageRead)
     }
 
     InventoryChangeMessages messages = m_inventory.CasketItemExtract(message.casket_item_id(), message.item_item_id());
-    SendInventoryChangeMessages(false, messages);
+    SendInventoryChangeMessages(messages);
 }

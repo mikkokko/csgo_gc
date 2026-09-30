@@ -15,7 +15,7 @@ InventoryModify::~InventoryModify()
     }
 }
 
-void InventoryModify::MarkItemCreated(uint32_t highId)
+void InventoryModify::MarkItemCreated(uint32_t highId, bool gameServerDirty)
 {
     auto existing = m_itemChanges.find(highId);
     if (existing != m_itemChanges.end())
@@ -24,26 +24,27 @@ void InventoryModify::MarkItemCreated(uint32_t highId)
         return;
     }
 
-    m_itemChanges.try_emplace(highId, ItemChangeType::Created);
+    m_itemChanges.try_emplace(highId, ItemChangeType::Created, gameServerDirty);
 }
 
-void InventoryModify::MarkItemDestroyed(uint32_t highId)
+void InventoryModify::MarkItemDestroyed(uint32_t highId, bool gameServerDirty)
 {
     auto existing = m_itemChanges.find(highId);
     if (existing == m_itemChanges.end())
     {
-        m_itemChanges.try_emplace(highId, ItemChangeType::Destroyed);
+        m_itemChanges.try_emplace(highId, ItemChangeType::Destroyed, gameServerDirty);
         return;
     }
 
-    switch (existing->second)
+    switch (existing->second.type)
     {
     case ItemChangeType::Created:
         m_itemChanges.erase(existing);
         return;
 
     case ItemChangeType::Updated:
-        existing->second = ItemChangeType::Destroyed;
+        existing->second.type = ItemChangeType::Destroyed;
+        existing->second.gameServerDirty |= gameServerDirty;
         return;
 
     default:
@@ -73,7 +74,7 @@ void InventoryModify::SetItemInventory(Item &item, uint32_t inventory)
     if (item.m_inventory != inventory)
     {
         item.m_inventory = inventory;
-        MarkUpdatedInternal(item.m_highId);
+        MarkUpdatedInternal(item.m_highId, item.HasEquips());
     }
 }
 
@@ -81,7 +82,7 @@ void InventoryModify::SetItemInventory(Item &item, uint32_t inventory)
 void InventoryModify::AddItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value)
 {
     item.m_attributes.emplace_back(defIndex, value);
-    MarkUpdatedInternal(item.m_highId);
+    MarkUpdatedInternal(item.m_highId, item.HasEquips());
 }
 
 // set attribute value if it exists, using this only makes sense if there's only 1 attribute with the def index
@@ -94,7 +95,7 @@ bool InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, I
             if (attribute.Value() != value)
             {
                 attribute.Value() = value;
-                MarkUpdatedInternal(item.m_highId);
+                MarkUpdatedInternal(item.m_highId, item.HasEquips());
             }
 
             return true;
@@ -104,7 +105,7 @@ bool InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, I
     if (addIfMissing)
     {
         item.m_attributes.emplace_back(defIndex, value);
-        MarkUpdatedInternal(item.m_highId);
+        MarkUpdatedInternal(item.m_highId, item.HasEquips());
         return true;
     }
 
@@ -131,7 +132,7 @@ AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, Attribute
             }
 
             *value = static_cast<uint32_t>(newValue);
-            MarkUpdatedInternal(item.m_highId);
+            MarkUpdatedInternal(item.m_highId, item.HasEquips());
             return AttributeIncrement::Ok;
         }
     }
@@ -159,7 +160,7 @@ AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, Attribute
             }
 
             *value = newValue;
-            MarkUpdatedInternal(item.m_highId);
+            MarkUpdatedInternal(item.m_highId, item.HasEquips());
             return AttributeIncrement::Ok;
         }
     }
@@ -197,14 +198,14 @@ void InventoryModify::RemoveItemAttributes(Item &item, std::initializer_list<Att
 
     if (modified)
     {
-        MarkUpdatedInternal(item.m_highId);
+        MarkUpdatedInternal(item.m_highId, item.HasEquips());
     }
 }
 
 void InventoryModify::AddItemEquip(Item &item, uint32_t classId, uint32_t slotId)
 {
     item.m_equips.emplace_back(classId, slotId);
-    MarkUpdatedInternal(item.m_highId);
+    MarkUpdatedInternal(item.m_highId, true);
 }
 
 void InventoryModify::RemoveItemEquips(Item &item)
@@ -212,7 +213,7 @@ void InventoryModify::RemoveItemEquips(Item &item)
     if (!item.m_equips.empty())
     {
         item.m_equips.clear();
-        MarkUpdatedInternal(item.m_highId);
+        MarkUpdatedInternal(item.m_highId, true);
     }
 }
 
@@ -235,29 +236,31 @@ bool InventoryModify::RemoveItemEquip(Item &item, uint32_t classId, uint32_t slo
 
     if (modified)
     {
-        MarkUpdatedInternal(item.m_highId);
+        MarkUpdatedInternal(item.m_highId, true);
     }
 
     return modified;
 }
 
-void InventoryModify::MarkUpdatedInternal(uint32_t highId)
+void InventoryModify::MarkUpdatedInternal(uint32_t highId, bool gameServerDirty)
 {
     auto existing = m_itemChanges.find(highId);
     if (existing == m_itemChanges.end())
     {
-        m_itemChanges.try_emplace(highId, ItemChangeType::Updated);
+        m_itemChanges.try_emplace(highId, ItemChangeType::Updated, gameServerDirty);
         return;
     }
 
-    switch (existing->second)
+    switch (existing->second.type)
     {
     case ItemChangeType::Created:
     case ItemChangeType::Updated:
-        // ok
+        // valid, update whether equips were touched
+        existing->second.gameServerDirty |= gameServerDirty;
         break;
 
     default:
+        // shouldn't happen
         assert(false);
         break;
     }
