@@ -3,7 +3,7 @@ project(launcher)
 # messy
 function(launcher_target NAME DEDICATED)
     if (WIN32)
-        add_executable(${NAME} WIN32 launcher_win.cpp launcher.rc)
+        add_executable(${NAME} WIN32 launcher_win.cpp launcher.manifest launcher.rc)
     else()
         add_executable(${NAME} launcher_unix.cpp)
     endif()
