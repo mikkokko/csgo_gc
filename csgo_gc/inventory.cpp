@@ -257,7 +257,10 @@ void Inventory::ReadFromFile()
 
 void Inventory::WriteToFile() const
 {
-    Platform::Print("Writing inventory to %s\n", InventoryFilePath);
+    Platform::Print("Writing inventory to %s (%zu items, %zu default equips)\n",
+        InventoryFilePath,
+        m_items.size(),
+        m_defaultEquips.size());
 
     KeyValue inventoryKey{ "inventory" };
 

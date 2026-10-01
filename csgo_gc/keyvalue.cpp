@@ -161,12 +161,30 @@ bool KeyValue::WriteToFile(const char *path)
     FILE *f = fopen(path, "wb");
     if (!f)
     {
+        Platform::Print("Could not open %s for writing\n", path);
         return false;
     }
 
     WriteToFile(f, 0);
 
-    fclose(f);
+    bool writeFailed = ferror(f) != 0;
+    int closeError = (fclose(f) == EOF) ? errno : 0;
+
+    if (writeFailed)
+    {
+        Platform::Print("Writing %s failed: %s\n", path);
+        return false;
+    }
+
+    if (closeError != 0)
+    {
+        Platform::Print("Closing %s failed: %s (%d)\n",
+            path,
+            strerror(closeError),
+            closeError);
+        return false;
+    }
+
     return true;
 }
 
