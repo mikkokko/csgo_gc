@@ -149,11 +149,18 @@ bool KeyValue::ParseFromFile(const char *path)
     std::string data = LoadFile(path);
     if (data.empty())
     {
+        Platform::Print("Could not load %s (or empty)\n", path);
         return false;
     }
 
     KeyValueParser parser{ data };
-    return Parse(parser);
+    if (!Parse(parser))
+    {
+        Platform::Print("Could not parse %s\n", path);
+        return false;
+    }
+
+    return true;
 }
 
 bool KeyValue::WriteToFile(const char *path)
