@@ -29,6 +29,8 @@ jobs:
       uses: lukka/run-vcpkg@v11
       with:
         vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+        vcpkgJsonGlob: 'vcpkg.json'
+        vcpkgConfigurationJsonGlob: 'vcpkg-configuration.json'
         doNotCache: true # cache vcpkg_installed ourselves instead
 
     - name: Get vcpkg commit
