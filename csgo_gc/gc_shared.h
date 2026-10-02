@@ -15,6 +15,7 @@ enum class GCEvent
     NetMessage, // id contains the recipient steam id, buffer contains the payload
     SOCacheRequest, // sent to client gc when connected to a gameserver
     ClientSOCacheUnsubscribe, // sent to server gc when a client disconnects, id contains the steam id
+    Tick, // client gc... sent when running callbacks
 };
 
 struct EventData

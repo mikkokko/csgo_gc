@@ -26,6 +26,13 @@ inline uint64_t ComposeItemId(uint32_t accountId, uint32_t highItemId)
     return low | (high << 32);
 }
 
+// get the full item id of the casket item is in
+static uint64_t GetCasketId(const Item &item)
+{
+    uint64_t high = item.GetAttributeValue<uint32_t>(AttributeDefIndex::CasketIdHigh);
+    return high ? ((high << 32) | item.GetAttributeValue<uint32_t>(AttributeDefIndex::CasketIdLow)) : 0;
+}
+
 // helper, see ItemIdDefaultItemMask for more information
 inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paintKitIndex)
 {
@@ -41,6 +48,7 @@ inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paint
 
 Inventory::Inventory(uint64_t steamId)
     : m_steamId{ steamId }
+    , m_editor{ m_itemSchema }
 {
     ReadFromFile();
 }
@@ -48,6 +56,133 @@ Inventory::Inventory(uint64_t steamId)
 Inventory::~Inventory()
 {
     WriteToFile();
+}
+
+bool Inventory::Update(InventoryChangeMessages &changeMessages)
+{
+    if (m_editor.WantsFullInventory())
+    {
+        SendFullInventoryToEditor();
+    }
+
+    EditorChanges changes;
+    if (!m_editor.GetChanges(changes))
+    {
+        return false;
+    }
+
+    // FIXME: this will cause the changes to be sent back to the editor!!! ideally we would not do this,
+    // but we have cases like removal of caskets or casketed items that will cause more item modifications
+    InventoryModify modify{ *this };
+
+    for (const EditorItem &editorItem : changes.items)
+    {
+        if (editorItem.type == EditorItemChangeType::Destroyed)
+        {
+            Item *item = FindItem(ComposeItemId(AccountId(), editorItem.highId));
+            if (item)
+            {
+                DestroyItem(modify, item);
+            }
+            else
+            {
+                assert(false);
+            }
+
+            continue;
+        }
+
+        if (editorItem.type == EditorItemChangeType::Created)
+        {
+            // editorItem.highId is NOT the item id we should use!!!!
+            // it's an opaque "item request id" from the editor, we
+            // need to send the actual item id back now that we've determined it
+            Item &item = CreateItem(modify, editorItem.desc);
+            m_editor.SendItemId(editorItem.highId, item.HighId());
+            continue;
+        }
+
+        // modification
+        Item *item = FindItem(ComposeItemId(AccountId(), editorItem.highId));
+        if (!item)
+        {
+            assert(false);
+            continue;
+        }
+
+        modify.UpdateFromDesc(*item, editorItem.desc);
+    }
+
+    changeMessages = BuildChangeMessages(modify);
+    return true;
+}
+
+void Inventory::FlushChanges(const InventoryModify &modify)
+{
+    if (modify.m_itemChanges.empty() && modify.m_defaultEquipChanges.empty())
+    {
+        // nope
+        return;
+    }
+
+    SendChangesToEditor(modify);
+
+    WriteToFile();
+}
+
+void Inventory::SendFullInventoryToEditor()
+{
+    EditorChanges changes;
+
+    m_editorVisibleItems.clear();
+
+    for (const auto &pair : m_items)
+    {
+        if (GetCasketId(pair.second))
+        {
+            // don't expose casketed items to the editor
+            continue;
+        }
+
+        EditorItem &item = changes.items.emplace_back();
+        item.type = EditorItemChangeType::Created;
+        item.highId = pair.second.HighId();
+        pair.second.ToDesc(item.desc);
+
+        m_editorVisibleItems.insert(item.highId);
+    }
+
+    m_editor.SendChanges(changes, true);
+}
+
+void Inventory::SendChangesToEditor(const InventoryModify &modify)
+{
+    EditorChanges changes;
+
+    for (const auto &[highId, change] : modify.m_itemChanges)
+    {
+        const Item *source = FindItem(ComposeItemId(AccountId(), highId));
+        if (!source || GetCasketId(*source))
+        {
+            if (m_editorVisibleItems.erase(highId))
+            {
+                EditorItem &dest = changes.items.emplace_back();
+                dest.highId = highId;
+                dest.type = EditorItemChangeType::Destroyed;
+            }
+
+            continue;
+        }
+
+        bool inserted = m_editorVisibleItems.insert(highId).second;
+
+        EditorItem &dest = changes.items.emplace_back();
+        dest.highId = highId;
+        dest.type = inserted ? EditorItemChangeType::Created : EditorItemChangeType::Modified;
+        source->ToDesc(dest.desc);
+    }
+
+    m_editor.SendChanges(changes, false);
 }
 
 InventoryChangeMessages Inventory::BuildChangeMessages(
@@ -929,7 +1064,29 @@ bool Inventory::DestroyItemById(InventoryModify &modify, uint64_t itemId)
         return false;
     }
 
-    bool hadEquips = it->second.HasEquips();
+    Item &item = it->second;
+
+    // schizo: if this item was in a casket, decrement the casket item count
+    Item *casket = FindItem(GetCasketId(item));
+    if (casket && casket->DefIndex() == ItemDefIndex::Casket)
+    {
+        modify.IncrementItemAttribute(*casket, AttributeDefIndex::CasketItemsCount, -1);
+        modify.SetItemAttribute(*casket, AttributeDefIndex::CasketModificationDate, static_cast<uint32_t>(time(nullptr)), true);
+    }
+
+    // schizo: if this was a casket, take all of the items out
+    if (item.DefIndex() == ItemDefIndex::Casket)
+    {
+        for (auto &pair : m_items)
+        {
+            if (GetCasketId(pair.second) == itemId)
+            {
+                modify.RemoveItemAttributes(pair.second, { AttributeDefIndex::CasketIdLow, AttributeDefIndex::CasketIdHigh });
+            }
+        }
+    }
+
+    bool hadEquips = item.HasEquips();
     m_items.erase(it);
 
     modify.MarkItemDestroyed(itemId >> 32, hadEquips);

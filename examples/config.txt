@@ -44,3 +44,8 @@
 // 1 = log to in-game console
 // 2 = log to in-game console and file (gc_log.txt)
 "log_output"	"1"
+
+// allow an inventory editor with this Origin to
+// connect to the websocket server at 127.0.0.1:13001
+// empty or null means the server is disabled
+"inventory_editor_origin"	""

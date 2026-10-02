@@ -29,7 +29,7 @@ enum class AttributeIncrement
 class InventoryModify
 {
 public:
-    InventoryModify(const Inventory &inventory);
+    InventoryModify(Inventory &inventory);
     ~InventoryModify();
 
     InventoryModify(const InventoryModify &) = delete;
@@ -42,6 +42,9 @@ public:
     void MarkItemCreated(uint32_t highId, bool gameServerDirty);
     void MarkItemDestroyed(uint32_t highId, bool gameServerDirty);
     void MarkDefaultEquipChanged(const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip);
+
+    // full update from the editor, except for equips as those need manual handling
+    void UpdateFromDesc(Item &item, const ItemDesc &desc);
 
     // for setting item positions...
     void SetItemInventory(Item &item, uint32_t inventory);
@@ -66,5 +69,5 @@ public:
 private:
     void MarkUpdatedInternal(uint32_t highId, bool gameServerDirty);
 
-    const Inventory &m_inventory;
+    Inventory &m_inventory;
 };

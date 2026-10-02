@@ -2,6 +2,7 @@ project(csgo_gc)
 
 find_package(MbedTLS CONFIG REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
+find_package(libwebsockets CONFIG REQUIRED)
 
 # funchook and its deps get pulled in via FetchContent
 # FIXME: consider alternatives!!! funchook is no longer
@@ -30,11 +31,13 @@ add_library(csgo_gc STATIC
     gc_shared.cpp
     graffiti.cpp
     inventory.cpp
+    inventory_editor.cpp
     inventory_modify.cpp
     item.cpp
     item_schema.cpp
     keyvalue.cpp
     main.cpp
+    message.cpp
     networking_client.cpp
     networking_server.cpp
     steam_hook.cpp)
@@ -77,7 +80,8 @@ target_link_libraries(csgo_gc PRIVATE
     MbedTLS::mbedcrypto
     protobuf::libprotobuf-lite
     funchook-static
-    steam_api)
+    steam_api
+    websockets)
 
 # apple message box
 if (APPLE)

@@ -2,17 +2,14 @@
 #include "inventory_modify.h"
 #include "inventory.h"
 
-InventoryModify::InventoryModify(const Inventory &inventory)
+InventoryModify::InventoryModify(Inventory &inventory)
     : m_inventory{ inventory }
 {
 }
 
 InventoryModify::~InventoryModify()
 {
-    if (!m_itemChanges.empty() || !m_defaultEquipChanges.empty())
-    {
-        m_inventory.WriteToFile();
-    }
+    m_inventory.FlushChanges(*this);
 }
 
 void InventoryModify::MarkItemCreated(uint32_t highId, bool gameServerDirty)
@@ -66,6 +63,21 @@ void InventoryModify::MarkDefaultEquipChanged(const CSOEconDefaultEquippedDefini
     }
 
     m_defaultEquipChanges.push_back(defaultEquip);
+}
+
+void InventoryModify::UpdateFromDesc(Item &item, const ItemDesc &desc)
+{
+    item.m_inventory = desc.inventory;
+    item.m_defIndex = desc.defIndex;
+    item.m_level = desc.level;
+    item.m_quality = desc.quality;
+    item.m_flags = desc.flags;
+    item.m_origin = desc.origin;
+    item.m_inUse = desc.inUse;
+    item.m_rarity = desc.rarity;
+    item.m_attributes = desc.attributes;
+
+    MarkUpdatedInternal(item.m_highId, item.HasEquips());
 }
 
 // for setting item positions...

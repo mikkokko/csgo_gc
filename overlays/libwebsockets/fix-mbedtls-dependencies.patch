@@ -1,0 +1,24 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1101,2 +1101,9 @@
++if (LWS_WITH_MBEDTLS)
++    find_package(MbedTLS CONFIG REQUIRED)
++    set(MBEDTLS_LIBRARY MbedTLS::mbedtls)
++    set(MBEDX509_LIBRARY MbedTLS::mbedx509)
++    set(MBEDCRYPTO_LIBRARY MbedTLS::mbedcrypto)
++endif()
++
+ include_directories("${PROJECT_SOURCE_DIR}/lib")
+ add_subdirectory(lib)
+diff --git a/cmake/libwebsockets-config.cmake.in b/cmake/libwebsockets-config.cmake.in
+--- a/cmake/libwebsockets-config.cmake.in
++++ b/cmake/libwebsockets-config.cmake.in
+@@ -12,2 +12,7 @@
++if (@LWS_WITH_MBEDTLS@)
++    include(CMakeFindDependencyMacro)
++    find_dependency(MbedTLS CONFIG)
++endif()
++
+ # Include the project Targets file, this contains definitions for IMPORTED targets.
+ if (LIB_LIST_AT_END)

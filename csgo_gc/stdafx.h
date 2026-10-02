@@ -14,6 +14,7 @@
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -42,3 +43,10 @@ template<typename Enum>
 
 // used in many files for logging
 #include "platform.h"
+
+// the struct name should make it obvious what it does
+template<class... T>
+struct Bruh : T...
+{
+    using T::operator()...;
+};

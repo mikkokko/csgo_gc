@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gc_const_csgo.h"
+#include "inventory_editor.h"
 #include "item.h"
 #include "item_schema.h"
 #include "random.h"
@@ -39,7 +40,7 @@ public:
     Inventory(uint64_t steamId);
     ~Inventory();
 
-    void WriteToFile() const;
+    bool Update(InventoryChangeMessages &changeMessages);
 
     void BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level, bool server);
 
@@ -58,6 +59,9 @@ public:
 
     InventoryChangeMessages SetItemPositions(const CMsgSetItemPositions &message, std::vector<CMsgItemAcknowledged> &acknowledgements);
     InventoryChangeMessages PurchaseItems(const std::vector<uint32_t> &defIndexes, std::vector<uint64_t> &itemIds);
+
+    // called by InventoryModify when it goes out of scope
+    void FlushChanges(const InventoryModify &modify);
 
 private:
     uint32_t AccountId() const;
@@ -81,6 +85,7 @@ private:
     Item *FindItem(uint64_t itemId);
 
     void ReadFromFile();
+    void WriteToFile() const;
 
     bool EquipItem(InventoryModify &modify, uint64_t itemId, uint32_t classId, uint32_t slotId);
     bool UnequipItem(InventoryModify &modify, uint64_t itemId);
@@ -93,10 +98,18 @@ private:
     void AddToMultipleObjects(CMsgSOMultipleObjects &message, SOTypeId type, const google::protobuf::MessageLite &object);
     void ToSingleObject(CMsgSOSingleObject &message, SOTypeId type, const google::protobuf::MessageLite &object);
 
+    void SendFullInventoryToEditor();
+    void SendChangesToEditor(const InventoryModify &modify);
+
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
     Random m_random;
     uint32_t m_lastHighItemId{};
     ItemMap m_items;
     std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;
+
+    InventoryEditor m_editor;
+
+    // stupid hack since we don't want to show casketed items in the editor
+    std::unordered_set<uint32_t> m_editorVisibleItems;
 };

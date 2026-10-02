@@ -37,6 +37,10 @@ void ClientGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t>
         HandleSOCacheRequest();
         break;
 
+    case GCEvent::Tick:
+        InventoryUpdate();
+        break;
+
     default:
         assert(false);
         break;
@@ -177,6 +181,15 @@ void ClientGC::HandleSOCacheRequest()
 
     GCMessageWrite messageWrite{ k_ESOMsg_CacheSubscribed, message };
     PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
+}
+
+void ClientGC::InventoryUpdate()
+{
+    InventoryChangeMessages changeMessages;
+    if (m_inventory.Update(changeMessages))
+    {
+        SendInventoryChangeMessages(changeMessages);
+    }
 }
 
 void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,

@@ -2,8 +2,7 @@
 #include "gc_message.h"
 
 GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
-    : m_data{ static_cast<const uint8_t *>(data) }
-    , m_size{ size }
+    : MessageRead{ data, size }
 {
     m_type = ReadUint32();
     if (!IsValid())
@@ -58,28 +57,6 @@ GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
 
     // caller needs to check for this
     assert(IsValid());
-}
-
-const void *GCMessageRead::ReadData(size_t size)
-{
-    if (m_error)
-    {
-        // shouldn't get called
-        assert(false);
-        return nullptr;
-    }
-
-    if (m_offset + size > m_size)
-    {
-        // overflow
-        assert(false);
-        m_error = true;
-        return nullptr;
-    }
-
-    const void *result = &m_data[m_offset];
-    m_offset += size;
-    return result;
 }
 
 // mikkotodo fix!!! this function is fucked and broken
@@ -160,10 +137,4 @@ GCMessageWrite::GCMessageWrite(const void *data, uint32_t size)
     assert(size >= sizeof(uint32_t));
     const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
     m_buffer.assign(bytes, bytes + size);
-}
-
-void GCMessageWrite::WriteData(const void *data, uint32_t size)
-{
-    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
-    m_buffer.insert(m_buffer.end(), bytes, bytes + size);
 }

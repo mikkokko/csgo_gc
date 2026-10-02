@@ -2,12 +2,6 @@
 #include "item.h"
 #include "keyvalue.h"
 
-template<class... T>
-struct Bruh : T...
-{
-    using T::operator()...;
-};
-
 Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema)
     : m_highId{ highId }
 {

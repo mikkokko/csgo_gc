@@ -1083,6 +1083,9 @@ static void Hk_SteamAPI_RunCallbacks()
             }
         }
 
+        // stupid hack to test the inventory editor
+        s_clientGC->m_gc.PostToGC(GCEvent::Tick, 0, nullptr, 0);
+
         // poll networking
         s_clientGC->m_networking.Update(&s_clientGC->m_gc);
 

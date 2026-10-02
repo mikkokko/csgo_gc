@@ -17,6 +17,7 @@ private:
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
     void HandleNetMessage(const void *data, uint32_t size);
     void HandleSOCacheRequest();
+    void InventoryUpdate();
 
     // send to the local game and the game server we're connected to (if we're connected)
     void SendMessageToGame(bool sendToGameServer, uint32_t type,

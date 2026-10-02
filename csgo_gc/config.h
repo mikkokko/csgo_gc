@@ -29,6 +29,8 @@ public:
     uint32_t AppIdOverride() const { return m_appIdOverride; }
     bool ShowCsgoGCServersOnly() const { return m_showCsgoGCServersOnly; }
 
+    const std::string &InventoryEditorOrigin() const { return m_inventoryEditorOrigin; }
+
     RankId CompetitiveRank() const { return m_competitiveRank; }
     int CompetitiveWins() const { return m_competitiveWins; }
     RankId WingmanRank() const { return m_wingmanRank; }
@@ -54,6 +56,8 @@ private:
     // and then wonder why the game doesn't work and open an issue on github otherwise
     uint32_t m_appIdOverride{ 4465480 };
     bool m_showCsgoGCServersOnly{ true };
+
+    std::string m_inventoryEditorOrigin;
 
     RankId m_competitiveRank{ RankNone };
     int m_competitiveWins{ 0 };
