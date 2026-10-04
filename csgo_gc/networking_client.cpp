@@ -35,7 +35,7 @@ void NetworkingClient::Update(ClientGC *gc)
         // don't pass messages to the gc unless it's our gameserver
         if (!m_serverSteamId || steamId != m_serverSteamId)
         {
-            Platform::Print("NetworkingClient: ignored message from %llu (not our gs %llu)\n", steamId, m_serverSteamId);
+            Platform::Print("NetworkingClient: ignored message from {} (not our gs {})\n", steamId, m_serverSteamId);
             message->Release();
             continue;
         }
@@ -76,17 +76,17 @@ bool NetworkingClient::HandleMessage(ClientGC *gc, uint64_t steamId, GCMessageRe
         const void *ticket = message.ReadData(ticketSize);
         if (!message.IsValid())
         {
-            Platform::Print("NetworkingClient: ignored connection from %llu (malfored message)\n", steamId);
+            Platform::Print("NetworkingClient: ignored connection from {} (malfored message)\n", steamId);
             return true;
         }
 
         if (!ValidateTicket(m_tickets, steamId, ticket, ticketSize))
         {
-            Platform::Print("NetworkingClient: ignored connection from %llu (ticket mismatch)\n", steamId);
+            Platform::Print("NetworkingClient: ignored connection from {} (ticket mismatch)\n", steamId);
             return true;
         }
 
-        Platform::Print("NetworkingClient: sending socache to %llu\n", steamId);
+        Platform::Print("NetworkingClient: sending socache to {}\n", steamId);
         m_serverSteamId = steamId;
         gc->PostToGC(GCEvent::SOCacheRequest, 0, nullptr, 0);
 
@@ -138,7 +138,7 @@ void NetworkingClient::ClearAuthTicket(uint32_t handle)
 
     if (it->second.steamId)
     {
-        Platform::Print("NetworkingClient: closing p2p session with %llu\n", it->second.steamId);
+        Platform::Print("NetworkingClient: closing p2p session with {}\n", it->second.steamId);
 
         // we had a session so close the connection
         SteamNetworkingIdentity identity;
@@ -170,5 +170,5 @@ void NetworkingClient::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t 
 
 void NetworkingClient::OnSessionFailed(SteamNetworkingMessagesSessionFailed_t *param)
 {
-    Platform::Print("NetworkingClient::OnSessionFailed: %s\n", param->m_info.m_szEndDebug);
+    Platform::Print("NetworkingClient::OnSessionFailed: {}\n", param->m_info.m_szEndDebug);
 }

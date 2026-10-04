@@ -6,6 +6,13 @@
 #include "item_schema.h"
 #include "random.h"
 
+#include "gcsdk_gcmessages.pb.h"
+#include "econ_gcmessages.pb.h"
+
+class CMsgApplySticker;
+class CMsgSetItemPositions;
+class CMsgItemAcknowledged;
+
 class InventoryModify;
 
 struct SingleObject
@@ -106,7 +113,7 @@ private:
     Random m_random;
     uint32_t m_lastHighItemId{};
     ItemMap m_items;
-    std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquips;
+    std::vector<DefaultEquip> m_defaultEquips;
 
     InventoryEditor m_editor;
 

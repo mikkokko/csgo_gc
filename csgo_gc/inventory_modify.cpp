@@ -50,12 +50,12 @@ void InventoryModify::MarkItemDestroyed(uint32_t highId, bool gameServerDirty)
     }
 }
 
-void InventoryModify::MarkDefaultEquipChanged(const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip)
+void InventoryModify::MarkDefaultEquipChanged(const DefaultEquip &defaultEquip)
 {
-    for (CSOEconDefaultEquippedDefinitionInstanceClient &existing : m_defaultEquipChanges)
+    for (DefaultEquip &existing : m_defaultEquipChanges)
     {
-        if (existing.class_id() == defaultEquip.class_id()
-            && existing.slot_id() == defaultEquip.slot_id())
+        if (existing.classId == defaultEquip.classId
+            && existing.slotId == defaultEquip.slotId)
         {
             existing = defaultEquip;
             return;
@@ -90,15 +90,7 @@ void InventoryModify::SetItemInventory(Item &item, uint32_t inventory)
     }
 }
 
-// always just adds a new attribute, one with the same def index can already exist
-void InventoryModify::AddItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value)
-{
-    item.m_attributes.emplace_back(defIndex, value);
-    MarkUpdatedInternal(item.m_highId, item.HasEquips());
-}
-
-// set attribute value if it exists, using this only makes sense if there's only 1 attribute with the def index
-bool InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value, bool addIfMissing)
+void InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value)
 {
     for (ItemAttribute &attribute : item.m_attributes)
     {
@@ -110,18 +102,12 @@ bool InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, I
                 MarkUpdatedInternal(item.m_highId, item.HasEquips());
             }
 
-            return true;
+            return;
         }
     }
 
-    if (addIfMissing)
-    {
-        item.m_attributes.emplace_back(defIndex, value);
-        MarkUpdatedInternal(item.m_highId, item.HasEquips());
-        return true;
-    }
-
-    return false;
+    item.m_attributes.emplace_back(defIndex, value);
+    MarkUpdatedInternal(item.m_highId, item.HasEquips());
 }
 
 AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, AttributeDefIndex defIndex, int amount, uint32_t max)

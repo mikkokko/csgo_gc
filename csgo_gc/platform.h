@@ -7,7 +7,13 @@ namespace Platform
 void Initialize();
 
 // print a debugging message to the in game console or something
-void Print(const char *format, ...);
+void PrintV(std::string_view fmt, std::format_args args);
+
+template<class... Args>
+void Print(std::format_string<Args...> fmt, Args &&...args)
+{
+    PrintV(fmt.get(), std::make_format_args(args...));
+}
 
 // fatal error, show a message box if possible and exit the program
 [[noreturn]] void Error(const char *format, ...);

@@ -112,13 +112,6 @@ class ItemSchema
 public:
     ItemSchema();
 
-    float AttributeFloat(const CSOEconItemAttribute *attribute) const;
-    uint32_t AttributeUint32(const CSOEconItemAttribute *attribute) const;
-    std::string AttributeString(const CSOEconItemAttribute *attribute) const;
-
-    bool SetAttributeFloat(CSOEconItemAttribute *attribute, float value) const;
-    bool SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const;
-    bool SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const;
     AttributeType GetAttributeType(AttributeDefIndex defIndex) const;
 
     // for case opening

@@ -2,6 +2,8 @@
 #include "graffiti.h"
 #include "platform.h"
 
+#include "cstrike15_gcmessages.pb.h"
+
 #include <mbedtls/pk.h>
 #include <mbedtls/md.h>
 #include <mbedtls/entropy.h>

@@ -20,6 +20,7 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 - Name tags
 - Music kits
 - In-game store
+- Real time inventory editing via WebSockets
 - Works without full Steam API emulation
 - Full Windows, Linux and macOS support
 - Functional lobbies
@@ -29,8 +30,6 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 
 ## Planned features
 - Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
-
-I'm still looking for the **full** CS:GO Item Schema. If you have a relatively recent copy of it and are willing to share it, let me know!
 
 ## Not planned
 - Matchmaking (can't be implemented without a centralized server)
@@ -45,7 +44,14 @@ I'm still looking for the **full** CS:GO Item Schema. If you have a relatively r
 - macOS users: The release binaries are not notarized, so if you're using them, you'll have to deal with that somehow
 
 ## Inventory editing
-For GUI inventory editors, see https://github.com/mikkokko/csgo_gc/issues/82. For manual editing, there is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
+
+### Realtime editing
+The GC exposes a local WebSocket API for inventory editors. An editor can read the inventory and send changes while the game is running. Changes appear in-game immediately and are saved to inventory.txt. In-game inventory changes are also sent to the connected editor.
+
+A web-based realtime editor is available [here](https://github.com/mikkokko/csgo_invedit). The default `inventory_editor_origin` in `csgo_gc/config.txt` allows connections from its site. To use another editor, set it to the `Origin` that editor provides.
+
+### Offline editing
+For GUI inventory editors made by others, see https://github.com/mikkokko/csgo_gc/issues/82. For manual editing, there is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
 
 ## Configuration
 See [csgo_gc/config.txt](examples/config.txt) for available options.
@@ -64,7 +70,7 @@ Requirements:
 - Git
 - vcpkg
 - CMake 3.20 or newer
-- C++ compiler with C++17 support (VS 2017 or later, Clang 5 or later, GCC 7 or later)
+- C++ compiler with C++20 support
 
 See [the continuous build workflow](.github/workflows/build.yml) for details.
 

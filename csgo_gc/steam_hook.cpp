@@ -665,7 +665,7 @@ public:
         if (VersionNameIs(version, "SteamGameCoordinator"))
         {
             PROXY_INTERFACE(SteamGameCoordinator, 001, m_steamPipe, m_steamUser);
-            Platform::Print("Can't hook %s\n", version);
+            Platform::Print("Can't hook {}\n", version);
             return nullptr;
         }
 
@@ -676,14 +676,14 @@ public:
             PROXY_INTERFACE(SteamGameServer, 012);
             PROXY_INTERFACE(SteamGameServer, 013);
             PROXY_INTERFACE(SteamGameServer, 014);
-            Platform::Print("Can't hook %s\n", version);
+            Platform::Print("Can't hook {}\n", version);
             return nullptr;
         }
 
         if (VersionNameIs(version, "SteamMatchMakingServers"))
         {
             PROXY_INTERFACE(SteamMatchmakingServers, 002);
-            Platform::Print("Can't hook %s\n", version);
+            Platform::Print("Can't hook {}\n", version);
             return nullptr;
         }
 
@@ -698,7 +698,7 @@ public:
             PROXY_INTERFACE(SteamUser, 020);
             PROXY_INTERFACE(SteamUser, 021);
             PROXY_INTERFACE(SteamUser, 022);
-            Platform::Print("Can't hook %s\n", version);
+            Platform::Print("Can't hook {}\n", version);
             return nullptr;
         }
 
@@ -708,7 +708,7 @@ public:
             PROXY_INTERFACE(SteamUserStats, 010);
             PROXY_INTERFACE(SteamUserStats, 011);
             PROXY_INTERFACE(SteamUserStats, 012);
-            Platform::Print("Can't hook %s\n", version);
+            Platform::Print("Can't hook {}\n", version);
             return nullptr;
         }
 
@@ -724,7 +724,7 @@ public:
             PROXY_INTERFACE(SteamUtils, 008);
             PROXY_INTERFACE(SteamUtils, 009);
             PROXY_INTERFACE(SteamUtils, 010);
-            Platform::Print("Can't hook %s\n", version);
+            Platform::Print("Can't hook {}\n", version);
             return nullptr;
         }
 #undef PROXY_INTERFACE
@@ -900,7 +900,7 @@ static void *Hk_CreateInterface(const char *name, int *errorCode)
         CHECK_STEAMCLIENT(011)
         CHECK_STEAMCLIENT(010)
 #undef CHECK_STEAMCLIENT
-        Platform::Print("Can't hook %s\n", name);
+        Platform::Print("Can't hook {}\n", name);
     }
 
     return result;

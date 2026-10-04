@@ -4,6 +4,12 @@
 #include "gc_const_csgo.h"
 #include "graffiti.h"
 
+#include "base_gcmessages.pb.h"
+#include "cstrike15_gcmessages.pb.h"
+#include "econ_gcmessages.pb.h"
+#include "gcsdk_gcmessages.pb.h"
+#include "gcsystemmsgs.pb.h"
+
 // yuck!! needed for CSteamID (construct full id from account id)
 #include "steam/steamclientpublic.h"
 
@@ -71,7 +77,7 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             break;
 
         default:
-            Platform::Print("ServerGC::HandleMessage: unhandled protobuf message %s)\n",
+            Platform::Print("ServerGC::HandleMessage: unhandled protobuf message {})\n",
                 MessageName(messageRead.TypeUnmasked()));
             break;
         }
@@ -80,7 +86,7 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
 
 void ServerGC::HandleClientSOCacheUnsubscribe(uint64_t steamId)
 {
-    Platform::Print("HandleClientSOCacheUnsubscribe: %llu\n", steamId);
+    Platform::Print("HandleClientSOCacheUnsubscribe: {}\n", steamId);
 
     CMsgSOCacheUnsubscribed message;
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
@@ -96,14 +102,14 @@ static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamI
     T message;
     if (!messageRead.ReadProtobuf(message))
     {
-        Platform::Print("ValidateMessageOwnerSOID %llu: parsing failed\n", steamId);
+        Platform::Print("ValidateMessageOwnerSOID {}: parsing failed\n", steamId);
         return false;
     }
 
     if (message.owner_soid().type() != SoIdTypeSteamId
         || message.owner_soid().id() != steamId)
     {
-        Platform::Print("ValidateMessageOwnerSOID %llu: steam id mismatch (message has %llu)\n",
+        Platform::Print("ValidateMessageOwnerSOID {}: steam id mismatch (message has {})\n",
             steamId, message.owner_soid().id());
         return false;
     }
@@ -150,14 +156,14 @@ bool ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(GCMessageRead &messageRead,
     CMsgSOCacheSubscribed message;
     if (!messageRead.ReadProtobuf(message))
     {
-        Platform::Print("ValidateMessageOwnerSOID %llu: parsing failed\n", steamId);
+        Platform::Print("ValidateMessageOwnerSOID {}: parsing failed\n", steamId);
         return false;
     }
 
     if (message.owner_soid().type() != SoIdTypeSteamId
         || message.owner_soid().id() != steamId)
     {
-        Platform::Print("ValidateMessageOwnerSOID %llu: steam id mismatch (message has %llu)\n",
+        Platform::Print("ValidateMessageOwnerSOID {}: steam id mismatch (message has {})\n",
             steamId, message.owner_soid().id());
         return false;
     }
@@ -169,13 +175,13 @@ bool ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(GCMessageRead &messageRead,
 
     if (itemCount > MaxServerSOCacheItems)
     {
-        Platform::Print("Client %llu socache has %d items (max allowed %d), ignoring\n", itemCount, MaxServerSOCacheItems);
+        Platform::Print("Client {} socache has {} items (max allowed {}), ignoring\n", steamId, itemCount, MaxServerSOCacheItems);
         return false;
     }
 
     if (modified)
     {
-        Platform::Print("SOCache from %llu had to be cleaned up (%zu -> %zu bytes)\n", steamId, oldSize, message.ByteSizeLong());
+        Platform::Print("SOCache from {} had to be cleaned up ({} -> {} bytes)\n", steamId, oldSize, message.ByteSizeLong());
         sanitized.emplace(k_ESOMsg_CacheSubscribed, message);
     }
 
@@ -184,7 +190,7 @@ bool ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(GCMessageRead &messageRead,
 
 void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
-    Platform::Print("HandleNetMessage: %llu, %u bytes\n", steamId, size);
+    Platform::Print("HandleNetMessage: {}, {} bytes\n", steamId, size);
 
     GCMessageRead validate{ 0, data, size };
     if (!validate.IsValid())
@@ -196,7 +202,7 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
     if (!validate.IsProtobuf())
     {
         // all the allowed messages are protobuf based
-        Platform::Print("ServerGC: ignoring non protobuf message %u from %llu\n",
+        Platform::Print("ServerGC: ignoring non protobuf message {} from {}\n",
             validate.TypeUnmasked(), steamId);
         return;
     }
@@ -228,7 +234,7 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
 
     if (!isValid)
     {
-        Platform::Print("ServerGC: ignoring net message %u from %llu\n",
+        Platform::Print("ServerGC: ignoring net message {} from {}\n",
             validate.TypeUnmasked(), steamId);
         return;
     }

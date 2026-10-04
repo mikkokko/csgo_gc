@@ -4,6 +4,10 @@
 #include "gc_shared.h"
 #include "inventory.h"
 
+class CMsgClientWelcome;
+class CMsgCStrike15Welcome;
+class CMsgGCCStrike15_v2_MatchmakingGC2ClientHello;
+
 class ClientGC final : public SharedGC
 {
 public:
