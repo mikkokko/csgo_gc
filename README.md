@@ -64,7 +64,7 @@ Requirements:
 - Git
 - vcpkg
 - CMake 3.20 or newer
-- C++ compiler with C++17 support (VS 2017 or later, Clang 5 or later, GCC 7 or later)
+- C++ compiler with C++20 support
 
 See [the continuous build workflow](.github/workflows/build.yml) for details.
 

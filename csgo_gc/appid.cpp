@@ -72,7 +72,7 @@ void Init()
     // defaults to 730 if not specified
     uint32_t appIdOverride = GetConfig().AppIdOverride();
 
-    Platform::Print("Using app id %u\n", appIdOverride);
+    Platform::Print("Using app id {}\n", appIdOverride);
 
     std::string steamInf = LoadFile("csgo/steam.inf");
     SteamInfResult steamInfResult = ReplaceSteamInfAppId(steamInf, appIdOverride);
@@ -82,15 +82,15 @@ void Init()
     case SteamInfResult::Ok:
         // could make a backup, but don't...
         WriteFile("csgo/steam.inf", steamInf);
-        Platform::Print("Replaced steam.inf app id with %u\n", appIdOverride);
+        Platform::Print("Replaced steam.inf app id with {}\n", appIdOverride);
         break;
 
     case SteamInfResult::InvalidFile:
-        Platform::Print("Did not replace steam.inf app id with %u (invalid file)\n", appIdOverride);
+        Platform::Print("Did not replace steam.inf app id with {} (invalid file)\n", appIdOverride);
         break;
 
     case SteamInfResult::AlreadyOk:
-        Platform::Print("steam.inf app id was already set to %u\n", appIdOverride);
+        Platform::Print("steam.inf app id was already set to {}\n", appIdOverride);
         break;
     }
 }

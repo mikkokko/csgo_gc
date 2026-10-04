@@ -21,7 +21,7 @@ bool NetworkingServer::ReceiveMessage(SteamNetworkingMessage_t *&message)
     // see if we have a session
     if (!m_clients.Has(steamId))
     {
-        Platform::Print("NetworkingServer: ignored message from %llu (no session)\n", steamId);
+        Platform::Print("NetworkingServer: ignored message from {} (no session)\n", steamId);
         message->Release();
         return false;
     }
@@ -44,7 +44,7 @@ static void SendMessageToUser(ISteamNetworkingMessages *networkingMessages, uint
 
     if (result != k_EResultOK)
     {
-        Platform::Print("SendMessageToUser failed for %llu: %d, closing session and trying again\n", steamId, result);
+        Platform::Print("SendMessageToUser failed for {}: {}, closing session and trying again\n", steamId, static_cast<int>(result));
 
         networkingMessages->CloseChannelWithUser(identity, NetMessageChannel);
 
@@ -58,7 +58,7 @@ static void SendMessageToUser(ISteamNetworkingMessages *networkingMessages, uint
         if (result != k_EResultOK)
         {
             // not much we can do in this situation i guess
-            Platform::Print("SendMessageToUser failed for %llu\n", steamId);
+            Platform::Print("SendMessageToUser failed for {}\n", steamId);
         }
     }
 }
@@ -67,7 +67,7 @@ void NetworkingServer::ClientConnected(uint64_t steamId, const void *ticket, uin
 {
     if (!m_clients.Add(steamId))
     {
-        Platform::Print("got ClientConnected for %llu but they're already on the list! ignoring\n", steamId);
+        Platform::Print("got ClientConnected for {} but they're already on the list! ignoring\n", steamId);
         return;
     }
 
@@ -86,7 +86,7 @@ void NetworkingServer::ClientDisconnected(uint64_t steamId)
 {
     if (!m_clients.Remove(steamId))
     {
-        Platform::Print("got ClientDisconnected for %llu but they're not on the list! ignoring\n", steamId);
+        Platform::Print("got ClientDisconnected for {} but they're not on the list! ignoring\n", steamId);
         return;
     }
 
@@ -99,7 +99,7 @@ void NetworkingServer::SendMessage(uint64_t steamId, const void *data, uint32_t 
 {
     if (!m_clients.Has(steamId))
     {
-        Platform::Print("No csgo_gc session with %llu, not sending message!!!\n");
+        Platform::Print("No csgo_gc session with {}, not sending message!!!\n", steamId);
         return;
     }
 
@@ -112,15 +112,15 @@ void NetworkingServer::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t 
 
     if (!m_clients.Has(steamId))
     {
-        Platform::Print("%llu sent a session request, we don't have a csgo_gc session, ignoring...\n");
+        Platform::Print("{} sent a session request, we don't have a csgo_gc session, ignoring...\n", steamId);
         return;
     }
 
-    Platform::Print("%llu sent a session request, we were playing GC with them so accept\n");
+    Platform::Print("{} sent a session request, we were playing GC with them so accept\n", steamId);
 
     if (!m_networkingMessages->AcceptSessionWithUser(param->m_identityRemote))
     {
-        Platform::Print("AcceptSessionWithUser with %llu failed???\n",
+        Platform::Print("AcceptSessionWithUser with {} failed???\n",
             param->m_identityRemote.GetSteamID64());
     }
 }
@@ -128,5 +128,5 @@ void NetworkingServer::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t 
 void NetworkingServer::OnSessionFailed(SteamNetworkingMessagesSessionFailed_t *param)
 {
     // don't do anything, rely on the auth session
-    Platform::Print("OnSessionFailed: %s\n", param->m_info.m_szEndDebug);
+    Platform::Print("OnSessionFailed: {}\n", param->m_info.m_szEndDebug);
 }

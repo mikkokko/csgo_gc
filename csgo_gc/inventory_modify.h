@@ -41,7 +41,7 @@ public:
     // manual bookkeeping
     void MarkItemCreated(uint32_t highId, bool gameServerDirty);
     void MarkItemDestroyed(uint32_t highId, bool gameServerDirty);
-    void MarkDefaultEquipChanged(const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip);
+    void MarkDefaultEquipChanged(const DefaultEquip &defaultEquip);
 
     // full update from the editor, except for equips as those need manual handling
     void UpdateFromDesc(Item &item, const ItemDesc &desc);
@@ -49,11 +49,8 @@ public:
     // for setting item positions...
     void SetItemInventory(Item &item, uint32_t inventory);
 
-    // always just adds a new attribute, one with the same def index can already exist
-    void AddItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value);
-
-    // set attribute value if it exists, using this only makes sense if there's only 1 attribute with the def index
-    bool SetItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value, bool addIfMissing);
+    // sets the value for the first attribute with a matching def index, adds the attribute if it doesn't exist
+    void SetItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value);
 
     AttributeIncrement IncrementItemAttribute(Item &item, AttributeDefIndex defIndex, int amount, uint32_t max = std::numeric_limits<uint32_t>::max());
     AttributeIncrement IncrementItemAttribute(Item &item, AttributeDefIndex defIndex, float amount, float min, float max);
@@ -64,7 +61,7 @@ public:
     bool RemoveItemEquip(Item &item, uint32_t classId, uint32_t slotId);
 
     std::unordered_map<uint32_t, ItemChange> m_itemChanges;
-    std::vector<CSOEconDefaultEquippedDefinitionInstanceClient> m_defaultEquipChanges;
+    std::vector<DefaultEquip> m_defaultEquipChanges;
 
 private:
     void MarkUpdatedInternal(uint32_t highId, bool gameServerDirty);

@@ -44,7 +44,7 @@ void Initialize()
     }
 }
 
-void Print(const char *format, ...)
+void PrintV(std::string_view fmt, std::format_args args)
 {
     LogOutput logOutput = GetConfig().GetLogOutput();
     if (logOutput <= LogOutputNone)
@@ -53,24 +53,19 @@ void Print(const char *format, ...)
         return;
     }
 
-    va_list ap;
-    char buffer[4096];
-
-    va_start(ap, format);
-    vsnprintf(buffer, sizeof(buffer), format, ap);
-    va_end(ap);
+    std::string buffer = std::vformat(fmt, args);
 
     if (s_ConColorMsg)
     {
         uint8_t color[4] = { 0, 255, 128, 255 };
-        s_ConColorMsg(color, "[GC] %s", buffer);
+        s_ConColorMsg(color, "[GC] %s", buffer.c_str());
     }
 
     // optionally also log to file
     if (logOutput >= LogOutputFile)
     {
         FILE *f = fopen("gc_log.txt", "a");
-        fprintf(f, "%s", buffer);
+        fprintf(f, "%s", buffer.c_str());
         fclose(f);
     }
 }

@@ -4,6 +4,17 @@
 
 class KeyValue;
 
+class CSOEconItem;
+class CEconItemPreviewDataBlock;
+
+// not item related per se, but where else would this go...
+struct DefaultEquip
+{
+    uint32_t defIndex;
+    uint32_t classId;
+    uint32_t slotId;
+};
+
 using ItemAttributeValue = std::variant<float, uint32_t, std::string>;
 
 class ItemAttribute
@@ -90,7 +101,7 @@ public:
 
     // serialization...
     void ToKeyValue(KeyValue &kv) const;
-    void ToCSOEconItem(CSOEconItem &item, uint32_t accountId, const ItemSchema &itemSchema) const;
+    void ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const;
     void ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t accountId) const;
     void ToDesc(ItemDesc &desc) const; // FIXME: do we want this
 

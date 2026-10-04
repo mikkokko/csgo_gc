@@ -83,7 +83,7 @@ AttributeInfo::AttributeInfo(const KeyValue &key)
         else
         {
             // not supported, fall back to float
-            Platform::Print("Unsupported attribute type %s\n", std::string{ type }.c_str());
+            Platform::Print("Unsupported attribute type {}\n", type);
             m_type = AttributeType::Float;
         }
     }
@@ -220,220 +220,6 @@ ItemSchema::ItemSchema()
     {
         ParseRevolvingLootLists(revolvingLootListsKey);
     }
-}
-
-static std::string DecodeAttributeString(std::string_view data)
-{
-    CAttribute_String attribute;
-    if (!attribute.ParseFromString(data))
-    {
-        assert(false);
-        return {};
-    }
-
-    return attribute.value();
-}
-
-static std::string EncodeAttributeString(std::string_view string)
-{
-    CAttribute_String attribute;
-    attribute.set_value(string);
-    return attribute.SerializeAsString();
-}
-
-float ItemSchema::AttributeFloat(const CSOEconItemAttribute *attribute) const
-{
-    auto it = m_attributeInfo.find(ToEnum<AttributeDefIndex>(attribute->def_index()));
-    if (it == m_attributeInfo.end())
-    {
-        assert(false);
-        return 0;
-    }
-
-    switch (it->second.m_type)
-    {
-    case AttributeType::Float:
-        return *reinterpret_cast<const float *>(attribute->value_bytes().data());
-
-    case AttributeType::Uint32:
-        return *reinterpret_cast<const uint32_t *>(attribute->value_bytes().data());
-
-    case AttributeType::String:
-        return FromString<float>(DecodeAttributeString(attribute->value_bytes()));
-
-    default:
-        assert(false);
-        return 0;
-    }
-}
-
-uint32_t ItemSchema::AttributeUint32(const CSOEconItemAttribute *attribute) const
-{
-    auto it = m_attributeInfo.find(ToEnum<AttributeDefIndex>(attribute->def_index()));
-    if (it == m_attributeInfo.end())
-    {
-        assert(false);
-        return 0;
-    }
-
-    switch (it->second.m_type)
-    {
-    case AttributeType::Float:
-        return *reinterpret_cast<const float *>(attribute->value_bytes().data());
-
-    case AttributeType::Uint32:
-        return *reinterpret_cast<const uint32_t *>(attribute->value_bytes().data());
-
-    case AttributeType::String:
-        return FromString<uint32_t>(DecodeAttributeString(attribute->value_bytes()));
-
-    default:
-        assert(false);
-        return 0;
-    }
-}
-
-std::string ItemSchema::AttributeString(const CSOEconItemAttribute *attribute) const
-{
-    auto it = m_attributeInfo.find(ToEnum<AttributeDefIndex>(attribute->def_index()));
-    if (it == m_attributeInfo.end())
-    {
-        assert(false);
-        return {};
-    }
-
-    switch (it->second.m_type)
-    {
-    case AttributeType::Float:
-        return std::to_string(*reinterpret_cast<const float *>(attribute->value_bytes().data()));
-
-    case AttributeType::Uint32:
-        return std::to_string(*reinterpret_cast<const uint32_t *>(attribute->value_bytes().data()));
-
-    case AttributeType::String:
-        return DecodeAttributeString(attribute->value_bytes());
-
-    default:
-        assert(false);
-        return {};
-    }
-}
-
-bool ItemSchema::SetAttributeFloat(CSOEconItemAttribute *attribute, float value) const
-{
-    auto it = m_attributeInfo.find(ToEnum<AttributeDefIndex>(attribute->def_index()));
-    if (it == m_attributeInfo.end())
-    {
-        assert(false);
-        return false;
-    }
-
-    switch (it->second.m_type)
-    {
-    case AttributeType::Float:
-    {
-        attribute->set_value_bytes(&value, sizeof(value));
-        break;
-    }
-
-    case AttributeType::Uint32:
-    {
-        uint32_t convert = static_cast<uint32_t>(value);
-        attribute->set_value_bytes(&convert, sizeof(convert));
-        break;
-    }
-
-    case AttributeType::String:
-    {
-        std::string convert = std::to_string(value);
-        attribute->set_value_bytes(EncodeAttributeString(convert));
-        break;
-    }
-
-    default:
-        assert(false);
-        return false;
-    }
-
-    return true;
-}
-
-bool ItemSchema::SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value) const
-{
-    auto it = m_attributeInfo.find(ToEnum<AttributeDefIndex>(attribute->def_index()));
-    if (it == m_attributeInfo.end())
-    {
-        assert(false);
-        return false;
-    }
-
-    switch (it->second.m_type)
-    {
-    case AttributeType::Float:
-    {
-        float convert = static_cast<float>(value);
-        attribute->set_value_bytes(&convert, sizeof(convert));
-        break;
-    }
-
-    case AttributeType::Uint32:
-    {
-        attribute->set_value_bytes(&value, sizeof(value));
-        break;
-    }
-
-    case AttributeType::String:
-    {
-        std::string convert = std::to_string(value);
-        attribute->set_value_bytes(EncodeAttributeString(convert));
-        break;
-    }
-
-    default:
-        assert(false);
-        return false;
-    }
-
-    return true;
-}
-
-bool ItemSchema::SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value) const
-{
-    auto it = m_attributeInfo.find(ToEnum<AttributeDefIndex>(attribute->def_index()));
-    if (it == m_attributeInfo.end())
-    {
-        assert(false);
-        return false;
-    }
-
-    switch (it->second.m_type)
-    {
-    case AttributeType::Float:
-    {
-        float convert = FromString<float>(value);
-        attribute->set_value_bytes(&convert, sizeof(convert));
-        break;
-    }
-
-    case AttributeType::Uint32:
-    {
-        uint32_t convert = FromString<uint32_t>(value);
-        attribute->set_value_bytes(&convert, sizeof(convert));
-        break;
-    }
-
-    case AttributeType::String:
-    {
-        attribute->set_value_bytes(EncodeAttributeString(value));
-        break;
-    }
-
-    default:
-        assert(false);
-        return false;
-    }
-
-    return true;
 }
 
 AttributeType ItemSchema::GetAttributeType(AttributeDefIndex defIndex) const
@@ -635,7 +421,7 @@ void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey
             // FIXME: self opening purchases
             if (itemInfo.m_lootListName.size())
             {
-                Platform::Print("Non coupon item associated loot list in %s!!!\n", itemInfo.m_name.c_str());
+                Platform::Print("Non coupon item associated loot list in {}!!!\n", itemInfo.m_name);
             }
 
             //assert(!itemInfo.m_lootListName.size());
@@ -687,7 +473,7 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
             else
             {
                 // not available to us mortals...
-                Platform::Print("No such prefab '%s'\n", std::string{ prefabName }.c_str());
+                Platform::Print("No such prefab '{}'\n", prefabName);
             }
         }
     }
@@ -921,7 +707,7 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
             else
             {
                 // what the fuck is this...
-                Platform::Print("Unhandled loot list entry %s!!!!\n", entryNameKey.c_str());
+                Platform::Print("Unhandled loot list entry {}!!!!\n", entryNameKey);
             }
         }
     }
@@ -959,7 +745,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
     const ItemInfo *itemInfo = ItemInfoByName(itemName);
     if (!itemInfo)
     {
-        Platform::Print("No such item %s!!!\n", std::string{ itemName }.c_str());
+        Platform::Print("No such item {}!!!\n", itemName);
         return false;
     }
 
@@ -980,7 +766,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         item.stickerKitInfo = StickerKitInfoByName(attributeName);
         if (!item.stickerKitInfo)
         {
-            Platform::Print("WARNING: No such sticker kit %s\n", std::string{ attributeName }.c_str());
+            Platform::Print("WARNING: No such sticker kit {}\n", attributeName);
             return false;
         }
 
@@ -998,7 +784,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         item.musicDefinitionInfo = MusicDefinitionInfoByName(attributeName);
         if (!item.musicDefinitionInfo)
         {
-            Platform::Print("WARNING: No such music definition %s\n", std::string{ attributeName }.c_str());
+            Platform::Print("WARNING: No such music definition {}\n", attributeName);
             return false;
         }
     }
@@ -1010,7 +796,7 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         if (!item.paintKitInfo)
         {
             assert(false);
-            Platform::Print("WARNING: No such paint kit %s\n", std::string{ attributeName }.c_str());
+            Platform::Print("WARNING: No such paint kit {}\n", attributeName);
             return false;
         }
 
@@ -1036,7 +822,6 @@ void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
         auto it = m_lootLists.find(lootListName);
         if (it == m_lootLists.end())
         {
-            //Platform::Print("Ignoring revolving loot list %s\n", lootListName.c_str());
             continue;
         }
 

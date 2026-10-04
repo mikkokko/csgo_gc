@@ -149,14 +149,14 @@ bool KeyValue::ParseFromFile(const char *path)
     std::string data = LoadFile(path);
     if (data.empty())
     {
-        Platform::Print("Could not load %s (or empty)\n", path);
+        Platform::Print("Could not load {} (or empty)\n", path);
         return false;
     }
 
     KeyValueParser parser{ data };
     if (!Parse(parser))
     {
-        Platform::Print("Could not parse %s\n", path);
+        Platform::Print("Could not parse {}\n", path);
         return false;
     }
 
@@ -168,7 +168,7 @@ bool KeyValue::WriteToFile(const char *path)
     FILE *f = fopen(path, "wb");
     if (!f)
     {
-        Platform::Print("Could not open %s for writing\n", path);
+        Platform::Print("Could not open {} for writing\n", path);
         return false;
     }
 
@@ -179,13 +179,13 @@ bool KeyValue::WriteToFile(const char *path)
 
     if (writeFailed)
     {
-        Platform::Print("Writing %s failed: %s\n", path);
+        Platform::Print("Writing {} failed\n", path);
         return false;
     }
 
     if (closeError != 0)
     {
-        Platform::Print("Closing %s failed: %s (%d)\n",
+        Platform::Print("Closing {} failed: {} ({})\n",
             path,
             strerror(closeError),
             closeError);

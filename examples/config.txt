@@ -16,6 +16,9 @@
 "player_level"	"39"
 "player_cur_xp"	"4999"
 
+"country"	"FI"
+"currency"	"2"
+
 // these are the same weights valve uses
 "rarity_weights"
 {
@@ -48,4 +51,4 @@
 // allow an inventory editor with this Origin to
 // connect to the websocket server at 127.0.0.1:13001
 // empty or null means the server is disabled
-"inventory_editor_origin"	""
+"inventory_editor_origin"	"https://mikkokko.github.io"

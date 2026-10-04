@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "gc_message.h"
 
+#include "steammessages.pb.h"
+
 GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
     : MessageRead{ data, size }
 {

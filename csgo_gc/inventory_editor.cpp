@@ -8,6 +8,7 @@
 #include <libwebsockets.h>
 
 constexpr int WebSocketPort = 13001;
+constexpr uint32_t ProtocolVersion = 1;
 
 // FIXME: is 4096 fair??+
 constexpr size_t RxBufferSize = 4096;
@@ -22,7 +23,8 @@ enum CmdType : uint32_t
     // sent as a response to CmdItemCreate by the GC
     // so the inventory editor can set the correct id
     CmdItemSetId, // uint32 (create request id), uint32 (created item id)
-    CmdInventorySnapshot // full inventory snapshot follows, editor should discard the old one
+    CmdInventorySnapshot, // full inventory snapshot follows, editor should discard the old one
+    CmdProtocolInfo // uint32 ProtocolVersion
 };
 
 static void ParseItem(MessageRead &message, EditorItem &item, ItemSchema &itemSchema)
@@ -158,15 +160,19 @@ InventoryEditor::InventoryEditor(ItemSchema &itemSchema)
     m_context = lws_create_context(&info);
     if (!m_context)
     {
-        Platform::Print("Inventory editor server initalization failed\n");
+        Platform::Print("Inventory editor server initialization failed\n");
+        return;
     }
 
-    Platform::Print("Inventory editor server listening on port %d\n", WebSocketPort);
+    Platform::Print("Inventory editor server listening on port {}\n", WebSocketPort);
 }
 
 InventoryEditor::~InventoryEditor()
 {
-    lws_context_destroy(m_context);
+    if (m_context)
+    {
+        lws_context_destroy(m_context);
+    }
 }
 
 bool InventoryEditor::GetChanges(EditorChanges &changes)
@@ -207,7 +213,7 @@ bool InventoryEditor::GetChanges(EditorChanges &changes)
 
 void InventoryEditor::SendChanges(const EditorChanges &changes, bool isFull)
 {
-    if (!m_client)
+    if (!m_client || (!isFull && m_wantsFullInventory))
     {
         return;
     }
@@ -217,12 +223,10 @@ void InventoryEditor::SendChanges(const EditorChanges &changes, bool isFull)
     {
         m_outbox.push_back(std::move(message));
         lws_callback_on_writable(m_client);
-    }
-
-    if (isFull && m_wantsFullInventory)
-    {
-        // we got it, thank you
-        m_wantsFullInventory = false;
+        if (isFull)
+        {
+            m_wantsFullInventory = false;
+        }
     }
 }
 
@@ -256,13 +260,13 @@ bool InventoryEditor::ParseMessage(const Message &message, EditorChanges &change
             break;
 
         default:
-            Platform::Print("Unknown message type %u from item editor\n", cmd);
+            Platform::Print("Unknown message type {} from item editor\n", cmd);
             return false;
         }
 
         if (!read.IsValid())
         {
-            Platform::Print("Parsing message type %u from item editor failed\n", cmd);
+            Platform::Print("Parsing message type {} from item editor failed\n", cmd);
             return false;
         }
 
@@ -353,15 +357,16 @@ int InventoryEditor::Callback(lws *wsi, int reason, void *user, void *in, size_t
         }
 
         std::string origin;
-        origin.resize(static_cast<size_t>(length));
+        origin.resize(static_cast<size_t>(length) + 1);
         if (lws_hdr_copy(wsi, origin.data(), length + 1, WSI_TOKEN_ORIGIN) != length)
         {
             return 1;
         }
 
+        origin.resize(static_cast<size_t>(length));
         if (origin != expected)
         {
-            Platform::Print("Inventory editor origin mismatch (%s, expected %s)\n", origin.c_str(), expected.c_str());
+            Platform::Print("Inventory editor origin mismatch ({}, expected {})\n", origin, expected);
             return 1;
         }
 
@@ -388,6 +393,13 @@ int InventoryEditor::Callback(lws *wsi, int reason, void *user, void *in, size_t
 
         // need to send the inventory
         self->m_wantsFullInventory = true;
+
+        // let the editor know the protocol version we expect
+        MessageWrite protocolInfo;
+        protocolInfo.WriteUint32(CmdProtocolInfo);
+        protocolInfo.WriteUint32(ProtocolVersion);
+        self->m_outbox.push_back(std::move(protocolInfo).TakeBuffer());
+        lws_callback_on_writable(wsi);
         break;
     }
 
@@ -460,6 +472,7 @@ int InventoryEditor::Callback(lws *wsi, int reason, void *user, void *in, size_t
         if (self->m_client == wsi)
         {
             self->m_client = nullptr;
+            self->m_wantsFullInventory = false;
             self->m_inbox.clear();
             self->m_outbox.clear();
         }

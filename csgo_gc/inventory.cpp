@@ -7,6 +7,9 @@
 #include "keyvalue.h"
 #include "random.h"
 
+#include "base_gcmessages.pb.h"
+#include "cstrike15_gcmessages.pb.h"
+
 constexpr const char *InventoryFilePath = "csgo_gc/inventory.txt";
 
 // mikkotodo actual versioning
@@ -46,6 +49,17 @@ inline bool IsDefaultItemId(uint64_t itemId, uint32_t &defIndex, uint32_t &paint
     return false;
 }
 
+inline void DefaultEquipToProto(
+    CSOEconDefaultEquippedDefinitionInstanceClient &proto,
+    const DefaultEquip &defaultEquip,
+    uint32_t accountId)
+{
+    proto.set_account_id(accountId);
+    proto.set_item_definition(defaultEquip.defIndex);
+    proto.set_class_id(defaultEquip.classId);
+    proto.set_slot_id(defaultEquip.slotId);
+}
+
 Inventory::Inventory(uint64_t steamId)
     : m_steamId{ steamId }
     , m_editor{ m_itemSchema }
@@ -60,13 +74,15 @@ Inventory::~Inventory()
 
 bool Inventory::Update(InventoryChangeMessages &changeMessages)
 {
+    EditorChanges changes;
+    const bool hasChanges = m_editor.GetChanges(changes);
+
     if (m_editor.WantsFullInventory())
     {
         SendFullInventoryToEditor();
     }
 
-    EditorChanges changes;
-    if (!m_editor.GetChanges(changes))
+    if (!hasChanges)
     {
         return false;
     }
@@ -217,7 +233,7 @@ InventoryChangeMessages Inventory::BuildChangeMessages(
         }
 
         CSOEconItem econItem;
-        item->ToCSOEconItem(econItem, AccountId(), m_itemSchema);
+        item->ToCSOEconItem(econItem, AccountId());
 
         if (change.type == ItemChangeType::Created)
         {
@@ -236,10 +252,12 @@ InventoryChangeMessages Inventory::BuildChangeMessages(
         }
     }
 
-    for (const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip : modify.m_defaultEquipChanges)
+    for (const DefaultEquip &defaultEquip : modify.m_defaultEquipChanges)
     {
-        AddToMultipleObjects(messages.updatedClient, SOTypeDefaultEquippedDefinitionInstanceClient, defaultEquip);
-        AddToMultipleObjects(messages.updatedGameServer, SOTypeDefaultEquippedDefinitionInstanceClient, defaultEquip);
+        CSOEconDefaultEquippedDefinitionInstanceClient proto;
+        DefaultEquipToProto(proto, defaultEquip, AccountId());
+        AddToMultipleObjects(messages.updatedClient, SOTypeDefaultEquippedDefinitionInstanceClient, proto);
+        AddToMultipleObjects(messages.updatedGameServer, SOTypeDefaultEquippedDefinitionInstanceClient, proto);
     }
 
     if (customizationType.has_value())
@@ -381,18 +399,17 @@ void Inventory::ReadFromFile()
 
         for (const KeyValue &defaultEquipKey : *defaultEquipsKey)
         {
-            CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip = m_defaultEquips.emplace_back();
-            defaultEquip.set_account_id(AccountId());
-            defaultEquip.set_item_definition(FromString<uint32_t>(defaultEquipKey.Name()));
-            defaultEquip.set_class_id(defaultEquipKey.GetNumber<uint32_t>("class_id"));
-            defaultEquip.set_slot_id(defaultEquipKey.GetNumber<uint32_t>("slot_id"));
+            uint32_t defIndex = FromString<uint32_t>(defaultEquipKey.Name());
+            uint32_t classId = defaultEquipKey.GetNumber<uint32_t>("class_id");
+            uint32_t slotId = defaultEquipKey.GetNumber<uint32_t>("slot_id");
+            m_defaultEquips.emplace_back(defIndex, classId, slotId);
         }
     }
 }
 
 void Inventory::WriteToFile() const
 {
-    Platform::Print("Writing inventory to %s (%zu items, %zu default equips)\n",
+    Platform::Print("Writing inventory to {} ({} items, {} default equips)\n",
         InventoryFilePath,
         m_items.size(),
         m_defaultEquips.size());
@@ -413,11 +430,11 @@ void Inventory::WriteToFile() const
     {
         KeyValue &defaultEquipsKey = inventoryKey.AddSubkey("default_equips");
 
-        for (const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip : m_defaultEquips)
+        for (const DefaultEquip &defaultEquip : m_defaultEquips)
         {
-            KeyValue &defaultEquipKey = defaultEquipsKey.AddSubkey(std::to_string(defaultEquip.item_definition()));
-            defaultEquipKey.AddNumber("class_id", defaultEquip.class_id());
-            defaultEquipKey.AddNumber("slot_id", defaultEquip.slot_id());
+            KeyValue &defaultEquipKey = defaultEquipsKey.AddSubkey(std::to_string(defaultEquip.defIndex));
+            defaultEquipKey.AddNumber("class_id", defaultEquip.classId);
+            defaultEquipKey.AddNumber("slot_id", defaultEquip.slotId);
         }
     }
 
@@ -442,7 +459,7 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
             }
 
             CSOEconItem serialized;
-            pair.second.ToCSOEconItem(serialized, AccountId(), m_itemSchema);
+            pair.second.ToCSOEconItem(serialized, AccountId());
             serialized.SerializeToString(object->add_object_data());
         }
     }
@@ -475,9 +492,11 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
         CMsgSOCacheSubscribed_SubscribedType *object = message.add_objects();
         object->set_type_id(SOTypeDefaultEquippedDefinitionInstanceClient);
 
-        for (const CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip : m_defaultEquips)
+        for (const DefaultEquip &defaultEquip : m_defaultEquips)
         {
-            defaultEquip.SerializeToString(object->add_object_data());
+            CSOEconDefaultEquippedDefinitionInstanceClient proto;
+            DefaultEquipToProto(proto, defaultEquip, AccountId());
+            proto.SerializeToString(object->add_object_data());
         }
     }
 }
@@ -520,14 +539,9 @@ bool Inventory::EquipItem(InventoryModify &modify, uint64_t itemId, uint32_t cla
         // if an item is equipped in this slot, unequip it first
         UnequipItem(modify, classId, slotId);
 
-        Platform::Print("EquipItem def %u class %d slot %d\n", defIndex, classId, slotId);
+        Platform::Print("EquipItem def {} class {} slot {}\n", defIndex, classId, slotId);
 
-        CSOEconDefaultEquippedDefinitionInstanceClient &defaultEquip = m_defaultEquips.emplace_back();
-        defaultEquip.set_account_id(AccountId());
-        defaultEquip.set_item_definition(defIndex);
-        defaultEquip.set_class_id(classId);
-        defaultEquip.set_slot_id(slotId);
-
+        DefaultEquip &defaultEquip = m_defaultEquips.emplace_back(defIndex, classId, slotId);
         modify.MarkDefaultEquipChanged(defaultEquip);
 
         return true;
@@ -536,14 +550,14 @@ bool Inventory::EquipItem(InventoryModify &modify, uint64_t itemId, uint32_t cla
     Item *item = FindItem(itemId);
     if (!item)
     {
-        Platform::Print("EquipItem: no such item %llu!!!!\n", itemId);
+        Platform::Print("EquipItem: no such item {}!!!!\n", itemId);
         return false; // didn't modify anything
     }
 
     // if an item is equipped in this slot, unequip it first
     UnequipItem(modify, classId, slotId);
 
-    Platform::Print("EquipItem %llu class %d slot %d\n", itemId, classId,
+    Platform::Print("EquipItem {} class {} slot {}\n", itemId, classId,
         slotId);
 
     modify.AddItemEquip(*item, classId, slotId);
@@ -593,7 +607,7 @@ InventoryChangeMessages Inventory::UseItem(uint64_t itemId)
     EquipItem(modify, unsealedId, 0, LoadoutSlotGraffiti);
 
     // remove this to have unlimited sprays
-    modify.AddItemAttribute(unsealed, AttributeDefIndex::SpraysRemaining, 50u);
+    modify.SetItemAttribute(unsealed, AttributeDefIndex::SpraysRemaining, 50u);
 
     return BuildChangeMessages(modify, k_EGCItemCustomizationNotification_GraffitiUnseal, { unsealedId });
 }
@@ -650,7 +664,7 @@ InventoryChangeMessages Inventory::SetItemPositions(
     {
         Item *item = FindItem(position.item_id());
 
-        Platform::Print("SetItemPositions: %llu --> %u\n", position.item_id(), position.position());
+        Platform::Print("SetItemPositions: {} --> {}\n", position.item_id(), position.position());
         modify.SetItemInventory(*item, position.position());
 
         CMsgItemAcknowledged &acknowledgement = acknowledgements.emplace_back();
@@ -718,12 +732,12 @@ InventoryChangeMessages Inventory::ApplySticker(const CMsgApplySticker &message)
     auto attributeStickerWear = StickerAttributeForSlot(AttributeDefIndex::StickerWear0, message.sticker_slot());
 
     // add the sticker id attribute
-    modify.AddItemAttribute(*item, attributeStickerId, stickerKit);
+    modify.SetItemAttribute(*item, attributeStickerId, stickerKit);
 
     // add the sticker wear attribute if this is not a patch (mikkotodo revisit...)
     if (sticker->DefIndex() != ItemDefIndex::Patch)
     {
-        modify.AddItemAttribute(*item, attributeStickerWear, 0.0f);
+        modify.SetItemAttribute(*item, attributeStickerWear, 0.0f);
     }
 
     uint64_t itemId = item->FullIdFor(AccountId());
@@ -811,18 +825,18 @@ InventoryChangeMessages Inventory::NameItem(uint64_t nameTagId, uint64_t itemId,
         return {};
     }
 
-    modify.SetItemAttribute(*item, AttributeDefIndex::CustomName, std::string{ name }, true);
+    modify.SetItemAttribute(*item, AttributeDefIndex::CustomName, std::string{ name });
 
     // caskets get updated here...
     if (item->DefIndex() == ItemDefIndex::Casket)
     {
         if (!item->HasAttribute(AttributeDefIndex::CasketItemsCount))
         {
-            modify.AddItemAttribute(*item, AttributeDefIndex::CasketItemsCount, 0u);
+            modify.SetItemAttribute(*item, AttributeDefIndex::CasketItemsCount, 0u);
         }
 
         uint32_t modifyTime = static_cast<uint32_t>(time(nullptr));
-        modify.SetItemAttribute(*item, AttributeDefIndex::CasketModificationDate, modifyTime, true);
+        modify.SetItemAttribute(*item, AttributeDefIndex::CasketModificationDate, modifyTime);
     }
 
     if (GetConfig().DestroyUsedItems())
@@ -844,7 +858,7 @@ InventoryChangeMessages Inventory::NameBaseItem(uint64_t nameTagId, uint32_t def
     Item &item = CreateItem(modify, desc);
     uint64_t itemId = item.FullIdFor(AccountId());
 
-    modify.SetItemAttribute(item, AttributeDefIndex::CustomName, std::string{ name }, true);
+    modify.SetItemAttribute(item, AttributeDefIndex::CustomName, std::string{ name });
 
     if (GetConfig().DestroyUsedItems())
     {
@@ -892,10 +906,10 @@ Item *Inventory::FindItem(uint64_t itemId)
 static void EmbedStorageReference(InventoryModify &modify, Item &item, uint64_t storageId)
 {
     uint32_t low = (storageId & UINT32_MAX);
-    modify.AddItemAttribute(item, AttributeDefIndex::CasketIdLow, low);
+    modify.SetItemAttribute(item, AttributeDefIndex::CasketIdLow, low);
 
     uint32_t high = (storageId >> 32) & UINT32_MAX;
-    modify.AddItemAttribute(item, AttributeDefIndex::CasketIdHigh, high);
+    modify.SetItemAttribute(item, AttributeDefIndex::CasketIdHigh, high);
 
     modify.RemoveItemEquips(item);
 }
@@ -936,7 +950,7 @@ InventoryChangeMessages Inventory::CasketItemAdd(uint64_t casketId, uint64_t ite
     }
 
     uint32_t modifyTime = static_cast<uint32_t>(time(nullptr));
-    modify.SetItemAttribute(*storage, AttributeDefIndex::CasketModificationDate, modifyTime, false);
+    modify.SetItemAttribute(*storage, AttributeDefIndex::CasketModificationDate, modifyTime);
 
     EmbedStorageReference(modify, *target, casketId);
 
@@ -974,7 +988,7 @@ InventoryChangeMessages Inventory::CasketItemExtract(uint64_t casketId, uint64_t
     }
 
     uint32_t modifyTime = static_cast<uint32_t>(time(nullptr));
-    modify.SetItemAttribute(*storage, AttributeDefIndex::CasketModificationDate, modifyTime, false);
+    modify.SetItemAttribute(*storage, AttributeDefIndex::CasketModificationDate, modifyTime);
 
     modify.RemoveItemAttributes(*target, { AttributeDefIndex::CasketIdLow, AttributeDefIndex::CasketIdHigh });
 
@@ -1029,24 +1043,16 @@ void Inventory::UnequipItem(InventoryModify &modify, uint32_t classId, uint32_t 
     {
         if (modify.RemoveItemEquip(pair.second, classId, slotId))
         {
-            Platform::Print("Unequip %llu class %d slot %d\n", pair.first, classId, slotId);
+            Platform::Print("Unequip {} class {} slot {}\n", pair.first, classId, slotId);
         }
     }
 
-    // check default equips
+    // check default equips, just delete the references locally
     for (auto it = m_defaultEquips.begin(); it != m_defaultEquips.end();)
     {
-        if (it->class_id() == classId && it->slot_id() == slotId)
+        if (it->classId == classId && it->slotId == slotId)
         {
-            Platform::Print("Unequip %u class %d slot %d\n", it->item_definition(), classId, slotId);
-
-            // mikkotodo is this correct???
-            // mikkotodo rpobably not correct.. i gess we don't even have to do this
-            // because the new equip overrides the old one
-            // but we can't just remove it either because "update" would get fucked
-            it->set_item_definition(0);
-            modify.MarkDefaultEquipChanged(*it);
-
+            Platform::Print("Unequip {} class {} slot {}\n", it->defIndex, classId, slotId);
             it = m_defaultEquips.erase(it);
         }
         else
@@ -1071,7 +1077,7 @@ bool Inventory::DestroyItemById(InventoryModify &modify, uint64_t itemId)
     if (casket && casket->DefIndex() == ItemDefIndex::Casket)
     {
         modify.IncrementItemAttribute(*casket, AttributeDefIndex::CasketItemsCount, -1);
-        modify.SetItemAttribute(*casket, AttributeDefIndex::CasketModificationDate, static_cast<uint32_t>(time(nullptr)), true);
+        modify.SetItemAttribute(*casket, AttributeDefIndex::CasketModificationDate, static_cast<uint32_t>(time(nullptr)));
     }
 
     // schizo: if this was a casket, take all of the items out

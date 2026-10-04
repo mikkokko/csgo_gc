@@ -2,6 +2,9 @@
 #include "item.h"
 #include "keyvalue.h"
 
+#include "base_gcmessages.pb.h"
+#include "cstrike15_gcmessages.pb.h"
+
 Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema)
     : m_highId{ highId }
 {
@@ -127,7 +130,24 @@ void Item::ToKeyValue(KeyValue &kv) const
     }
 }
 
-void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId, const ItemSchema &itemSchema) const
+static void SetAttributeFloat(CSOEconItemAttribute *attribute, float value)
+{
+    attribute->set_value_bytes(&value, sizeof(value));
+}
+
+static void SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value)
+{
+    attribute->set_value_bytes(&value, sizeof(value));
+}
+
+static void SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value)
+{
+    CAttribute_String string;
+    string.set_value(value);
+    string.SerializeToString(attribute->mutable_value_bytes());
+}
+
+void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const
 {
     item.set_id(FullIdFor(accountId));
     item.set_account_id(accountId);
@@ -149,11 +169,11 @@ void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId, const ItemSchema
         // illegible bullshit
         std::visit(Bruh{
                        [&](float v)
-                       { itemSchema.SetAttributeFloat(econ, v); },
+                       { SetAttributeFloat(econ, v); },
                        [&](uint32_t v)
-                       { itemSchema.SetAttributeUint32(econ, v); },
+                       { SetAttributeUint32(econ, v); },
                        [&](const std::string &v)
-                       { itemSchema.SetAttributeString(econ, v); },
+                       { SetAttributeString(econ, v); },
                    },
             attribute.Value());
     }
