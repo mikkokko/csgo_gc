@@ -251,4 +251,9 @@ bool PatchServerBrowserAppId(uint32_t appId)
     return false;
 }
 
+bool RemoveFile(const char* path)
+{
+    return DeleteFileA(path) ? true : false;
+}
+
 } // namespace Platform

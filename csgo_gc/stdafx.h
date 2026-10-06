@@ -3,13 +3,13 @@
 #include <assert.h>
 
 #include <array>
-#include <atomic>
 #include <charconv>
 #include <condition_variable>
+#include <deque>
 #include <format>
 #include <list>
+#include <map>
 #include <optional>
-#include <queue>
 #include <random>
 #include <string>
 #include <thread>
@@ -33,7 +33,13 @@ template<typename Enum>
     return static_cast<Enum>(value);
 }
 
-#include "google/protobuf/message_lite.h"
+#include "base_gcmessages.pb.h"
+#include "cstrike15_gcmessages.pb.h"
+#include "econ_gcmessages.pb.h"
+#include "engine_gcmessages.pb.h"
+#include "gcsdk_gcmessages.pb.h"
+#include "gcsystemmsgs.pb.h"
+#include "steammessages.pb.h"
 
 // used in many files for logging
 #include "platform.h"

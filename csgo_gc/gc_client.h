@@ -1,8 +1,10 @@
 #pragma once
 
-#include "config.h"
+#include "gc_const.h"
 #include "gc_shared.h"
 #include "inventory.h"
+
+class GCMessageRead;
 
 class CMsgClientWelcome;
 class CMsgCStrike15Welcome;

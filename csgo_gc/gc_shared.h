@@ -1,7 +1,5 @@
 #pragma once
 
-#include "gc_message.h"
-
 enum class HostEvent
 {
     Message, // id contains the message type, buffer contains the payload
@@ -38,7 +36,7 @@ protected:
     void StartThread();
     void StopThread();
 
-    void PostToHost(HostEvent type, uint64_t id, const void *data, uint32_t dataSize);
+    void PostToHost(HostEvent type, uint64_t id, std::vector<uint8_t> &&buffer);
 
 private:
     virtual void HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer) = 0;

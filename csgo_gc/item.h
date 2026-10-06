@@ -1,7 +1,8 @@
 #pragma once
 
-#include "item_schema.h"
+#include "item_schema_const.h"
 
+class ItemSchema;
 class KeyValue;
 
 class CSOEconItem;
@@ -89,7 +90,7 @@ public:
     Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema);
 
     // used by InventoryModify to create items
-    Item(uint32_t highId, const ItemDesc &desc);
+    Item(uint32_t highId, ItemDesc &&desc);
 
     // stupid
     uint64_t FullIdFor(uint32_t accountId) const
@@ -103,18 +104,20 @@ public:
     void ToKeyValue(KeyValue &kv) const;
     void ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const;
     void ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t accountId) const;
-    void ToDesc(ItemDesc &desc) const; // FIXME: do we want this
 
     uint32_t HighId() const { return m_highId; }
-    ItemDefIndex DefIndex() const { return m_defIndex; }
-    Rarity GetRarity() const { return m_rarity; }
+    const ItemDesc &GetDesc() const { return m_desc; }
+
+    // FIXME: cull some of the stuff below in favour of using GetDesc???
+    ItemDefIndex DefIndex() const { return m_desc.defIndex; }
+    Rarity GetRarity() const { return m_desc.rarity; }
 
     // could return a span later if needed
-    bool HasEquips() const { return !m_equips.empty(); }
+    bool HasEquips() const { return !m_desc.equips.empty(); }
 
     bool HasAttribute(AttributeDefIndex defIndex) const
     {
-        for (const ItemAttribute &attribute : m_attributes)
+        for (const ItemAttribute &attribute : m_desc.attributes)
         {
             if (attribute.DefIndex() == defIndex)
             {
@@ -128,7 +131,7 @@ public:
     template<typename T>
     T GetAttributeValue(AttributeDefIndex defIndex) const
     {
-        for (const ItemAttribute &attribute : m_attributes)
+        for (const ItemAttribute &attribute : m_desc.attributes)
         {
             if (attribute.DefIndex() == defIndex)
             {
@@ -144,15 +147,5 @@ private:
     friend class InventoryModify;
 
     const uint32_t m_highId;
-    uint32_t m_inventory;
-    ItemDefIndex m_defIndex;
-    uint32_t m_level;
-    Quality m_quality;
-    uint32_t m_flags;
-    uint32_t m_origin;
-    bool m_inUse;
-    Rarity m_rarity;
-
-    std::vector<ItemAttribute> m_attributes;
-    std::vector<ItemEquip> m_equips;
+    ItemDesc m_desc{};
 };

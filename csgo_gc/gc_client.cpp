@@ -1,6 +1,9 @@
 #include "stdafx.h"
 #include "gc_client.h"
+#include "config.h"
+#include "gc_message.h"
 #include "graffiti.h"
+#include "inventory_messages.h"
 #include "keyvalue.h"
 
 #include "base_gcmessages.pb.h"
@@ -186,7 +189,7 @@ void ClientGC::HandleSOCacheRequest()
     m_inventory.BuildCacheSubscription(message, GetConfig().Level(), true);
 
     GCMessageWrite messageWrite{ k_ESOMsg_CacheSubscribed, message };
-    PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
+    PostToHost(HostEvent::NetMessage, 0, std::move(messageWrite).TakeBuffer());
 }
 
 void ClientGC::InventoryUpdate()
@@ -205,10 +208,11 @@ void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
 
     if (sendToGameServer)
     {
-        PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
+        PostToHost(HostEvent::NetMessage, 0, messageWrite.CopyBuffer());
     }
 
-    PostToHost(HostEvent::Message, messageWrite.TypeMasked(), messageWrite.Data(), messageWrite.Size());
+    uint32_t typeMasked = messageWrite.TypeMasked();
+    PostToHost(HostEvent::Message, typeMasked, std::move(messageWrite).TakeBuffer());
 }
 
 void ClientGC::SendInventoryChangeMessages(const InventoryChangeMessages &result)
@@ -226,13 +230,14 @@ void ClientGC::SendInventoryChangeMessages(const InventoryChangeMessages &result
     if (result.updatedClient.objects_modified_size())
     {
         GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedClient };
-        PostToHost(HostEvent::Message, messageWrite.TypeMasked(), messageWrite.Data(), messageWrite.Size());
+        uint32_t typeMasked = messageWrite.TypeMasked();
+        PostToHost(HostEvent::Message, typeMasked, std::move(messageWrite).TakeBuffer());
     }
 
     if (result.updatedGameServer.objects_modified_size())
     {
         GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedGameServer };
-        PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
+        PostToHost(HostEvent::NetMessage, 0, std::move(messageWrite).TakeBuffer());
     }
 
     if (result.notification.has_request())
@@ -454,7 +459,7 @@ void ClientGC::SetItemPositions(GCMessageRead &messageRead)
     {
         // send these to the server only
         GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
-        PostToHost(HostEvent::NetMessage, 0, messageWrite.Data(), messageWrite.Size());
+        PostToHost(HostEvent::NetMessage, 0, std::move(messageWrite).TakeBuffer());
     }
 
     SendInventoryChangeMessages(messages);
@@ -569,7 +574,7 @@ void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
     SendInventoryChangeMessages(messages);
 
     // this will run the steam callback
-    PostToHost(HostEvent::MicroTransactionResponse, 0, nullptr, 0);
+    PostToHost(HostEvent::MicroTransactionResponse, 0, {});
 }
 
 void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)

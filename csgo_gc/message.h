@@ -66,6 +66,11 @@ public:
         return std::move(m_buffer);
     }
 
+    std::vector<uint8_t> CopyBuffer()
+    {
+        return m_buffer;
+    }
+
 protected:
     std::vector<uint8_t> m_buffer;
 };

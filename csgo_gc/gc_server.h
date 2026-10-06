@@ -2,6 +2,8 @@
 
 #include "gc_shared.h"
 
+class GCMessageRead;
+
 class ServerGC final : public SharedGC
 {
 public:

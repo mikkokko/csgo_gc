@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "item.h"
+#include "item_schema.h"
 #include "keyvalue.h"
 
 #include "base_gcmessages.pb.h"
@@ -8,19 +9,19 @@
 Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema)
     : m_highId{ highId }
 {
-    m_inventory = kv.GetNumber<uint32_t>("inventory");
-    m_defIndex = ToEnum<ItemDefIndex>(kv.GetNumber<uint32_t>("def_index"));
-    m_level = kv.GetNumber<uint32_t>("level");
-    m_quality = ToEnum<Quality>(kv.GetNumber<uint32_t>("quality"));
-    m_flags = kv.GetNumber<uint32_t>("flags");
-    m_origin = kv.GetNumber<uint32_t>("origin");
-    m_inUse = kv.GetNumber<int>("in_use") ? true : false;
-    m_rarity = ToEnum<Rarity>(kv.GetNumber<uint32_t>("rarity"));
+    m_desc.inventory = kv.GetNumber<uint32_t>("inventory");
+    m_desc.defIndex = ToEnum<ItemDefIndex>(kv.GetNumber<uint32_t>("def_index"));
+    m_desc.level = kv.GetNumber<uint32_t>("level");
+    m_desc.quality = ToEnum<Quality>(kv.GetNumber<uint32_t>("quality"));
+    m_desc.flags = kv.GetNumber<uint32_t>("flags");
+    m_desc.origin = kv.GetNumber<uint32_t>("origin");
+    m_desc.inUse = kv.GetNumber<int>("in_use") ? true : false;
+    m_desc.rarity = ToEnum<Rarity>(kv.GetNumber<uint32_t>("rarity"));
 
     const KeyValue *attributesKey = kv.GetSubkey("attributes");
     if (attributesKey)
     {
-        m_attributes.reserve(attributesKey->SubkeyCount());
+        m_desc.attributes.reserve(attributesKey->SubkeyCount());
 
         for (const KeyValue &attributeKey : *attributesKey)
         {
@@ -31,22 +32,22 @@ Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSc
             // on another steam account doesn't fuck things up
             if (defIndex == AttributeDefIndex::CasketIdLow)
             {
-                m_attributes.emplace_back(defIndex, accountId);
+                m_desc.attributes.emplace_back(defIndex, accountId);
                 continue;
             }
 
             switch (itemSchema.GetAttributeType(defIndex))
             {
             case AttributeType::Float:
-                m_attributes.emplace_back(defIndex, FromString<float>(value));
+                m_desc.attributes.emplace_back(defIndex, FromString<float>(value));
                 break;
 
             case AttributeType::Uint32:
-                m_attributes.emplace_back(defIndex, FromString<uint32_t>(value));
+                m_desc.attributes.emplace_back(defIndex, FromString<uint32_t>(value));
                 break;
 
             case AttributeType::String:
-                m_attributes.emplace_back(defIndex, std::string{ value });
+                m_desc.attributes.emplace_back(defIndex, std::string{ value });
                 break;
             }
         }
@@ -58,54 +59,43 @@ Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSc
         std::string_view name = kv.GetString("custom_name");
         if (name.size())
         {
-            m_attributes.emplace_back(AttributeDefIndex::CustomName, std::string{ name });
+            m_desc.attributes.emplace_back(AttributeDefIndex::CustomName, std::string{ name });
         }
     }
 
     const KeyValue *equippedStateKey = kv.GetSubkey("equipped_state");
     if (equippedStateKey)
     {
-        m_equips.reserve(equippedStateKey->SubkeyCount());
+        m_desc.equips.reserve(equippedStateKey->SubkeyCount());
 
         for (const KeyValue &equippedKey : *equippedStateKey)
         {
             uint32_t equipClass = FromString<uint32_t>(equippedKey.Name());
             uint32_t equpSlot = FromString<uint32_t>(equippedKey.String());
-            m_equips.emplace_back(equipClass, equpSlot);
+            m_desc.equips.emplace_back(equipClass, equpSlot);
         }
     }
 }
 
-// FIXME: take rvalue ref instead??? common pattern is to
-// get the desc from schema and just create an item using it
-Item::Item(uint32_t highId, const ItemDesc &desc)
+Item::Item(uint32_t highId, ItemDesc &&desc)
     : m_highId{ highId }
+    , m_desc{ std::move(desc) }
 {
-    m_inventory = desc.inventory;
-    m_defIndex = desc.defIndex;
-    m_level = desc.level;
-    m_quality = desc.quality;
-    m_flags = desc.flags;
-    m_origin = desc.origin;
-    m_inUse = desc.inUse;
-    m_rarity = desc.rarity;
-    m_attributes = desc.attributes;
-    m_equips = desc.equips;
 }
 
 void Item::ToKeyValue(KeyValue &kv) const
 {
-    kv.AddNumber("inventory", m_inventory);
-    kv.AddNumber("def_index", FromEnum(m_defIndex));
-    kv.AddNumber("level", m_level);
-    kv.AddNumber("quality", FromEnum(m_quality));
-    kv.AddNumber("flags", m_flags);
-    kv.AddNumber("origin", m_origin);
-    kv.AddNumber("in_use", m_inUse);
-    kv.AddNumber("rarity", FromEnum(m_rarity));
+    kv.AddNumber("inventory", m_desc.inventory);
+    kv.AddNumber("def_index", FromEnum(m_desc.defIndex));
+    kv.AddNumber("level", m_desc.level);
+    kv.AddNumber("quality", FromEnum(m_desc.quality));
+    kv.AddNumber("flags", m_desc.flags);
+    kv.AddNumber("origin", m_desc.origin);
+    kv.AddNumber("in_use", m_desc.inUse);
+    kv.AddNumber("rarity", FromEnum(m_desc.rarity));
 
     KeyValue &attributesKey = kv.AddSubkey("attributes");
-    for (const ItemAttribute &attribute : m_attributes)
+    for (const ItemAttribute &attribute : m_desc.attributes)
     {
         std::string name = std::to_string(FromEnum(attribute.DefIndex()));
 
@@ -124,7 +114,7 @@ void Item::ToKeyValue(KeyValue &kv) const
     }
 
     KeyValue &equippedStateKey = kv.AddSubkey("equipped_state");
-    for (const ItemEquip &equip : m_equips)
+    for (const ItemEquip &equip : m_desc.equips)
     {
         equippedStateKey.AddNumber(std::to_string(equip.Class()), equip.Slot());
     }
@@ -151,17 +141,17 @@ void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const
 {
     item.set_id(FullIdFor(accountId));
     item.set_account_id(accountId);
-    item.set_inventory(m_inventory);
-    item.set_def_index(FromEnum(m_defIndex));
+    item.set_inventory(m_desc.inventory);
+    item.set_def_index(FromEnum(m_desc.defIndex));
     item.set_quantity(1);
-    item.set_level(m_level);
-    item.set_quality(FromEnum(m_quality));
-    item.set_flags(m_flags);
-    item.set_origin(m_origin);
-    item.set_in_use(m_inUse);
-    item.set_rarity(FromEnum(m_rarity));
+    item.set_level(m_desc.level);
+    item.set_quality(FromEnum(m_desc.quality));
+    item.set_flags(m_desc.flags);
+    item.set_origin(m_desc.origin);
+    item.set_in_use(m_desc.inUse);
+    item.set_rarity(FromEnum(m_desc.rarity));
 
-    for (const ItemAttribute &attribute : m_attributes)
+    for (const ItemAttribute &attribute : m_desc.attributes)
     {
         CSOEconItemAttribute *econ = item.add_attribute();
         econ->set_def_index(FromEnum(attribute.DefIndex()));
@@ -178,7 +168,7 @@ void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const
             attribute.Value());
     }
 
-    for (const ItemEquip &equip : m_equips)
+    for (const ItemEquip &equip : m_desc.equips)
     {
         CSOEconItemEquipped *econ = item.add_equipped_state();
         econ->set_new_class(equip.Class());
@@ -221,19 +211,19 @@ void Item::ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t
 {
     block.set_accountid(accountId);
     block.set_itemid(FullIdFor(accountId));
-    block.set_defindex(FromEnum(m_defIndex));
-    block.set_rarity(FromEnum(m_rarity));
-    block.set_quality(FromEnum(m_quality));
-    block.set_inventory(m_inventory);
-    block.set_origin(m_origin);
+    block.set_defindex(FromEnum(m_desc.defIndex));
+    block.set_rarity(FromEnum(m_desc.rarity));
+    block.set_quality(FromEnum(m_desc.quality));
+    block.set_inventory(m_desc.inventory);
+    block.set_origin(m_desc.origin);
 
     // not stored in CSOEconItem?
-    // block.set_entindex(m_entIndex);
-    // block.set_dropreason(m_dropReason);
+    // block.set_entindex(m_desc.entIndex);
+    // block.set_dropreason(m_desc.dropReason);
 
     std::array<CEconItemPreviewDataBlock_Sticker, MaxStickers> stickers;
 
-    for (const ItemAttribute &attribute : m_attributes)
+    for (const ItemAttribute &attribute : m_desc.attributes)
     {
         switch (attribute.DefIndex())
         {
@@ -383,18 +373,4 @@ void Item::ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t
         *sticker = source;
         sticker->set_slot(i);
     }
-}
-
-void Item::ToDesc(ItemDesc &desc) const
-{
-    desc.inventory = m_inventory;
-    desc.defIndex = m_defIndex;
-    desc.level = m_level;
-    desc.quality = m_quality;
-    desc.flags = m_flags;
-    desc.origin = m_origin;
-    desc.inUse = m_inUse;
-    desc.rarity = m_rarity;
-    desc.attributes = m_attributes;
-    desc.equips = m_equips;
 }

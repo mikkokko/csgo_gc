@@ -77,15 +77,12 @@ void SharedGC::PostToGC(GCEvent type, uint64_t id, const void *data, uint32_t da
     }
 }
 
-void SharedGC::PostToHost(HostEvent type, uint64_t id, const void *data, uint32_t dataSize)
+void SharedGC::PostToHost(HostEvent type, uint64_t id, std::vector<uint8_t> &&buffer)
 {
-    const uint8_t *dataBegin = reinterpret_cast<const uint8_t *>(data);
-    const uint8_t *dataEnd = dataBegin + dataSize;
-
     EventData event;
     event.type = static_cast<int>(type);
     event.id = id;
-    event.buffer.assign(dataBegin, dataEnd);
+    event.buffer = std::move(buffer);
 
     {
         std::lock_guard lock{ m_hostEventMutex };

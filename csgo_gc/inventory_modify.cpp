@@ -65,17 +65,12 @@ void InventoryModify::MarkDefaultEquipChanged(const DefaultEquip &defaultEquip)
     m_defaultEquipChanges.push_back(defaultEquip);
 }
 
-void InventoryModify::UpdateFromDesc(Item &item, const ItemDesc &desc)
+void InventoryModify::UpdateFromDesc(Item &item, ItemDesc &&desc)
 {
-    item.m_inventory = desc.inventory;
-    item.m_defIndex = desc.defIndex;
-    item.m_level = desc.level;
-    item.m_quality = desc.quality;
-    item.m_flags = desc.flags;
-    item.m_origin = desc.origin;
-    item.m_inUse = desc.inUse;
-    item.m_rarity = desc.rarity;
-    item.m_attributes = desc.attributes;
+    // FIXME: decide what to do with the equips, currently we don't apply then
+    std::vector<ItemEquip> temp = std::move(item.m_desc.equips);
+    item.m_desc = std::move(desc);
+    item.m_desc.equips = std::move(temp);
 
     MarkUpdatedInternal(item.m_highId, item.HasEquips());
 }
@@ -83,16 +78,16 @@ void InventoryModify::UpdateFromDesc(Item &item, const ItemDesc &desc)
 // for setting item positions...
 void InventoryModify::SetItemInventory(Item &item, uint32_t inventory)
 {
-    if (item.m_inventory != inventory)
+    if (item.m_desc.inventory != inventory)
     {
-        item.m_inventory = inventory;
+        item.m_desc.inventory = inventory;
         MarkUpdatedInternal(item.m_highId, item.HasEquips());
     }
 }
 
 void InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, ItemAttributeValue value)
 {
-    for (ItemAttribute &attribute : item.m_attributes)
+    for (ItemAttribute &attribute : item.m_desc.attributes)
     {
         if (attribute.DefIndex() == defIndex)
         {
@@ -106,13 +101,13 @@ void InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, I
         }
     }
 
-    item.m_attributes.emplace_back(defIndex, value);
+    item.m_desc.attributes.emplace_back(defIndex, value);
     MarkUpdatedInternal(item.m_highId, item.HasEquips());
 }
 
 AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, AttributeDefIndex defIndex, int amount, uint32_t max)
 {
-    for (ItemAttribute &attribute : item.m_attributes)
+    for (ItemAttribute &attribute : item.m_desc.attributes)
     {
         if (attribute.DefIndex() == defIndex)
         {
@@ -140,7 +135,7 @@ AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, Attribute
 
 AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, AttributeDefIndex defIndex, float amount, float min, float max)
 {
-    for (ItemAttribute &attribute : item.m_attributes)
+    for (ItemAttribute &attribute : item.m_desc.attributes)
     {
         if (attribute.DefIndex() == defIndex)
         {
@@ -170,7 +165,7 @@ void InventoryModify::RemoveItemAttributes(Item &item, std::initializer_list<Att
 {
     bool modified = false;
 
-    for (auto it = item.m_attributes.begin(); it != item.m_attributes.end();)
+    for (auto it = item.m_desc.attributes.begin(); it != item.m_desc.attributes.end();)
     {
         bool remove = false;
 
@@ -185,7 +180,7 @@ void InventoryModify::RemoveItemAttributes(Item &item, std::initializer_list<Att
 
         if (remove)
         {
-            it = item.m_attributes.erase(it);
+            it = item.m_desc.attributes.erase(it);
             modified = true;
         }
         else
@@ -202,15 +197,15 @@ void InventoryModify::RemoveItemAttributes(Item &item, std::initializer_list<Att
 
 void InventoryModify::AddItemEquip(Item &item, uint32_t classId, uint32_t slotId)
 {
-    item.m_equips.emplace_back(classId, slotId);
+    item.m_desc.equips.emplace_back(classId, slotId);
     MarkUpdatedInternal(item.m_highId, true);
 }
 
 void InventoryModify::RemoveItemEquips(Item &item)
 {
-    if (!item.m_equips.empty())
+    if (!item.m_desc.equips.empty())
     {
-        item.m_equips.clear();
+        item.m_desc.equips.clear();
         MarkUpdatedInternal(item.m_highId, true);
     }
 }
@@ -219,11 +214,11 @@ bool InventoryModify::RemoveItemEquip(Item &item, uint32_t classId, uint32_t slo
 {
     bool modified = false;
 
-    for (auto it = item.m_equips.begin(); it != item.m_equips.end();)
+    for (auto it = item.m_desc.equips.begin(); it != item.m_desc.equips.end();)
     {
         if (it->Class() == classId && it->Slot() == slotId)
         {
-            it = item.m_equips.erase(it);
+            it = item.m_desc.equips.erase(it);
             modified = true;
         }
         else

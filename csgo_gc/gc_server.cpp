@@ -2,6 +2,7 @@
 #include "gc_server.h"
 #include "gc_const.h"
 #include "gc_const_csgo.h"
+#include "gc_message.h"
 #include "graffiti.h"
 
 #include "base_gcmessages.pb.h"
@@ -93,7 +94,8 @@ void ServerGC::HandleClientSOCacheUnsubscribe(uint64_t steamId)
     message.mutable_owner_soid()->set_id(steamId);
 
     GCMessageWrite write{ k_ESOMsg_CacheUnsubscribed, message };
-    PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
+    uint32_t typeMasked = write.TypeMasked();
+    PostToHost(HostEvent::Message, typeMasked, std::move(write).TakeBuffer());
 }
 
 template<typename T>
@@ -249,12 +251,13 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
     if (sanitized.has_value())
     {
         // pass the sanitized message
-        PostToHost(HostEvent::Message, sanitized->TypeMasked(), sanitized->Data(), sanitized->Size());
+        uint32_t typeMasked = sanitized->TypeMasked();
+        PostToHost(HostEvent::Message, typeMasked, std::move(*sanitized).TakeBuffer());
     }
     else
     {
         // otherwise the old message was fine
-        PostToHost(HostEvent::Message, validate.TypeMasked(), data, size);
+        PostToHost(HostEvent::Message, validate.TypeMasked(), GCMessageWrite{ data, size }.TakeBuffer());
     }
 }
 
@@ -271,7 +274,8 @@ void ServerGC::SendServerWelcome()
     welcome.set_rtime32_gc_welcome_timestamp(static_cast<uint32_t>(time(nullptr)));
 
     GCMessageWrite write{ k_EMsgGCServerWelcome, welcome };
-    PostToHost(HostEvent::Message, write.TypeMasked(), write.Data(), write.Size());
+    uint32_t typeMasked = write.TypeMasked();
+    PostToHost(HostEvent::Message, typeMasked, std::move(write).TakeBuffer());
 
     m_sentWelcome = true;
 }
@@ -288,5 +292,5 @@ void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     // just forward it to the killer
     GCMessageWrite messageWrite{ k_EMsgGC_IncrementKillCountAttribute, message };
     CSteamID killerId{ message.killer_account_id(), k_EUniversePublic, k_EAccountTypeIndividual };
-    PostToHost(HostEvent::NetMessage, killerId.ConvertToUint64(), messageWrite.Data(), messageWrite.Size());
+    PostToHost(HostEvent::NetMessage, killerId.ConvertToUint64(), std::move(messageWrite).TakeBuffer());
 }

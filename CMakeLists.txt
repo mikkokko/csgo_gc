@@ -44,6 +44,7 @@ endif()
 if (MSVC)
     # statically linked crt
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    add_compile_options(/MP)
 else()
     add_compile_options(-fpic -fvisibility=hidden)
 

@@ -6,40 +6,18 @@
 #include "item_schema.h"
 #include "random.h"
 
-#include "gcsdk_gcmessages.pb.h"
-#include "econ_gcmessages.pb.h"
-
 class CMsgApplySticker;
 class CMsgSetItemPositions;
 class CMsgItemAcknowledged;
 
+class CMsgSOCacheSubscribed;
+class CMsgSOMultipleObjects;
+class CMsgSOSingleObject;
+
+enum EGCItemCustomizationNotification : int;
+
 class InventoryModify;
-
-struct SingleObject
-{
-    CMsgSOSingleObject proto;
-    bool sendToGameServer;
-};
-
-// this should be revisited later... these semantics
-// are not exactly correct, but it'll do for now
-struct InventoryChangeMessages
-{
-    // full shared object cache update for clients
-    CMsgSOMultipleObjects updatedClient;
-
-    // janky... same as above but only contains equipped items
-    CMsgSOMultipleObjects updatedGameServer;
-
-    // client, or both client and game server
-    std::vector<SingleObject> created;
-    std::vector<SingleObject> destroyed;
-
-    // client only
-    CMsgGCItemCustomizationNotification notification;
-};
-
-using ItemMap = std::unordered_map<uint64_t, Item>;
+struct InventoryChangeMessages;
 
 class Inventory
 {
@@ -85,8 +63,8 @@ private:
     // used to create items from inventory.txt
     void CreateItem(uint32_t highId, const KeyValue &kv);
 
-    // bruh...
-    Item &CreateItem(InventoryModify &modify, const ItemDesc &desc);
+    // used to create items at runtime
+    Item &CreateItem(InventoryModify &modify, ItemDesc &&desc);
 
     // find an existing item by id, returns nullptr if not found
     Item *FindItem(uint64_t itemId);
@@ -108,11 +86,13 @@ private:
     void SendFullInventoryToEditor();
     void SendChangesToEditor(const InventoryModify &modify);
 
+    void RemoveCachedIcon(uint32_t highId) const;
+
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
     Random m_random;
     uint32_t m_lastHighItemId{};
-    ItemMap m_items;
+    std::unordered_map<uint64_t, Item> m_items;
     std::vector<DefaultEquip> m_defaultEquips;
 
     InventoryEditor m_editor;

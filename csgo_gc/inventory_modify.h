@@ -44,7 +44,7 @@ public:
     void MarkDefaultEquipChanged(const DefaultEquip &defaultEquip);
 
     // full update from the editor, except for equips as those need manual handling
-    void UpdateFromDesc(Item &item, const ItemDesc &desc);
+    void UpdateFromDesc(Item &item, ItemDesc &&desc);
 
     // for setting item positions...
     void SetItemInventory(Item &item, uint32_t inventory);

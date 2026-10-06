@@ -24,8 +24,8 @@ class KeyValueParser
 {
 public:
     KeyValueParser(std::string_view str)
-        : m_ptr{ str.begin() }
-        , m_end{ str.end() }
+        : m_ptr{ str.data() }
+        , m_end{ str.data() + str.size() }
     {
     }
 
@@ -40,7 +40,7 @@ public:
                 return false;
             }
 
-            if (*m_ptr > ' ')
+            if (static_cast<unsigned char>(*m_ptr) > ' ')
             {
                 break;
             }
@@ -73,25 +73,53 @@ public:
         goto start;
     }
 
-    std::string_view ParseString()
+    // FIXME: unfuck this
+    std::string ParseUnquotedString()
     {
+        std::string value;
+
+        while (!IsEndOfFile())
+        {
+            char ch = *m_ptr++;
+            if (static_cast<unsigned char>(ch) <= ' ')
+            {
+                break;
+            }
+
+            value.push_back(ch);
+        }
+
+        return value;
+    }
+
+    std::string ParseString()
+    {
+        if (*m_ptr != '"')
+        {
+            return ParseUnquotedString();
+        }
+
         m_ptr++; // skip the start quote
 
-        auto start = m_ptr;
+        std::string value;
 
-        while (!IsEndOfFile() && *m_ptr != '"')
+        while (!IsEndOfFile())
         {
-            m_ptr++;
+            char ch = *m_ptr++;
+            if (ch == '"')
+            {
+                break;
+            }
+
+            if (ch == '\\' && !IsEndOfFile() && (*m_ptr == '"' || *m_ptr == '\\'))
+            {
+                ch = *m_ptr++;
+            }
+
+            value.push_back(ch);
         }
 
-        size_t length = m_ptr - start;
-
-        if (!IsEndOfFile())
-        {
-            m_ptr++; // skip the end quote
-        }
-
-        return { &start[0], length };
+        return value;
     }
 
     char PeekCharacter() const
@@ -109,8 +137,8 @@ public:
 private:
     bool IsEndOfFile() const { return m_ptr >= m_end; }
 
-    std::string_view::const_iterator m_ptr;
-    std::string_view::const_iterator m_end;
+    const char *m_ptr;
+    const char *m_end;
 };
 
 std::string LoadFile(const char *path)
@@ -154,7 +182,7 @@ bool KeyValue::ParseFromFile(const char *path)
     }
 
     KeyValueParser parser{ data };
-    if (!Parse(parser))
+    if (!Parse(parser, path))
     {
         Platform::Print("Could not parse {}\n", path);
         return false;
@@ -232,7 +260,18 @@ void KeyValue::BinaryWriteToString(std::string &buffer)
     BinaryWriteCommand(buffer, BinaryCommand::Terminate);
 }
 
-bool KeyValue::Parse(KeyValueParser &parser)
+static std::string BuildIncludeFilePath(std::string_view currentPath, std::string filename)
+{
+    size_t separator = currentPath.find_last_of("/\\");
+    if (separator != std::string_view::npos)
+    {
+        filename.insert(0, currentPath.substr(0, separator + 1));
+    }
+
+    return filename;
+}
+
+bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
 {
     m_subkeys.reserve(SubkeyReserveCount);
 
@@ -241,6 +280,28 @@ bool KeyValue::Parse(KeyValueParser &parser)
         if (!parser.NextToken())
         {
             return true;
+        }
+
+        if (parser.PeekCharacter() == '#')
+        {
+            std::string directive = parser.ParseString();
+            if (directive != "#base")
+            {
+                return false;
+            }
+
+            if (!parser.NextToken() || parser.PeekCharacter() != '"')
+            {
+                return false;
+            }
+
+            std::string includedPath = BuildIncludeFilePath(path, parser.ParseString());
+            if (!ParseFromFile(includedPath.c_str()))
+            {
+                return false;
+            }
+
+            continue;
         }
 
         KeyValue *current;
@@ -272,7 +333,7 @@ bool KeyValue::Parse(KeyValueParser &parser)
 
         case '{':
             parser.SkipCharacter();
-            if (!current->Parse(parser))
+            if (!current->Parse(parser, path))
             {
                 return false;
             }
@@ -295,6 +356,23 @@ KeyValue *KeyValue::FindOrCreateSubkey(std::string_view name)
     }
 
     return &m_subkeys.emplace_back(name);
+}
+
+static void WriteString(FILE *f, std::string_view value)
+{
+    fputc('"', f);
+
+    for (char ch : value)
+    {
+        if (ch == '"' || ch == '\\')
+        {
+            fputc('\\', f);
+        }
+
+        fputc(ch, f);
+    }
+
+    fputc('"', f);
 }
 
 void KeyValue::WriteToFile(FILE *f, int indent)
@@ -323,13 +401,16 @@ void KeyValue::WriteToFile(FILE *f, int indent)
             fputs("\t", f);
         }
 
+        WriteString(f, subkey.m_name);
+
         if (subkey.m_string.size())
         {
-            fprintf(f, "\"%s\"\t\t\"%s\"\n", subkey.m_name.c_str(), subkey.m_string.c_str());
+            fputs("\t\t", f);
+            WriteString(f, subkey.m_string);
+            fputc('\n', f);
         }
         else
         {
-            fprintf(f, "\"%s\"", subkey.m_name.c_str());
             subkey.WriteToFile(f, indent + 1);
         }
     }
@@ -338,7 +419,7 @@ void KeyValue::WriteToFile(FILE *f, int indent)
     {
         for (int i = 0; i < indent - 1; i++)
         {
-            fputs("	", f);
+            fputs("\t", f);
         }
 
         fputs("}\n", f);

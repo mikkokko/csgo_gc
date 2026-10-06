@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "steam_hook.h"
 #include "appid.h"
+#include "config.h"
 #include "gc_client.h"
 #include "gc_server.h"
 #include "platform.h"
@@ -24,12 +25,26 @@ struct SteamNetworkingIdentity;
 #include "networking_client.h"
 #include "networking_server.h"
 
+#include <proxy/steamproxy.h>
+
 // glue for the old interfaces below...
 #define STEAM_METHOD_DESC(DESC) STEAM_DESC(DESC)
 #define CALL_RESULT(RESULT_TYPE) STEAM_CALL_RESULT(RESULT_TYPE)
 class ISteamMasterServerUpdater;
 class ISteamUnifiedMessages;
 typedef void (*SteamAPI_PostAPIResultInProcess_t)(SteamAPICall_t, void *, uint32, int);
+
+template<class Sig>
+struct OrigFromSig;
+
+template<class Ret, class... Args>
+struct OrigFromSig<Ret(Args...)>
+{
+    using Type = Orig<Ret, Args...>;
+};
+
+#define PROXY_FUNC(ret, name, ...) \
+    ret name([[maybe_unused]] OrigFromSig<ret(__VA_ARGS__)>::Type original, ##__VA_ARGS__)
 
 static ISteamClient *s_actualSteamClient;
 
@@ -100,13 +115,13 @@ public:
         }
 
         memcpy(buffer, message.buffer.data(), message.buffer.size());
-        m_messages.pop();
+        m_messages.pop_front();
         return true;
     }
 
     void AddMessage(uint32_t type, std::vector<uint8_t> &&buffer)
     {
-        Message &dest = m_messages.emplace();
+        Message &dest = m_messages.emplace_back();
         dest.type = type;
         dest.buffer = std::move(buffer);
     }
@@ -118,7 +133,7 @@ private:
         std::vector<uint8_t> buffer;
     };
 
-    std::queue<Message> m_messages;
+    std::deque<Message> m_messages;
 };
 
 template<typename GC, typename Networking>
@@ -224,7 +239,7 @@ public:
         }
     }
 
-    EGCResults SendMessage(auto, uint32 unMsgType, const void *pubData, uint32 cubData)
+    PROXY_FUNC(EGCResults, SendMessage, uint32 unMsgType, const void *pubData, uint32 cubData)
     {
         if (m_server)
         {
@@ -240,7 +255,7 @@ public:
         return k_EGCResultOK;
     }
 
-    bool IsMessageAvailable(auto, uint32 *pcubMsgSize)
+    PROXY_FUNC(bool, IsMessageAvailable, uint32 *pcubMsgSize)
     {
         if (m_server)
         {
@@ -252,7 +267,7 @@ public:
         }
     }
 
-    EGCResults RetrieveMessage(auto, uint32 *punMsgType, void *pubDest, uint32 cubDest, uint32 *pcubMsgSize)
+    PROXY_FUNC(EGCResults, RetrieveMessage, uint32 *punMsgType, void *pubDest, uint32 cubDest, uint32 *pcubMsgSize)
     {
         bool result;
 
@@ -286,7 +301,7 @@ constexpr SteamAPICall_t CheckSignatureCall = 0x6666666666666666;
 class SteamUtilsProxy final
 {
 public:
-    bool IsAPICallCompleted(auto original, SteamAPICall_t hSteamAPICall, bool *pbFailed)
+    PROXY_FUNC(bool, IsAPICallCompleted, SteamAPICall_t hSteamAPICall, bool *pbFailed)
     {
         if (hSteamAPICall == CheckSignatureCall)
         {
@@ -302,7 +317,7 @@ public:
     }
 
     // yeah we won't get here
-    //ESteamAPICallFailure GetAPICallFailureReason(auto original, SteamAPICall_t hSteamAPICall)
+    //PROXY_FUNC(ESteamAPICallFailure, GetAPICallFailureReason, SteamAPICall_t hSteamAPICall)
     //{
     //    if (hSteamAPICall == CheckSignatureCall)
     //    {
@@ -314,7 +329,7 @@ public:
     //    return original(hSteamAPICall);
     //}
 
-    bool GetAPICallResult(auto original, SteamAPICall_t hSteamAPICall, void *pCallback, int cubCallback, int iCallbackExpected, bool *pbFailed)
+    PROXY_FUNC(bool, GetAPICallResult, SteamAPICall_t hSteamAPICall, void *pCallback, int cubCallback, int iCallbackExpected, bool *pbFailed)
     {
         if (hSteamAPICall == CheckSignatureCall
             && cubCallback == sizeof(CheckFileSignature_t)
@@ -334,7 +349,7 @@ public:
         return original(hSteamAPICall, pCallback, cubCallback, iCallbackExpected, pbFailed);
     }
 
-    SteamAPICall_t CheckFileSignature(auto, const char *)
+    PROXY_FUNC(SteamAPICall_t, CheckFileSignature, const char *)
     {
         // spoof this
         return CheckSignatureCall;
@@ -355,7 +370,7 @@ static void QueueUserStatsCallback()
 class SteamUserStatsProxy final
 {
 public:
-    bool RequestCurrentStats(auto original)
+    PROXY_FUNC(bool, RequestCurrentStats)
     {
         if (!AppId::IsOriginal())
         {
@@ -367,7 +382,7 @@ public:
         return original();
     }
 
-    SteamAPICall_t RequestUserStats(auto original, CSteamID steamIDUser)
+    PROXY_FUNC(SteamAPICall_t, RequestUserStats, CSteamID steamIDUser)
     {
         if (!AppId::IsOriginal())
         {
@@ -382,7 +397,7 @@ public:
 class SteamGameServerProxy final
 {
 public:
-    bool InitGameServer(auto original, uint32 unIP, uint16 usGamePort, uint16 usQueryPort, uint32 unFlags, AppId_t nGameAppId, const char *pchVersionString)
+    PROXY_FUNC(bool, InitGameServer, uint32 unIP, uint16 usGamePort, uint16 usQueryPort, uint32 unFlags, AppId_t nGameAppId, const char *pchVersionString)
     {
         // no longer present in steamworks sdk
         constexpr uint32 k_unServerFlagSecure = 2;
@@ -408,7 +423,7 @@ public:
         return false;
     }
 
-    void SetGameTags(auto original, const char *pchGameTags)
+    PROXY_FUNC(void, SetGameTags, const char *pchGameTags)
     {
         std::string tags = pchGameTags;
 
@@ -424,7 +439,7 @@ public:
         original(tags.c_str());
     }
 
-    EBeginAuthSessionResult BeginAuthSession(auto original, const void *pAuthTicket, int cbAuthTicket, CSteamID steamID)
+    PROXY_FUNC(EBeginAuthSessionResult, BeginAuthSession, const void *pAuthTicket, int cbAuthTicket, CSteamID steamID)
     {
         EBeginAuthSessionResult result = original(pAuthTicket, cbAuthTicket, steamID);
         if (s_serverGC && result == k_EBeginAuthSessionResultOK)
@@ -435,7 +450,7 @@ public:
         return result;
     }
 
-    void EndAuthSession(auto original, CSteamID steamID)
+    PROXY_FUNC(void, EndAuthSession, CSteamID steamID)
     {
         if (s_serverGC)
         {
@@ -452,7 +467,7 @@ public:
 class SteamUserProxy final
 {
 public:
-    HAuthTicket GetAuthSessionTicket(auto original, void *pTicket, int cbMaxTicket, uint32 *pcbTicket)
+    PROXY_FUNC(HAuthTicket, GetAuthSessionTicket, void *pTicket, int cbMaxTicket, uint32 *pcbTicket)
     {
         HAuthTicket ticket = original(pTicket, cbMaxTicket, pcbTicket);
         if (s_clientGC && ticket != k_HAuthTicketInvalid)
@@ -463,7 +478,7 @@ public:
         return ticket;
     }
 
-    HAuthTicket GetAuthSessionTicket(auto original, void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity)
+    PROXY_FUNC(HAuthTicket, GetAuthSessionTicket, void *pTicket, int cbMaxTicket, uint32 *pcbTicket, const SteamNetworkingIdentity *pSteamNetworkingIdentity)
     {
         HAuthTicket ticket = original(pTicket, cbMaxTicket, pcbTicket, pSteamNetworkingIdentity);
         if (s_clientGC && ticket != k_HAuthTicketInvalid)
@@ -474,7 +489,7 @@ public:
         return ticket;
     }
 
-    void CancelAuthTicket(auto original, HAuthTicket hAuthTicket)
+    PROXY_FUNC(void, CancelAuthTicket, HAuthTicket hAuthTicket)
     {
         if (s_clientGC)
         {
@@ -501,8 +516,7 @@ public:
         return buffer.data();
     }
 
-    HServerListRequest RequestInternetServerList(auto original,
-        AppId_t iApp,
+    PROXY_FUNC(HServerListRequest, RequestInternetServerList, AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse)
@@ -514,8 +528,7 @@ public:
         return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestLANServerList(auto original,
-        AppId_t iApp,
+    PROXY_FUNC(HServerListRequest, RequestLANServerList, AppId_t iApp,
         ISteamMatchmakingServerListResponse *pRequestServersResponse)
     {
         CheckServerBrowserPatch();
@@ -523,8 +536,7 @@ public:
         return original(iApp, pRequestServersResponse);
     }
 
-    HServerListRequest RequestFriendsServerList(auto original,
-        AppId_t iApp,
+    PROXY_FUNC(HServerListRequest, RequestFriendsServerList, AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse)
@@ -536,8 +548,7 @@ public:
         return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestFavoritesServerList(auto original,
-        AppId_t iApp,
+    PROXY_FUNC(HServerListRequest, RequestFavoritesServerList, AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse)
@@ -549,8 +560,7 @@ public:
         return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestHistoryServerList(auto original,
-        AppId_t iApp,
+    PROXY_FUNC(HServerListRequest, RequestHistoryServerList, AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse)
@@ -562,8 +572,7 @@ public:
         return original(iApp, &filters, buffer.size(), pRequestServersResponse);
     }
 
-    HServerListRequest RequestSpectatorServerList(auto original,
-        AppId_t iApp,
+    PROXY_FUNC(HServerListRequest, RequestSpectatorServerList, AppId_t iApp,
         MatchMakingKeyValuePair_t **ppchFilters,
         uint32 nFilters,
         ISteamMatchmakingServerListResponse *pRequestServersResponse)
@@ -780,7 +789,7 @@ public:
         assert(m_proxies.empty());
     }
 
-    bool BReleaseSteamPipe(auto original, HSteamPipe hSteamPipe)
+    PROXY_FUNC(bool, BReleaseSteamPipe, HSteamPipe hSteamPipe)
     {
         if (hSteamPipe == s_serverSteamPipe)
         {
@@ -793,7 +802,7 @@ public:
         return original(hSteamPipe);
     }
 
-    HSteamUser CreateLocalUser(auto original, HSteamPipe *phSteamPipe, EAccountType eAccountType)
+    PROXY_FUNC(HSteamUser, CreateLocalUser, HSteamPipe *phSteamPipe, EAccountType eAccountType)
     {
         HSteamUser user = original(phSteamPipe, eAccountType);
         if (user && (eAccountType == k_EAccountTypeGameServer || eAccountType == k_EAccountTypeAnonGameServer))
@@ -805,7 +814,7 @@ public:
         return user;
     }
 
-    void ReleaseUser(auto original, HSteamPipe hSteamPipe, HSteamUser hUser)
+    PROXY_FUNC(void, ReleaseUser, HSteamPipe hSteamPipe, HSteamUser hUser)
     {
         m_proxies.erase(ProxyKey(hSteamPipe, hUser));
         original(hSteamPipe, hUser);
@@ -819,42 +828,44 @@ public:
         return result ? result : original;
     }
 
-    ISteamUser *GetISteamUser(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
+    PROXY_FUNC(ISteamUser *, GetISteamUser, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
         return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    ISteamGameServer *GetISteamGameServer(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
+    PROXY_FUNC(ISteamGameServer *, GetISteamGameServer, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
         return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    ISteamUtils *GetISteamUtils(auto original, HSteamPipe hSteamPipe, const char *pchVersion)
+    PROXY_FUNC(ISteamUtils *, GetISteamUtils, HSteamPipe hSteamPipe, const char *pchVersion)
     {
         return ProxyInterface(original(hSteamPipe, pchVersion), 0, hSteamPipe, pchVersion, true);
     }
 
-    ISteamMatchmakingServers *GetISteamMatchmakingServers(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
+    PROXY_FUNC(ISteamMatchmakingServers *, GetISteamMatchmakingServers, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
         return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    void *GetISteamGenericInterface(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
+    PROXY_FUNC(void *, GetISteamGenericInterface, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
         return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion, true);
     }
 
-    ISteamUserStats *GetISteamUserStats(auto original, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
+    PROXY_FUNC(ISteamUserStats *, GetISteamUserStats, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion)
     {
         return ProxyInterface(original(hSteamUser, hSteamPipe, pchVersion), hSteamUser, hSteamPipe, pchVersion);
     }
 
-    void DestroyAllInterfaces(auto original)
+    PROXY_FUNC(void, DestroyAllInterfaces)
     {
         m_proxies.clear();
         original();
     }
 };
+
+#undef PROXY_FUNC
 
 static SteamClientProxy s_steamClientProxy;
 

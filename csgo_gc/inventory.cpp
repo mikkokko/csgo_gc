@@ -3,6 +3,7 @@
 #include "case_opening.h"
 #include "config.h"
 #include "gc_const.h"
+#include "inventory_messages.h"
 #include "inventory_modify.h"
 #include "keyvalue.h"
 #include "random.h"
@@ -91,7 +92,8 @@ bool Inventory::Update(InventoryChangeMessages &changeMessages)
     // but we have cases like removal of caskets or casketed items that will cause more item modifications
     InventoryModify modify{ *this };
 
-    for (const EditorItem &editorItem : changes.items)
+    // not const ref since we move the item descs
+    for (EditorItem &editorItem : changes.items)
     {
         if (editorItem.type == EditorItemChangeType::Destroyed)
         {
@@ -113,7 +115,7 @@ bool Inventory::Update(InventoryChangeMessages &changeMessages)
             // editorItem.highId is NOT the item id we should use!!!!
             // it's an opaque "item request id" from the editor, we
             // need to send the actual item id back now that we've determined it
-            Item &item = CreateItem(modify, editorItem.desc);
+            Item &item = CreateItem(modify, std::move(editorItem.desc));
             m_editor.SendItemId(editorItem.highId, item.HighId());
             continue;
         }
@@ -126,7 +128,7 @@ bool Inventory::Update(InventoryChangeMessages &changeMessages)
             continue;
         }
 
-        modify.UpdateFromDesc(*item, editorItem.desc);
+        modify.UpdateFromDesc(*item, std::move(editorItem.desc));
     }
 
     changeMessages = BuildChangeMessages(modify);
@@ -163,7 +165,7 @@ void Inventory::SendFullInventoryToEditor()
         EditorItem &item = changes.items.emplace_back();
         item.type = EditorItemChangeType::Created;
         item.highId = pair.second.HighId();
-        pair.second.ToDesc(item.desc);
+        item.desc = pair.second.GetDesc();
 
         m_editorVisibleItems.insert(item.highId);
     }
@@ -195,7 +197,7 @@ void Inventory::SendChangesToEditor(const InventoryModify &modify)
         EditorItem &dest = changes.items.emplace_back();
         dest.highId = highId;
         dest.type = inserted ? EditorItemChangeType::Created : EditorItemChangeType::Modified;
-        source->ToDesc(dest.desc);
+        dest.desc = source->GetDesc();
     }
 
     m_editor.SendChanges(changes, false);
@@ -358,16 +360,20 @@ void Inventory::CreateItem(uint32_t highId, const KeyValue &kv)
     assert(inserted);
 }
 
-Item &Inventory::CreateItem(InventoryModify &modify, const ItemDesc &desc)
+Item &Inventory::CreateItem(InventoryModify &modify, ItemDesc &&desc)
 {
     uint32_t highId = GetHighItemId(0);
     uint64_t itemId = ComposeItemId(AccountId(), highId);
 
     // this will succeed, GetHighItemId confirmed there are no collisions
-    auto [it, inserted] = m_items.try_emplace(itemId, highId, desc);
+    auto [it, inserted] = m_items.try_emplace(itemId, highId, std::move(desc));
     assert(inserted);
 
     modify.MarkItemCreated(highId, it->second.HasEquips());
+
+    // new item: if a cached icon exists, it's because
+    // of item id reuse and the icon is likely wrong
+    RemoveCachedIcon(highId);
 
     return it->second;
 }
@@ -594,10 +600,9 @@ InventoryChangeMessages Inventory::UseItem(uint64_t itemId)
     }
 
     // create an unsealed spray based on the sealed one
-    ItemDesc temp;
-    item->ToDesc(temp);
+    ItemDesc temp = item->GetDesc();
     temp.defIndex = ItemDefIndex::SprayPaint;
-    Item &unsealed = CreateItem(modify, temp);
+    Item &unsealed = CreateItem(modify, std::move(temp));
     uint64_t unsealedId = unsealed.FullIdFor(AccountId());
 
     // remove the sealed spray from our inventory
@@ -632,7 +637,7 @@ InventoryChangeMessages Inventory::UnlockCrate(uint64_t crateId, uint64_t keyId)
     }
 
     InventoryModify modify{ *this };
-    Item &item = CreateItem(modify, temp);
+    Item &item = CreateItem(modify, std::move(temp));
     uint64_t itemId = item.FullIdFor(AccountId());
 
     if (GetConfig().DestroyUsedItems())
@@ -721,7 +726,7 @@ InventoryChangeMessages Inventory::ApplySticker(const CMsgApplySticker &message)
 
         ItemDesc desc{};
         m_itemSchema.GetItemDesc(ToEnum<ItemDefIndex>(message.baseitem_defidx()), ItemOriginBaseItem, UnacknowledgedInvalid, desc);
-        item = &CreateItem(modify, desc);
+        item = &CreateItem(modify, std::move(desc));
     }
     else
     {
@@ -855,7 +860,7 @@ InventoryChangeMessages Inventory::NameBaseItem(uint64_t nameTagId, uint32_t def
     ItemDesc desc{};
     m_itemSchema.GetItemDesc(ToEnum<ItemDefIndex>(defIndex), ItemOriginBaseItem, UnacknowledgedInvalid, desc);
 
-    Item &item = CreateItem(modify, desc);
+    Item &item = CreateItem(modify, std::move(desc));
     uint64_t itemId = item.FullIdFor(AccountId());
 
     modify.SetItemAttribute(item, AttributeDefIndex::CustomName, std::string{ name });
@@ -1006,7 +1011,7 @@ InventoryChangeMessages Inventory::PurchaseItems(const std::vector<uint32_t> &de
     {
         ItemDesc desc{};
         m_itemSchema.GetItemDesc(ToEnum<ItemDefIndex>(defIndex), ItemOriginPurchased, UnacknowledgedPurchased, desc);
-        Item &item = CreateItem(modify, desc);
+        Item &item = CreateItem(modify, std::move(desc));
         itemIds.push_back(item.FullIdFor(AccountId()));
     }
 
@@ -1095,6 +1100,8 @@ bool Inventory::DestroyItemById(InventoryModify &modify, uint64_t itemId)
     bool hadEquips = item.HasEquips();
     m_items.erase(it);
 
+    RemoveCachedIcon(itemId >> 32);
+
     modify.MarkItemDestroyed(itemId >> 32, hadEquips);
     return true;
 }
@@ -1106,5 +1113,15 @@ void Inventory::DestroyItem(InventoryModify &modify, Item *item)
     {
         // how is this possible???
         assert(false);
+    }
+}
+
+void Inventory::RemoveCachedIcon(uint32_t highId) const
+{
+    // FIXME: first value depends on game version
+    std::string path = std::format("csgo/resource/flash/econ/weapons/cached/13-{:x}-{:x}.iic", highId, AccountId());
+    if (Platform::RemoveFile(path.c_str()))
+    {
+        Platform::Print("Deleted {}\n", path);
     }
 }

@@ -88,7 +88,7 @@ public:
     }
 
 private:
-    bool Parse(KeyValueParser &parser);
+    bool Parse(KeyValueParser &parser, std::string_view path);
     KeyValue *FindOrCreateSubkey(std::string_view name);
     void WriteToFile(FILE *f, int indent);
 
