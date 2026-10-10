@@ -70,6 +70,11 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
         switch (messageRead.TypeUnmasked())
         {
         case k_EMsgGCClientHello:
+        case k_EMsgGCClientHelloPW:
+        case k_EMsgGCClientHelloR2:
+        case k_EMsgGCClientHelloR3:
+        case k_EMsgGCClientHelloR4:
+        case k_EMsgGCClientHelloPartner:
             OnClientHello(messageRead);
             break;
 
