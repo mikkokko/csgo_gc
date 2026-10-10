@@ -72,6 +72,14 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
         case k_EMsgGCClientHello:
             OnClientHello(messageRead);
             break;
+    
+        case k_EMsgGCClientHelloPartner:
+        case k_EMsgGCClientHelloPW:
+        case k_EMsgGCClientHelloR2:
+        case k_EMsgGCClientHelloR3:
+        case k_EMsgGCClientHelloR4:
+            OnClientHello(messageRead);
+            break;
 
         case k_EMsgGCAdjustItemEquippedState:
             AdjustItemEquippedState(messageRead);
