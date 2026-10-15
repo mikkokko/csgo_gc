@@ -649,7 +649,7 @@ void ClientGC::OnPartyRegister(GCMessageRead &messageRead) // this function is j
     CMsgGCCStrike15_v2_Party_Register response;
     response.set_id(lobbyId);
     response.set_ver(message.ver());
-    response.set_apr(GetConfig().HasPrime() ? 1 : 0);
+    response.set_apr(1);
     response.set_ark(static_cast<uint32_t>(GetConfig().CompetitiveRank()) * 10);
     response.set_grp(3);
     response.set_slots(5);
