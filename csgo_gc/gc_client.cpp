@@ -636,7 +636,7 @@ void ClientGC::OnPartyRegister(GCMessageRead &messageRead) // this function is j
     CMsgGCCStrike15_v2_Party_Register message;
     if (!messageRead.ReadProtobuf(message))
     {
-        Platform::PrintWarning("Failed to parse Party_Register\n");
+        Platform::Print("Failed to parse Party_Register\n");
         return;
     }
 
