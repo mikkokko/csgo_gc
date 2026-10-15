@@ -174,50 +174,7 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     }
 }
 
-void ClientGC::OnGetEventFavorites(GCMessageRead &messageRead) // this function is just to cleanup the logs, and so the client is happy
-{
-    CMsgGCCStrike15_v2_GetEventFavorites_Request request;
-    if (!messageRead.ReadProtobuf(request))
-    {
-        Platform::Print("Parsing GetEventFavorites failed, ignoring\n");   
-        return;
-    }
 
-    CMsgGCCStrike15_v2_GetEventFavorites_Response response;
-    response.set_all_events(request.all_events());
-    response.set_json_favorites("[]");
-    response.set_json_featured("[]");
-
-    SendMessageToGame(false, k_EMsgGCCStrike15_v2_GetEventFavorites_Response, response);
-}
-
-void ClientGC::OnPartyRegister(GCMessageRead &messageRead) // this function is just to cleanup the logs, and so the client is happy
-{
-    CMsgGCCStrike15_v2_Party_Register message;
-    if (!messageRead.ReadProtobuf(message))
-    {
-        Platform::PrintWarning("Failed to parse Party_Register\n");
-        return;
-    }
-
-    uint32_t lobbyId = message.id();
-    if (lobbyId == 0 || !lobbyId)
-    {
-        do { lobbyId = Random{}.Integer<uint32_t>(); } while (lobbyId == 0);
-    }
-
-    CMsgGCCStrike15_v2_Party_Register response;
-    response.set_id(lobbyId);
-    response.set_ver(message.ver());
-    response.set_apr(GetConfig().HasPrime() ? 1 : 0);
-    response.set_ark(static_cast<uint32_t>(GetConfig().CompetitiveRank()) * 10);
-    response.set_grp(3);
-    response.set_slots(5);
-    response.set_launcher(message.launcher());
-    response.set_game_type(message.game_type());
-
-    SendMessageToGame(false, k_EMsgGCCStrike15_v2_Party_Register, response);
-}
 
 void ClientGC::HandleNetMessage(const void *data, uint32_t size)
 {
@@ -655,6 +612,51 @@ void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
 
     // done with this one
     m_transactionId = 0;
+}
+
+void ClientGC::OnGetEventFavorites(GCMessageRead &messageRead) // this function is just to cleanup the logs, and so the client is happy
+{
+    CMsgGCCStrike15_v2_GetEventFavorites_Request request;
+    if (!messageRead.ReadProtobuf(request))
+    {
+        Platform::Print("Parsing GetEventFavorites failed, ignoring\n");   
+        return;
+    }
+
+    CMsgGCCStrike15_v2_GetEventFavorites_Response response;
+    response.set_all_events(request.all_events());
+    response.set_json_favorites("[]");
+    response.set_json_featured("[]");
+
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_GetEventFavorites_Response, response);
+}
+
+void ClientGC::OnPartyRegister(GCMessageRead &messageRead) // this function is just to cleanup the logs, and so the client is happy
+{
+    CMsgGCCStrike15_v2_Party_Register message;
+    if (!messageRead.ReadProtobuf(message))
+    {
+        Platform::PrintWarning("Failed to parse Party_Register\n");
+        return;
+    }
+
+    uint32_t lobbyId = message.id();
+    if (lobbyId == 0 || !lobbyId)
+    {
+        do { lobbyId = Random{}.Integer<uint32_t>(); } while (lobbyId == 0);
+    }
+
+    CMsgGCCStrike15_v2_Party_Register response;
+    response.set_id(lobbyId);
+    response.set_ver(message.ver());
+    response.set_apr(GetConfig().HasPrime() ? 1 : 0);
+    response.set_ark(static_cast<uint32_t>(GetConfig().CompetitiveRank()) * 10);
+    response.set_grp(3);
+    response.set_slots(5);
+    response.set_launcher(message.launcher());
+    response.set_game_type(message.game_type());
+
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_Party_Register, response);
 }
 
 void ClientGC::DeleteItem(GCMessageRead &messageRead)
