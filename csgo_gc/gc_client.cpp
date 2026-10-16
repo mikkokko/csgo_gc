@@ -126,15 +126,13 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             ProcessCasketItemExtract(messageRead);
             break;
 
-        // both of these are to just cleanup the logs, ig?
         case k_EMsgGCCStrike15_v2_GetEventFavorites_Request:
             OnGetEventFavorites(messageRead);
             break;
+
         case k_EMsgGCCStrike15_v2_Party_Register:
             OnPartyRegister(messageRead);
             break;
-
-
 
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled protobuf message {}\n",
@@ -614,12 +612,12 @@ void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
     m_transactionId = 0;
 }
 
-void ClientGC::OnGetEventFavorites(GCMessageRead &messageRead) // this function is just to cleanup the logs, and so the client is happy
+void ClientGC::OnGetEventFavorites(GCMessageRead &messageRead)
 {
     CMsgGCCStrike15_v2_GetEventFavorites_Request request;
     if (!messageRead.ReadProtobuf(request))
     {
-        Platform::Print("Parsing GetEventFavorites failed, ignoring\n");   
+        Platform::Print("Parsing GetEventFavorites failed, ignoring\n");
         return;
     }
 
@@ -631,7 +629,7 @@ void ClientGC::OnGetEventFavorites(GCMessageRead &messageRead) // this function 
     SendMessageToGame(false, k_EMsgGCCStrike15_v2_GetEventFavorites_Response, response);
 }
 
-void ClientGC::OnPartyRegister(GCMessageRead &messageRead) // this function is just to cleanup the logs, and so the client is happy
+void ClientGC::OnPartyRegister(GCMessageRead &messageRead)
 {
     CMsgGCCStrike15_v2_Party_Register message;
     if (!messageRead.ReadProtobuf(message))
@@ -641,9 +639,9 @@ void ClientGC::OnPartyRegister(GCMessageRead &messageRead) // this function is j
     }
 
     uint32_t lobbyId = message.id();
-    if (lobbyId == 0 || !lobbyId)
+    if (!lobbyId)
     {
-        do { lobbyId = Random{}.Integer<uint32_t>(); } while (lobbyId == 0);
+        lobbyId = Random{}.Integer<uint32_t>(1, UINT32_MAX);
     }
 
     CMsgGCCStrike15_v2_Party_Register response;
