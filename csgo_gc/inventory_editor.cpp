@@ -130,7 +130,7 @@ static void SerializeItem(MessageWrite &message, const EditorItem &item)
 InventoryEditor::InventoryEditor(ItemSchema &itemSchema)
     : m_itemSchema{ itemSchema }
 {
-    const std::string &origin = GetConfig().InventoryEditorOrigin();
+    const std::string &origin = GetConfig().m_inventoryEditorOrigin;
     if (origin.empty() || origin == "null")
     {
         Platform::Print("Inventory editor server disabled\n");
@@ -349,7 +349,7 @@ int InventoryEditor::Callback(lws *wsi, int reason, void *user, void *in, size_t
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
     {
         // validate the origin here
-        const std::string &expected = GetConfig().InventoryEditorOrigin();
+        const std::string &expected = GetConfig().m_inventoryEditorOrigin;
         int length = lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN);
         if (length <= 0 || static_cast<size_t>(length) != expected.size())
         {

@@ -640,7 +640,7 @@ InventoryChangeMessages Inventory::UnlockCrate(uint64_t crateId, uint64_t keyId)
     Item &item = CreateItem(modify, std::move(temp));
     uint64_t itemId = item.FullIdFor(AccountId());
 
-    if (GetConfig().DestroyUsedItems())
+    if (GetConfig().m_destroyUsedItems)
     {
         assert(keyId != itemId);
         DestroyItem(modify, crate);
@@ -747,7 +747,7 @@ InventoryChangeMessages Inventory::ApplySticker(const CMsgApplySticker &message)
 
     uint64_t itemId = item->FullIdFor(AccountId());
 
-    if (GetConfig().DestroyUsedItems())
+    if (GetConfig().m_destroyUsedItems)
     {
         DestroyItem(modify, sticker);
     }
@@ -844,7 +844,7 @@ InventoryChangeMessages Inventory::NameItem(uint64_t nameTagId, uint64_t itemId,
         modify.SetItemAttribute(*item, AttributeDefIndex::CasketModificationDate, modifyTime);
     }
 
-    if (GetConfig().DestroyUsedItems())
+    if (GetConfig().m_destroyUsedItems)
     {
         assert(nameTagId != itemId);
         DestroyItemById(modify, nameTagId);
@@ -865,7 +865,7 @@ InventoryChangeMessages Inventory::NameBaseItem(uint64_t nameTagId, uint32_t def
 
     modify.SetItemAttribute(item, AttributeDefIndex::CustomName, std::string{ name });
 
-    if (GetConfig().DestroyUsedItems())
+    if (GetConfig().m_destroyUsedItems)
     {
         assert(nameTagId != itemId);
         DestroyItemById(modify, nameTagId);

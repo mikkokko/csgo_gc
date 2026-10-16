@@ -70,7 +70,7 @@ static void WriteFile(const char *path, const std::string &buffer)
 void Init()
 {
     // defaults to 730 if not specified
-    uint32_t appIdOverride = GetConfig().AppIdOverride();
+    uint32_t appIdOverride = GetConfig().m_appIdOverride;
 
     Platform::Print("Using app id {}\n", appIdOverride);
 
@@ -97,12 +97,12 @@ void Init()
 
 uint32_t GetOverride()
 {
-    return GetConfig().AppIdOverride();
+    return GetConfig().m_appIdOverride;
 }
 
 bool IsOriginal()
 {
-    return (GetConfig().AppIdOverride() == 730);
+    return (GetConfig().m_appIdOverride == 730);
 }
 
 }

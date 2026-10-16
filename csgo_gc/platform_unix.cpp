@@ -46,7 +46,7 @@ void Initialize()
 
 void PrintV(std::string_view fmt, std::format_args args)
 {
-    LogOutput logOutput = GetConfig().GetLogOutput();
+    LogOutput logOutput = GetConfig().m_logOutput;
     if (logOutput <= LogOutputNone)
     {
         // no logging
