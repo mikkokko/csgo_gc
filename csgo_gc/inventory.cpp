@@ -356,7 +356,7 @@ void Inventory::CreateItem(uint32_t highId, const KeyValue &kv)
     uint64_t itemId = ComposeItemId(AccountId(), highId);
 
     // this will succeed, GetHighItemId confirmed there are no collisions
-    auto [it, inserted] = m_items.try_emplace(itemId, highId, AccountId(), kv, m_itemSchema);
+    [[maybe_unused]] auto [it, inserted] = m_items.try_emplace(itemId, highId, AccountId(), kv, m_itemSchema);
     assert(inserted);
 }
 

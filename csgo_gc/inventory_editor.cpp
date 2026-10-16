@@ -147,7 +147,7 @@ InventoryEditor::InventoryEditor(ItemSchema &itemSchema)
 
     // FIXME: should actually be a member...
     static lws_protocols protocols[] = {
-        { "default", callback, sizeof(Session), RxBufferSize },
+        { "default", callback, sizeof(Session), RxBufferSize, 0, nullptr, 0 },
         LWS_PROTOCOL_LIST_TERM
     };
 

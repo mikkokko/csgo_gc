@@ -248,7 +248,7 @@ static void CopyToReadOnly(void *dest, const void *src, size_t size, int oldFlag
     assert(alignedAddress <= dest);
     assert(alignedSize >= size);
 
-    int result = mprotect(alignedAddress, alignedSize, oldFlags | PROT_WRITE);
+    [[maybe_unused]] int result = mprotect(alignedAddress, alignedSize, oldFlags | PROT_WRITE);
     assert(result == 0);
 
     memcpy(dest, src, size);

@@ -358,6 +358,10 @@ void Item::ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t
         case AttributeDefIndex::StickerRotation5:
             stickers[5].set_rotation(attribute.ValueAs<float>());
             break;
+
+        default:
+            // does not affect the preview block
+            break;
         }
     }
 
