@@ -38,15 +38,20 @@ jobs:
       shell: bash
       run: echo "sha=$(git -C '${{ github.workspace }}/vcpkg' rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+    - name: Get runner image
+      id: runner-image
+      shell: bash
+      run: echo "version=${ImageVersion:?Unknown runner image version}" >> "$GITHUB_OUTPUT"
+
     - name: Cache vcpkg installed packages
       uses: actions/cache@v4
       with:
         path: |
           ${{ github.workspace }}/build/vcpkg_installed
           ${{ github.workspace }}/build_ds/vcpkg_installed
-        key: vcpkg-${{ matrix.os }}-${{ steps.vcpkg-commit.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkg-${{ matrix.os }}-${{ steps.runner-image.outputs.version }}-${{ steps.vcpkg-commit.outputs.sha }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlays/**') }}
         restore-keys: |
-          vcpkg-${{ matrix.os }}-${{ steps.vcpkg-commit.outputs.sha }}-
+          vcpkg-${{ matrix.os }}-${{ steps.runner-image.outputs.version }}-${{ steps.vcpkg-commit.outputs.sha }}-
 
     - if: matrix.os == 'ubuntu-latest'
       name: Dependencies
