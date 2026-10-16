@@ -48,6 +48,10 @@
 // 2 = log to in-game console and file (gc_log.txt)
 "log_output"	"1"
 
+// optionally load the item schema from another location
+// normally this should always be the path the game loads it from
+"item_schema_path"  "csgo/scripts/items/items_game.txt"
+
 // allow an inventory editor with this Origin to
 // connect to the websocket server at 127.0.0.1:13001
 // empty or null means the server is disabled

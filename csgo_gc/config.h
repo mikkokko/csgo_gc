@@ -31,6 +31,8 @@ public:
     uint32_t m_appIdOverride{ 4465480 };
     bool m_showCsgoGCServersOnly{ true };
 
+    std::string m_itemSchemaPath{ "csgo/scripts/items/items_game.txt" };
+
     std::string m_inventoryEditorOrigin;
 
     RankId m_competitiveRank{ RankNone };
