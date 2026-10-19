@@ -191,38 +191,6 @@ bool KeyValue::ParseFromFile(const char *path)
     return true;
 }
 
-bool KeyValue::WriteToFile(const char *path)
-{
-    FILE *f = fopen(path, "wb");
-    if (!f)
-    {
-        Platform::Print("Could not open {} for writing\n", path);
-        return false;
-    }
-
-    WriteToFile(f, 0);
-
-    bool writeFailed = ferror(f) != 0;
-    int closeError = (fclose(f) == EOF) ? errno : 0;
-
-    if (writeFailed)
-    {
-        Platform::Print("Writing {} failed\n", path);
-        return false;
-    }
-
-    if (closeError != 0)
-    {
-        Platform::Print("Closing {} failed: {} ({})\n",
-            path,
-            strerror(closeError),
-            closeError);
-        return false;
-    }
-
-    return true;
-}
-
 static void BinaryWriteCommand(std::string &buffer, BinaryCommand cmd)
 {
     buffer.append(1, static_cast<char>(cmd));
@@ -358,74 +326,6 @@ KeyValue *KeyValue::FindOrCreateSubkey(std::string_view name)
     return &m_subkeys.emplace_back(name);
 }
 
-static void WriteString(FILE *f, std::string_view value)
-{
-    fputc('"', f);
-
-    for (char ch : value)
-    {
-        if (ch == '"' || ch == '\\')
-        {
-            fputc('\\', f);
-        }
-
-        fputc(ch, f);
-    }
-
-    fputc('"', f);
-}
-
-void KeyValue::WriteToFile(FILE *f, int indent)
-{
-    if (indent)
-    {
-        fputs("\n", f);
-
-        for (int i = 0; i < indent - 1; i++)
-        {
-            fputs("\t", f);
-        }
-
-        fputs("{\n", f);
-    }
-
-    for (KeyValue &subkey : m_subkeys)
-    {
-        if (subkey.m_string.empty() && subkey.m_subkeys.empty())
-        {
-            continue;
-        }
-
-        for (int i = 0; i < indent; i++)
-        {
-            fputs("\t", f);
-        }
-
-        WriteString(f, subkey.m_name);
-
-        if (subkey.m_string.size())
-        {
-            fputs("\t\t", f);
-            WriteString(f, subkey.m_string);
-            fputc('\n', f);
-        }
-        else
-        {
-            subkey.WriteToFile(f, indent + 1);
-        }
-    }
-
-    if (indent)
-    {
-        for (int i = 0; i < indent - 1; i++)
-        {
-            fputs("\t", f);
-        }
-
-        fputs("}\n", f);
-    }
-}
-
 const KeyValue *KeyValue::GetSubkey(std::string_view name) const
 {
     for (const KeyValue &subkey : m_subkeys)
@@ -450,13 +350,63 @@ std::string_view KeyValue::GetString(std::string_view name, std::string_view fal
     return subkey->m_string;
 }
 
-KeyValue &KeyValue::AddSubkey(std::string_view name)
+KeyValueWrite::KeyValueWrite(FILE *file)
+    : m_file{ file }
 {
-    return m_subkeys.emplace_back(name);
 }
 
-void KeyValue::AddString(std::string_view name, std::string_view value)
+void KeyValueWrite::WriteText(std::string_view text)
 {
-    KeyValue &subkey = AddSubkey(name);
-    subkey.m_string = value;
+    fwrite(text.data(), 1, text.size(), m_file);
+}
+
+void KeyValueWrite::WriteQuoted(std::string_view text)
+{
+    WriteText("\"");
+
+    std::size_t start = 0;
+
+    for (size_t i = text.find_first_of("\"\\"); i != std::string_view::npos; i = text.find_first_of("\"\\", i + 1))
+    {
+        WriteText(text.substr(start, i - start));
+        WriteText("\\");
+        start = i;
+    }
+
+    WriteText(text.substr(start));
+    WriteText("\"");
+}
+
+void KeyValueWrite::WriteIndent()
+{
+    for (int i = 0; i < m_depth; i++)
+    {
+        WriteText("\t");
+    }
+}
+
+void KeyValueWrite::BeginBlock(std::string_view name)
+{
+    WriteIndent();
+    WriteQuoted(name);
+    WriteText("\n");
+    WriteIndent();
+    WriteText("{\n");
+    m_depth++;
+}
+
+void KeyValueWrite::AddString(std::string_view name, std::string_view value)
+{
+    WriteIndent();
+    WriteQuoted(name);
+    WriteText("\t\t");
+    WriteQuoted(value);
+    WriteText("\n");
+}
+
+void KeyValueWrite::EndBlock()
+{
+    m_depth--;
+    WriteIndent();
+    WriteText("}\n");
 }

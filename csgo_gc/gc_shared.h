@@ -5,15 +5,24 @@ enum class HostEvent
     Message, // id contains the message type, buffer contains the payload
     NetMessage, // id contains the recipient steam id, buffer contains the payload
     MicroTransactionResponse, // runs MicroTxnAuthorizationResponse_t, no arguments
+    CloseChannel, // id contains the steam id
 };
 
 enum class GCEvent
 {
+    // shared
     Message, // id contains the message type, buffer contains the payload
-    NetMessage, // id contains the recipient steam id, buffer contains the payload
-    SOCacheRequest, // sent to client gc when connected to a gameserver
-    ClientSOCacheUnsubscribe, // sent to server gc when a client disconnects, id contains the steam id
-    Tick, // client gc... sent when running callbacks
+    NetMessage, // id contains the sender steam id, buffer contains the payload
+    Tick, // sent when running callbacks
+
+    // client
+    SetAuthTicket, // id contains the ticket handle, buffer contains the ticket
+    ClearAuthTicket, // id contains the ticket handle
+
+    // server
+    ClientConnected, // id contains the steam id, buffer contains the ticket
+    ClientDisconnected, // id contains the steam id
+    SessionRequest, // id contains the steam id
 };
 
 struct EventData

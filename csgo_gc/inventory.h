@@ -45,14 +45,12 @@ public:
     InventoryChangeMessages SetItemPositions(const CMsgSetItemPositions &message, std::vector<CMsgItemAcknowledged> &acknowledgements);
     InventoryChangeMessages PurchaseItems(const std::vector<uint32_t> &defIndexes, std::vector<uint64_t> &itemIds);
 
-    // called by InventoryModify when it goes out of scope
-    void FlushChanges(const InventoryModify &modify);
-
 private:
     uint32_t AccountId() const;
 
-    InventoryChangeMessages BuildChangeMessages(
-        const InventoryModify &modify,
+    // increment version, build messages for the game, send changes to editor and write to file
+    InventoryChangeMessages FinishChanges(
+        InventoryModify &modify,
         std::optional<EGCItemCustomizationNotification> customizationType = std::nullopt,
         std::initializer_list<uint64_t> customizationItemIds = {});
 
@@ -92,6 +90,7 @@ private:
     ItemSchema m_itemSchema;
     Random m_random;
     uint32_t m_lastHighItemId{};
+    uint64_t m_version{ 1 };
     std::unordered_map<uint64_t, Item> m_items;
     std::vector<DefaultEquip> m_defaultEquips;
 

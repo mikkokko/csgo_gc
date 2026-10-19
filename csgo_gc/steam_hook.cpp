@@ -143,7 +143,7 @@ public:
     template<typename... Args>
     GCWrapper(ISteamNetworkingMessages *networkingMessages, Args &&...args)
         : m_gc{ std::forward<Args>(args)... }
-        , m_networking{ networkingMessages }
+        , m_networking{ networkingMessages, m_gc }
     {
     }
 
@@ -444,7 +444,7 @@ public:
         EBeginAuthSessionResult result = original(pAuthTicket, cbAuthTicket, steamID);
         if (s_serverGC && result == k_EBeginAuthSessionResultOK)
         {
-            s_serverGC->m_networking.ClientConnected(steamID.ConvertToUint64(), pAuthTicket, cbAuthTicket);
+            s_serverGC->m_gc.PostToGC(GCEvent::ClientConnected, steamID.ConvertToUint64(), pAuthTicket, cbAuthTicket);
         }
 
         return result;
@@ -454,10 +454,7 @@ public:
     {
         if (s_serverGC)
         {
-            s_serverGC->m_networking.ClientDisconnected(steamID.ConvertToUint64());
-
-            // also remember to unsub from the socache!!! not sure if this does anything in newer builds though
-            s_serverGC->m_gc.PostToGC(GCEvent::ClientSOCacheUnsubscribe, steamID.ConvertToUint64(), nullptr, 0);
+            s_serverGC->m_gc.PostToGC(GCEvent::ClientDisconnected, steamID.ConvertToUint64(), nullptr, 0);
         }
 
         original(steamID);
@@ -472,7 +469,7 @@ public:
         HAuthTicket ticket = original(pTicket, cbMaxTicket, pcbTicket);
         if (s_clientGC && ticket != k_HAuthTicketInvalid)
         {
-            s_clientGC->m_networking.SetAuthTicket(ticket, pTicket, *pcbTicket);
+            s_clientGC->m_gc.PostToGC(GCEvent::SetAuthTicket, ticket, pTicket, *pcbTicket);
         }
 
         return ticket;
@@ -483,7 +480,7 @@ public:
         HAuthTicket ticket = original(pTicket, cbMaxTicket, pcbTicket, pSteamNetworkingIdentity);
         if (s_clientGC && ticket != k_HAuthTicketInvalid)
         {
-            s_clientGC->m_networking.SetAuthTicket(ticket, pTicket, *pcbTicket);
+            s_clientGC->m_gc.PostToGC(GCEvent::SetAuthTicket, ticket, pTicket, *pcbTicket);
         }
 
         return ticket;
@@ -493,7 +490,7 @@ public:
     {
         if (s_clientGC)
         {
-            s_clientGC->m_networking.ClearAuthTicket(hAuthTicket);
+            s_clientGC->m_gc.PostToGC(GCEvent::ClearAuthTicket, hAuthTicket, nullptr, 0);
         }
 
         original(hAuthTicket);
@@ -1081,7 +1078,11 @@ static void Hk_SteamAPI_RunCallbacks()
                 break;
 
             case HostEvent::NetMessage:
-                s_clientGC->m_networking.SendMessage(event.buffer.data(), static_cast<uint32_t>(event.buffer.size()));
+                s_clientGC->m_networking.SendMessage(event.id, event.buffer.data(), static_cast<uint32_t>(event.buffer.size()));
+                break;
+
+            case HostEvent::CloseChannel:
+                s_clientGC->m_networking.CloseChannel(event.id);
                 break;
 
             case HostEvent::MicroTransactionResponse:
@@ -1098,7 +1099,7 @@ static void Hk_SteamAPI_RunCallbacks()
         s_clientGC->m_gc.PostToGC(GCEvent::Tick, 0, nullptr, 0);
 
         // poll networking
-        s_clientGC->m_networking.Update(&s_clientGC->m_gc);
+        s_clientGC->m_networking.Update();
 
         // run client gc callbacks
         uint32_t messageSize;
@@ -1159,6 +1160,10 @@ static void Hk_SteamGameServer_RunCallbacks()
                 s_serverGC->m_networking.SendMessage(event.id, event.buffer.data(), static_cast<uint32_t>(event.buffer.size()));
                 break;
 
+            case HostEvent::CloseChannel:
+                s_serverGC->m_networking.CloseChannel(event.id);
+                break;
+
             default:
                 assert(false);
                 break;
@@ -1174,12 +1179,8 @@ static void Hk_SteamGameServer_RunCallbacks()
             s_callbackHooks.RunCallback(true, GCMessageAvailable_t::k_iCallback, &param);
         }
 
-        SteamNetworkingMessage_t *message;
-        while (s_serverGC->m_networking.ReceiveMessage(message))
-        {
-            s_serverGC->m_gc.PostToGC(GCEvent::NetMessage, message->m_identityPeer.GetSteamID64(), message->GetData(), message->GetSize());
-            message->Release();
-        }
+        s_serverGC->m_networking.Update();
+        s_serverGC->m_gc.PostToGC(GCEvent::Tick, 0, nullptr, 0);
     }
 }
 

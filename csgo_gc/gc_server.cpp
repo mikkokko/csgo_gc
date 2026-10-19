@@ -4,6 +4,7 @@
 #include "gc_const_csgo.h"
 #include "gc_message.h"
 #include "graffiti.h"
+#include "networking_shared.h"
 
 #include "base_gcmessages.pb.h"
 #include "cstrike15_gcmessages.pb.h"
@@ -13,6 +14,9 @@
 
 // yuck!! needed for CSteamID (construct full id from account id)
 #include "steam/steamclientpublic.h"
+
+constexpr int MaxConnectMessages = 5;
+constexpr int ConnectMessageDelayBase = 5;
 
 ServerGC::ServerGC()
 {
@@ -42,8 +46,20 @@ void ServerGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t>
         HandleNetMessage(id, buffer.data(), static_cast<uint32_t>(buffer.size()));
         break;
 
-    case GCEvent::ClientSOCacheUnsubscribe:
-        HandleClientSOCacheUnsubscribe(id);
+    case GCEvent::ClientConnected:
+        ClientConnected(id, buffer);
+        break;
+
+    case GCEvent::ClientDisconnected:
+        ClientDisconnected(id);
+        break;
+
+    case GCEvent::SessionRequest:
+        HandleSessionRequest(id);
+        break;
+
+    case GCEvent::Tick:
+        UpdateConnections();
         break;
 
     default:
@@ -83,6 +99,89 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             break;
         }
     }
+}
+
+void ServerGC::ClientConnected(uint64_t steamId, const std::vector<uint8_t> &ticket)
+{
+    auto [it, inserted] = m_clients.try_emplace(steamId, ticket);
+    if (!inserted)
+    {
+        Platform::Print("got ClientConnected for {} but they're already on the list! ignoring\n", steamId);
+        return;
+    }
+
+    SendConnectMessage(steamId, it->second);
+}
+
+void ServerGC::ClientDisconnected(uint64_t steamId)
+{
+    if (m_clients.erase(steamId))
+    {
+        PostToHost(HostEvent::CloseChannel, steamId, {});
+    }
+    else
+    {
+        Platform::Print("got ClientDisconnected for {} but they're not on the list! ignoring\n", steamId);
+    }
+
+    HandleClientSOCacheUnsubscribe(steamId);
+}
+
+void ServerGC::HandleSessionRequest(uint64_t steamId)
+{
+    auto it = m_clients.find(steamId);
+    if (it == m_clients.end())
+    {
+        Platform::Print("{} sent a session request, we don't have a csgo_gc session, ignoring...\n", steamId);
+        return;
+    }
+
+    Platform::Print("{} sent a session request, we were playing GC with them so accept\n", steamId);
+
+    // request latest socache just in case, this will implicitly accept the request
+    SendConnectMessage(steamId, it->second);
+}
+
+void ServerGC::UpdateConnections()
+{
+    for (auto &[steamId, state] : m_clients)
+    {
+        if (state.hasSOCache || state.connectSendCount >= MaxConnectMessages)
+        {
+            continue;
+        }
+
+        auto nextTime = state.lastConnectSend + std::chrono::seconds{ state.connectSendCount * ConnectMessageDelayBase };
+        if (std::chrono::steady_clock::now() >= nextTime)
+        {
+            SendConnectMessage(steamId, state);
+        }
+    }
+}
+
+void ServerGC::SendConnectMessage(uint64_t steamId, GCClientState &state)
+{
+    // send a message, if the client has csgo_gc installed they will reply with their so cache
+    GCMessageWrite messageWrite{ k_EMsgNetworkConnect };
+    messageWrite.WriteUint32(static_cast<uint32_t>(state.authTicket.size()));
+    messageWrite.WriteData(state.authTicket.data(), static_cast<uint32_t>(state.authTicket.size()));
+
+    state.lastConnectSend = std::chrono::steady_clock::now();
+    state.connectSendCount++;
+    SendMessageToClient(steamId, std::move(messageWrite).TakeBuffer());
+
+    Platform::Print("Queued connect message {}/{} to {}\n", state.connectSendCount, MaxConnectMessages, steamId);
+}
+
+void ServerGC::SendMessageToClient(uint64_t steamId, std::vector<uint8_t> &&buffer)
+{
+    if (!m_clients.contains(steamId))
+    {
+        Platform::Print("No csgo_gc session with {}, not sending message!!!\n", steamId);
+        return;
+    }
+
+    PostToHost(HostEvent::NetMessage, steamId, std::move(buffer));
 }
 
 void ServerGC::HandleClientSOCacheUnsubscribe(uint64_t steamId)
@@ -192,6 +291,13 @@ bool ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(GCMessageRead &messageRead,
 
 void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
+    auto it = m_clients.find(steamId);
+    if (it == m_clients.end())
+    {
+        Platform::Print("ServerGC: ignored message from {} (no session)\n", steamId);
+        return;
+    }
+
     Platform::Print("HandleNetMessage: {}, {} bytes\n", steamId, size);
 
     GCMessageRead validate{ 0, data, size };
@@ -259,6 +365,12 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         // otherwise the old message was fine
         PostToHost(HostEvent::Message, validate.TypeMasked(), GCMessageWrite{ data, size }.TakeBuffer());
     }
+
+    if (validate.TypeUnmasked() == k_ESOMsg_CacheSubscribed && !it->second.hasSOCache)
+    {
+        Platform::Print("ServerGC: received socache from {}\n", steamId);
+        it->second.hasSOCache = true;
+    }
 }
 
 void ServerGC::SendServerWelcome()
@@ -292,5 +404,5 @@ void ServerGC::IncrementKillCountAttribute(GCMessageRead &messageRead)
     // just forward it to the killer
     GCMessageWrite messageWrite{ k_EMsgGC_IncrementKillCountAttribute, message };
     CSteamID killerId{ message.killer_account_id(), k_EUniversePublic, k_EAccountTypeIndividual };
-    PostToHost(HostEvent::NetMessage, killerId.ConvertToUint64(), std::move(messageWrite).TakeBuffer());
+    SendMessageToClient(killerId.ConvertToUint64(), std::move(messageWrite).TakeBuffer());
 }

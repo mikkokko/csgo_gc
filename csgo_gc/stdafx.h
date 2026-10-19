@@ -4,6 +4,7 @@
 
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <format>

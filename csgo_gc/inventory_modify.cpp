@@ -1,16 +1,5 @@
 #include "stdafx.h"
 #include "inventory_modify.h"
-#include "inventory.h"
-
-InventoryModify::InventoryModify(Inventory &inventory)
-    : m_inventory{ inventory }
-{
-}
-
-InventoryModify::~InventoryModify()
-{
-    m_inventory.FlushChanges(*this);
-}
 
 void InventoryModify::MarkItemCreated(uint32_t highId, bool gameServerDirty)
 {
@@ -163,33 +152,12 @@ AttributeIncrement InventoryModify::IncrementItemAttribute(Item &item, Attribute
 
 void InventoryModify::RemoveItemAttributes(Item &item, std::initializer_list<AttributeDefIndex> types)
 {
-    bool modified = false;
-
-    for (auto it = item.m_desc.attributes.begin(); it != item.m_desc.attributes.end();)
+    auto predicate = [types](const ItemAttribute &attribute)
     {
-        bool remove = false;
+        return std::find(types.begin(), types.end(), attribute.DefIndex()) != types.end();
+    };
 
-        for (AttributeDefIndex type : types)
-        {
-            if (it->DefIndex() == type)
-            {
-                remove = true;
-                break;
-            }
-        }
-
-        if (remove)
-        {
-            it = item.m_desc.attributes.erase(it);
-            modified = true;
-        }
-        else
-        {
-            it++;
-        }
-    }
-
-    if (modified)
+    if (std::erase_if(item.m_desc.attributes, predicate) > 0)
     {
         MarkUpdatedInternal(item.m_highId, item.HasEquips());
     }
@@ -210,29 +178,17 @@ void InventoryModify::RemoveItemEquips(Item &item)
     }
 }
 
-bool InventoryModify::RemoveItemEquip(Item &item, uint32_t classId, uint32_t slotId)
+void InventoryModify::RemoveItemEquip(Item &item, uint32_t classId, uint32_t slotId)
 {
-    bool modified = false;
-
-    for (auto it = item.m_desc.equips.begin(); it != item.m_desc.equips.end();)
+    auto predicate = [classId, slotId](const ItemEquip &equip)
     {
-        if (it->Class() == classId && it->Slot() == slotId)
-        {
-            it = item.m_desc.equips.erase(it);
-            modified = true;
-        }
-        else
-        {
-            it++;
-        }
-    }
+        return equip.Class() == classId && equip.Slot() == slotId;
+    };
 
-    if (modified)
+    if (std::erase_if(item.m_desc.equips, predicate) > 0)
     {
         MarkUpdatedInternal(item.m_highId, true);
     }
-
-    return modified;
 }
 
 void InventoryModify::MarkUpdatedInternal(uint32_t highId, bool gameServerDirty)

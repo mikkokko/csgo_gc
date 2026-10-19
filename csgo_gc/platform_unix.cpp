@@ -64,8 +64,12 @@ void PrintV(std::string_view fmt, std::format_args args)
     // optionally also log to file
     if (logOutput >= LogOutputFile)
     {
+        // timestamp it
+        auto now = std::chrono::system_clock::now();
+        std::string nowString = std::format("{:%H:%M:%S}", now);
+
         FILE *f = fopen("gc_log.txt", "a");
-        fprintf(f, "%s", buffer.c_str());
+        fprintf(f, "[%s] %s", nowString.c_str(), buffer.c_str());
         fclose(f);
     }
 }

@@ -2,8 +2,6 @@
 
 #include "item.h"
 
-class Inventory;
-
 enum class ItemChangeType
 {
     Created,
@@ -29,14 +27,23 @@ enum class AttributeIncrement
 class InventoryModify
 {
 public:
-    InventoryModify(Inventory &inventory);
-    ~InventoryModify();
+    InventoryModify() = default;
+
+    ~InventoryModify()
+    {
+        assert(m_finished || !HasChanges());
+    }
 
     InventoryModify(const InventoryModify &) = delete;
     InventoryModify(InventoryModify &&) = delete;
 
     InventoryModify &operator=(const InventoryModify &) = delete;
     InventoryModify &operator=(InventoryModify &&) = delete;
+
+    bool HasChanges() const
+    {
+        return !m_itemChanges.empty() || !m_defaultEquipChanges.empty();
+    }
 
     // manual bookkeeping
     void MarkItemCreated(uint32_t highId, bool gameServerDirty);
@@ -58,13 +65,14 @@ public:
 
     void AddItemEquip(Item &item, uint32_t classId, uint32_t slotId);
     void RemoveItemEquips(Item &item);
-    bool RemoveItemEquip(Item &item, uint32_t classId, uint32_t slotId);
+    void RemoveItemEquip(Item &item, uint32_t classId, uint32_t slotId);
+
+    // schizo debug
+    bool m_finished{ false };
 
     std::unordered_map<uint32_t, ItemChange> m_itemChanges;
     std::vector<DefaultEquip> m_defaultEquipChanges;
 
 private:
     void MarkUpdatedInternal(uint32_t highId, bool gameServerDirty);
-
-    Inventory &m_inventory;
 };

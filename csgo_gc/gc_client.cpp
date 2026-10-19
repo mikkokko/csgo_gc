@@ -5,6 +5,7 @@
 #include "graffiti.h"
 #include "inventory_messages.h"
 #include "keyvalue.h"
+#include "networking_shared.h"
 
 #include "base_gcmessages.pb.h"
 #include "cstrike15_gcmessages.pb.h"
@@ -39,11 +40,15 @@ void ClientGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t>
         break;
 
     case GCEvent::NetMessage:
-        HandleNetMessage(buffer.data(), static_cast<uint32_t>(buffer.size()));
+        HandleNetMessage(id, buffer.data(), static_cast<uint32_t>(buffer.size()));
         break;
 
-    case GCEvent::SOCacheRequest:
-        HandleSOCacheRequest();
+    case GCEvent::SetAuthTicket:
+        SetAuthTicket(static_cast<uint32_t>(id), buffer);
+        break;
+
+    case GCEvent::ClearAuthTicket:
+        ClearAuthTicket(static_cast<uint32_t>(id));
         break;
 
     case GCEvent::Tick:
@@ -172,15 +177,25 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     }
 }
 
-
-
-void ClientGC::HandleNetMessage(const void *data, uint32_t size)
+void ClientGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
 {
     // pass 0 as type so it gets parsed from the message
     GCMessageRead messageRead{ 0, data, size };
     if (!messageRead.IsValid())
     {
         assert(false);
+        return;
+    }
+
+    if (!messageRead.IsProtobuf() && messageRead.TypeUnmasked() == k_EMsgNetworkConnect)
+    {
+        HandleConnect(steamId, messageRead);
+        return;
+    }
+
+    if (!m_serverSteamId || steamId != m_serverSteamId)
+    {
+        Platform::Print("ClientGC: ignored message from {} (not our gs {})\n", steamId, m_serverSteamId);
         return;
     }
 
@@ -198,13 +213,78 @@ void ClientGC::HandleNetMessage(const void *data, uint32_t size)
         MessageName(messageRead.TypeUnmasked()));
 }
 
+void ClientGC::SetAuthTicket(uint32_t handle, const std::vector<uint8_t> &buffer)
+{
+    AuthTicket &ticket = m_tickets[handle];
+    ticket.steamId = 0;
+    ticket.buffer = buffer;
+}
+
+void ClientGC::ClearAuthTicket(uint32_t handle)
+{
+    auto it = m_tickets.find(handle);
+    if (it == m_tickets.end())
+    {
+        assert(false);
+        Platform::Print("ClientGC: tried to clear a nonexistent auth ticket???\n");
+        return;
+    }
+
+    if (it->second.steamId)
+    {
+        Platform::Print("ClientGC: closing p2p session with {}\n", it->second.steamId);
+        PostToHost(HostEvent::CloseChannel, it->second.steamId, {});
+
+        if (it->second.steamId == m_serverSteamId)
+        {
+            Platform::Print("ClientGC: clearing gs identity\n");
+            m_serverSteamId = 0;
+        }
+    }
+
+    m_tickets.erase(it);
+}
+
+void ClientGC::HandleConnect(uint64_t steamId, GCMessageRead &message)
+{
+    uint32_t ticketSize = message.ReadUint32();
+    const void *ticket = message.ReadData(ticketSize);
+    if (!message.IsValid())
+    {
+        Platform::Print("ClientGC: ignored connection from {} (malformed message)\n", steamId);
+        return;
+    }
+
+    for (auto &[handle, authTicket] : m_tickets)
+    {
+        if (authTicket.buffer.size() == ticketSize && !memcmp(authTicket.buffer.data(), ticket, ticketSize))
+        {
+            authTicket.steamId = steamId;
+            m_serverSteamId = steamId;
+            Platform::Print("ClientGC: sending socache to {}\n", steamId);
+            HandleSOCacheRequest();
+            return;
+        }
+    }
+
+    Platform::Print("ClientGC: ignored connection from {} (ticket mismatch)\n", steamId);
+}
+
 void ClientGC::HandleSOCacheRequest()
 {
     CMsgSOCacheSubscribed message;
     m_inventory.BuildCacheSubscription(message, GetConfig().m_level, true);
 
     GCMessageWrite messageWrite{ k_ESOMsg_CacheSubscribed, message };
-    PostToHost(HostEvent::NetMessage, 0, std::move(messageWrite).TakeBuffer());
+    SendMessageToServer(std::move(messageWrite).TakeBuffer());
+}
+
+void ClientGC::SendMessageToServer(std::vector<uint8_t> &&buffer)
+{
+    if (m_serverSteamId)
+    {
+        PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(buffer));
+    }
 }
 
 void ClientGC::InventoryUpdate()
@@ -223,7 +303,7 @@ void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
 
     if (sendToGameServer)
     {
-        PostToHost(HostEvent::NetMessage, 0, messageWrite.CopyBuffer());
+        SendMessageToServer(messageWrite.CopyBuffer());
     }
 
     uint32_t typeMasked = messageWrite.TypeMasked();
@@ -252,7 +332,7 @@ void ClientGC::SendInventoryChangeMessages(const InventoryChangeMessages &result
     if (result.updatedGameServer.objects_modified_size())
     {
         GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedGameServer };
-        PostToHost(HostEvent::NetMessage, 0, std::move(messageWrite).TakeBuffer());
+        SendMessageToServer(std::move(messageWrite).TakeBuffer());
     }
 
     if (result.notification.has_request())
@@ -474,7 +554,7 @@ void ClientGC::SetItemPositions(GCMessageRead &messageRead)
     {
         // send these to the server only
         GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
-        PostToHost(HostEvent::NetMessage, 0, std::move(messageWrite).TakeBuffer());
+        SendMessageToServer(std::move(messageWrite).TakeBuffer());
     }
 
     SendInventoryChangeMessages(messages);

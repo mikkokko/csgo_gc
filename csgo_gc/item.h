@@ -4,6 +4,7 @@
 
 class ItemSchema;
 class KeyValue;
+class KeyValueWrite;
 
 class CSOEconItem;
 class CEconItemPreviewDataBlock;
@@ -101,7 +102,7 @@ public:
     }
 
     // serialization...
-    void ToKeyValue(KeyValue &kv) const;
+    void ToKeyValue(KeyValueWrite &kv) const;
     void ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const;
     void ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t accountId) const;
 

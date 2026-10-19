@@ -10,6 +10,12 @@ class CMsgClientWelcome;
 class CMsgCStrike15Welcome;
 class CMsgGCCStrike15_v2_MatchmakingGC2ClientHello;
 
+struct AuthTicket
+{
+    uint64_t steamId{}; // gameserver
+    std::vector<uint8_t> buffer;
+};
+
 class ClientGC final : public SharedGC
 {
 public:
@@ -21,7 +27,10 @@ private:
 
     // event handlers
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
-    void HandleNetMessage(const void *data, uint32_t size);
+    void HandleNetMessage(uint64_t steamId, const void *data, uint32_t size);
+    void SetAuthTicket(uint32_t handle, const std::vector<uint8_t> &buffer);
+    void ClearAuthTicket(uint32_t handle);
+    void HandleConnect(uint64_t steamId, GCMessageRead &message);
     void HandleSOCacheRequest();
     void InventoryUpdate();
 
@@ -30,6 +39,7 @@ private:
         const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
     void SendInventoryChangeMessages(const InventoryChangeMessages &messages);
+    void SendMessageToServer(std::vector<uint8_t> &&buffer);
 
     void OnClientHello(GCMessageRead &messageRead);
     void AdjustItemEquippedState(GCMessageRead &messageRead);
@@ -65,6 +75,9 @@ private:
     const uint64_t m_steamId;
 
     Inventory m_inventory;
+
+    uint64_t m_serverSteamId{};
+    std::unordered_map<uint32_t, AuthTicket> m_tickets;
 
     // microtransactions, we only have one going at a time
     uint64_t m_transactionId{};

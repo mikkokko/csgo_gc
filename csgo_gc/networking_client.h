@@ -2,37 +2,21 @@
 
 #include "networking_shared.h"
 
-class ClientGC;
-class GCMessageRead;
-class GCMessageWrite;
-
-struct AuthTicket
-{
-    uint64_t steamId{}; // gameserver
-    std::vector<uint8_t> buffer;
-};
+class SharedGC;
 
 class NetworkingClient
 {
 public:
-    NetworkingClient(ISteamNetworkingMessages *networkingMessages);
+    NetworkingClient(ISteamNetworkingMessages *networkingMessages, SharedGC &gc);
 
-    void Update(ClientGC *gc);
+    void Update();
 
-    void SendMessage(const void *data, uint32_t size);
-
-    // for gameserver validation
-    void SetAuthTicket(uint32_t handle, const void *data, uint32_t size);
-    void ClearAuthTicket(uint32_t handle);
+    void SendMessage(uint64_t steamId, const void *data, uint32_t size);
+    void CloseChannel(uint64_t steamId);
 
 private:
-    // return false if it wasn't handled, in which case we pass it to m_clientGC
-    bool HandleMessage(ClientGC *gc, uint64_t steamId, GCMessageRead &message);
-
     ISteamNetworkingMessages *const m_networkingMessages;
-    uint64_t m_serverSteamId{};
-
-    std::unordered_map<uint32_t, AuthTicket> m_tickets;
+    SharedGC &m_gc;
 
     STEAM_CALLBACK(NetworkingClient,
         OnSessionRequest,

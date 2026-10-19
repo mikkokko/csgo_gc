@@ -83,7 +83,7 @@ Item::Item(uint32_t highId, ItemDesc &&desc)
 {
 }
 
-void Item::ToKeyValue(KeyValue &kv) const
+void Item::ToKeyValue(KeyValueWrite &kv) const
 {
     kv.AddNumber("inventory", m_desc.inventory);
     kv.AddNumber("def_index", FromEnum(m_desc.defIndex));
@@ -94,29 +94,41 @@ void Item::ToKeyValue(KeyValue &kv) const
     kv.AddNumber("in_use", m_desc.inUse);
     kv.AddNumber("rarity", FromEnum(m_desc.rarity));
 
-    KeyValue &attributesKey = kv.AddSubkey("attributes");
-    for (const ItemAttribute &attribute : m_desc.attributes)
+    if (!m_desc.attributes.empty())
     {
-        std::string name = std::to_string(FromEnum(attribute.DefIndex()));
+        kv.BeginBlock("attributes");
 
-        // illegible bullshit
-        std::string value = std::visit(Bruh{
-                                           [&](float v)
-                                           { return std::to_string(v); },
-                                           [&](uint32_t v)
-                                           { return std::to_string(v); },
-                                           [&](const std::string &v)
-                                           { return v; },
-                                       },
-            attribute.Value());
+        for (const ItemAttribute &attribute : m_desc.attributes)
+        {
+            std::string name = std::to_string(FromEnum(attribute.DefIndex()));
 
-        attributesKey.AddString(name, value);
+            // illegible bullshit
+            std::string value = std::visit(Bruh{
+                                               [&](float v)
+                                               { return std::to_string(v); },
+                                               [&](uint32_t v)
+                                               { return std::to_string(v); },
+                                               [&](const std::string &v)
+                                               { return v; },
+                                           },
+                attribute.Value());
+
+            kv.AddString(name, value);
+        }
+
+        kv.EndBlock();
     }
 
-    KeyValue &equippedStateKey = kv.AddSubkey("equipped_state");
-    for (const ItemEquip &equip : m_desc.equips)
+    if (!m_desc.equips.empty())
     {
-        equippedStateKey.AddNumber(std::to_string(equip.Class()), equip.Slot());
+        kv.BeginBlock("equipped_state");
+
+        for (const ItemEquip &equip : m_desc.equips)
+        {
+            kv.AddNumber(std::to_string(equip.Class()), equip.Slot());
+        }
+
+        kv.EndBlock();
     }
 }
 
