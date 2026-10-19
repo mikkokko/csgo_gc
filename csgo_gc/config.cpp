@@ -25,6 +25,8 @@ GCConfig::GCConfig()
     m_appIdOverride = config.GetNumber("appid_override", m_appIdOverride);
     m_showCsgoGCServersOnly = config.GetNumber("show_csgo_gc_servers_only", m_showCsgoGCServersOnly);
 
+    m_pingServicePort = config.GetNumber("ping_service_port", m_pingServicePort);
+
     m_itemSchemaPath = config.GetString("item_schema_path", m_itemSchemaPath);
 
     m_inventoryEditorOrigin = config.GetString("inventory_editor_origin", m_inventoryEditorOrigin);

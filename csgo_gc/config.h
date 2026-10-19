@@ -31,6 +31,9 @@ public:
     uint32_t m_appIdOverride{ 4465480 };
     bool m_showCsgoGCServersOnly{ true };
 
+    // loopback port for the server latency service used by panorama quickplay, 0 disables it
+    int m_pingServicePort{ 27099 };
+
     std::string m_itemSchemaPath{ "csgo/scripts/items/items_game.txt" };
 
     std::string m_inventoryEditorOrigin;

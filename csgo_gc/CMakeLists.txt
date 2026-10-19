@@ -40,6 +40,7 @@ add_library(csgo_gc STATIC
     message.cpp
     networking_client.cpp
     networking_server.cpp
+    ping_service.cpp
     steam_hook.cpp)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -82,6 +83,10 @@ target_link_libraries(csgo_gc PRIVATE
     funchook-static
     steam_api
     websockets)
+
+if (WIN32)
+    target_link_libraries(csgo_gc PRIVATE ws2_32)
+endif()
 
 # apple message box
 if (APPLE)
