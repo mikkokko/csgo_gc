@@ -16,8 +16,7 @@ public:
     bool SelectItemFromCrate(ItemDefIndex crateDefIndex, ItemDesc &desc);
 
 private:
-    const LootListItem *SelectLootListItem(const std::vector<const LootListItem *> &items);
-    Rarity RandomRarityForItems(const std::vector<const LootListItem *> &items);
+    const LootListItem *SelectLootListItem(std::span<const LootListItem *const> sortedItems);
     bool ShouldMakeStatTrak(const LootListItem &item, const LootList &lootList, bool containsUnusuals);
 
     const ItemSchema &m_itemSchema;
