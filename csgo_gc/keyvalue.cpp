@@ -20,12 +20,17 @@ enum class BinaryCommand : uint8_t
     Terminate
 };
 
+static bool IsSpace(char c)
+{
+    return (c == ' ') || ((unsigned int)c - '\t' < 5);
+}
+
 class KeyValueParser
 {
 public:
-    KeyValueParser(std::string_view str)
-        : m_ptr{ str.data() }
-        , m_end{ str.data() + str.size() }
+    KeyValueParser(char *ptr, char *end)
+        : m_ptr{ ptr }
+        , m_end{ end }
     {
     }
 
@@ -35,12 +40,12 @@ public:
     start:
         while (true)
         {
-            if (IsEndOfFile())
+            if (m_ptr == m_end)
             {
                 return false;
             }
 
-            if (static_cast<unsigned char>(*m_ptr) > ' ')
+            if (!IsSpace(*m_ptr))
             {
                 break;
             }
@@ -57,12 +62,12 @@ public:
 
         while (true)
         {
-            if (IsEndOfFile())
+            if (m_ptr == m_end)
             {
                 return false;
             }
 
-            if (*m_ptr == '\n')
+            if (*m_ptr == '\n' || *m_ptr == '\r')
             {
                 break;
             }
@@ -73,98 +78,67 @@ public:
         goto start;
     }
 
-    // FIXME: unfuck this
-    std::string ParseUnquotedString()
+    std::string_view ParseString()
     {
-        std::string value;
-
-        while (!IsEndOfFile())
-        {
-            char ch = *m_ptr++;
-            if (static_cast<unsigned char>(ch) <= ' ')
-            {
-                break;
-            }
-
-            value.push_back(ch);
-        }
-
-        return value;
-    }
-
-    std::string ParseString()
-    {
+        // unquoted
         if (*m_ptr != '"')
         {
-            return ParseUnquotedString();
+            char *start = m_ptr;
+
+            while (m_ptr != m_end && !IsSpace(*m_ptr) && *m_ptr != '{' && *m_ptr != '}')
+            {
+                m_ptr++;
+            }
+
+            return { start, static_cast<size_t>(m_ptr - start) };
         }
 
         m_ptr++; // skip the start quote
 
-        std::string value;
+        char *start = m_ptr;
+        char *end = start;
 
-        while (!IsEndOfFile())
+        // escape it in place
+        while (m_ptr != m_end && *m_ptr != '"')
         {
-            char ch = *m_ptr++;
-            if (ch == '"')
+            if (*m_ptr == '\\' && m_end - m_ptr >= 2 && (m_ptr[1] == '"' || m_ptr[1] == '\\'))
             {
-                break;
+                m_ptr++;
             }
 
-            if (ch == '\\' && !IsEndOfFile() && (*m_ptr == '"' || *m_ptr == '\\'))
-            {
-                ch = *m_ptr++;
-            }
-
-            value.push_back(ch);
+            *end++ = *m_ptr++;
         }
 
-        return value;
+        if (m_ptr != m_end)
+        {
+            m_ptr++;
+        }
+
+        return { start, static_cast<size_t>(end - start) };
     }
 
     char PeekCharacter() const
     {
-        assert(!IsEndOfFile());
+        assert(m_ptr < m_end);
         return m_ptr[0];
     }
 
     void SkipCharacter()
     {
-        assert(!IsEndOfFile());
+        assert(m_ptr < m_end);
         m_ptr++;
     }
 
 private:
-    bool IsEndOfFile() const { return m_ptr >= m_end; }
-
-    const char *m_ptr;
-    const char *m_end;
+    char *m_ptr;
+    char *m_end;
 };
 
-std::string LoadFile(const char *path)
+KeyValueRead::KeyValueRead(const char *path)
 {
-    FILE *f = fopen(path, "rb");
-    if (!f)
-    {
-        return {};
-    }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    std::string buffer;
-    buffer.resize(size);
-    long bytesRead = static_cast<long>(fread(buffer.data(), 1, size, f));
-
-    fclose(f);
-
-    if (bytesRead != size)
-    {
-        return {};
-    }
-
-    return buffer;
+    std::vector<size_t> order;
+    std::vector<bool> removed;
+    m_good = m_root.ParseFromFile(path, m_storage) && m_root.Dedupe(order, removed);
 }
 
 KeyValue::KeyValue(std::string_view name)
@@ -172,17 +146,43 @@ KeyValue::KeyValue(std::string_view name)
 {
 }
 
-bool KeyValue::ParseFromFile(const char *path)
+static char *LoadFile(const char *path, KeyValueStorage &storage, size_t &size)
 {
-    std::string data = LoadFile(path);
-    if (data.empty())
+    FILE *f = fopen(path, "rb");
+    if (!f)
+    {
+        return nullptr;
+    }
+
+    fseek(f, 0, SEEK_END);
+    size = static_cast<size_t>(ftell(f));
+    fseek(f, 0, SEEK_SET);
+
+    char *buffer = storage.AllocateString(size);
+    size_t bytesRead = fread(buffer, 1, size, f);
+
+    fclose(f);
+
+    if (bytesRead != size)
+    {
+        return nullptr;
+    }
+
+    return buffer;
+}
+
+bool KeyValue::ParseFromFile(const char *path, KeyValueStorage &storage)
+{
+    size_t fileSize;
+    char *fileData = LoadFile(path, storage, fileSize);
+    if (!fileData)
     {
         Platform::Print("Could not load {} (or empty)\n", path);
         return false;
     }
 
-    KeyValueParser parser{ data };
-    if (!Parse(parser, path))
+    KeyValueParser parser{ fileData, fileData + fileSize };
+    if (!Parse(parser, path, storage))
     {
         Platform::Print("Could not parse {}\n", path);
         return false;
@@ -202,22 +202,17 @@ static void BinaryWriteString(std::string &buffer, std::string_view string)
     buffer.append(1, '\0');
 }
 
-void KeyValue::BinaryWriteToString(std::string &buffer)
+void KeyValue::BinaryWriteToString(std::string &buffer) const
 {
-    for (KeyValue &subkey : m_subkeys)
+    for (const KeyValue &subkey : Subkeys())
     {
-        if (subkey.m_string.empty() && subkey.m_subkeys.empty())
-        {
-            continue;
-        }
-
-        if (subkey.m_string.size())
+        if (subkey.String().size())
         {
             BinaryWriteCommand(buffer, BinaryCommand::String);
             BinaryWriteString(buffer, subkey.m_name);
-            BinaryWriteString(buffer, subkey.m_string);
+            BinaryWriteString(buffer, subkey.String());
         }
-        else
+        else if (subkey.Subkeys().size())
         {
             BinaryWriteCommand(buffer, BinaryCommand::Subkey);
             BinaryWriteString(buffer, subkey.m_name);
@@ -228,20 +223,28 @@ void KeyValue::BinaryWriteToString(std::string &buffer)
     BinaryWriteCommand(buffer, BinaryCommand::Terminate);
 }
 
-static std::string BuildIncludeFilePath(std::string_view currentPath, std::string filename)
+static std::string BuildIncludeFilePath(std::string_view currentPath, std::string_view filename)
 {
+    std::string result{ filename };
+
     size_t separator = currentPath.find_last_of("/\\");
     if (separator != std::string_view::npos)
     {
-        filename.insert(0, currentPath.substr(0, separator + 1));
+        result.insert(0, currentPath.substr(0, separator + 1));
     }
 
-    return filename;
+    return result;
 }
 
-bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
+bool KeyValue::Parse(KeyValueParser &parser, std::string_view path, KeyValueStorage &storage)
 {
-    m_subkeys.reserve(SubkeyReserveCount);
+    if (!std::holds_alternative<std::vector<KeyValue>>(m_value))
+    {
+        m_value.emplace<std::vector<KeyValue>>();
+    }
+
+    auto &subkeys = std::get<std::vector<KeyValue>>(m_value);
+    subkeys.reserve(SubkeyReserveCount);
 
     while (true)
     {
@@ -252,8 +255,7 @@ bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
 
         if (parser.PeekCharacter() == '#')
         {
-            std::string directive = parser.ParseString();
-            if (directive != "#base")
+            if (parser.ParseString() != "#base")
             {
                 return false;
             }
@@ -264,7 +266,7 @@ bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
             }
 
             std::string includedPath = BuildIncludeFilePath(path, parser.ParseString());
-            if (!ParseFromFile(includedPath.c_str()))
+            if (!ParseFromFile(includedPath.c_str(), storage))
             {
                 return false;
             }
@@ -277,7 +279,7 @@ bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
         switch (parser.PeekCharacter())
         {
         case '"':
-            current = FindOrCreateSubkey(parser.ParseString());
+            current = &subkeys.emplace_back(parser.ParseString());
             break;
 
         case '}':
@@ -296,12 +298,12 @@ bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
         switch (parser.PeekCharacter())
         {
         case '"':
-            current->m_string = parser.ParseString();
+            current->m_value = parser.ParseString();
             break;
 
         case '{':
             parser.SkipCharacter();
-            if (!current->Parse(parser, path))
+            if (!current->Parse(parser, path, storage))
             {
                 return false;
             }
@@ -313,22 +315,98 @@ bool KeyValue::Parse(KeyValueParser &parser, std::string_view path)
     }
 }
 
-KeyValue *KeyValue::FindOrCreateSubkey(std::string_view name)
+bool KeyValue::Dedupe(std::vector<size_t> &order, std::vector<bool> &removed)
 {
-    for (KeyValue &subkey : m_subkeys)
+    auto *children = std::get_if<std::vector<KeyValue>>(&m_value);
+    if (!children)
     {
-        if (subkey.m_name == name)
+        return true;
+    }
+
+    auto &subkeys = *children;
+
+    order.resize(subkeys.size());
+    for (size_t i = 0; i < subkeys.size(); i++)
+    {
+        order[i] = i;
+    }
+
+    auto predicate = [subkeys](size_t a, size_t b)
+    {
+        auto compare = subkeys[a].m_name.compare(subkeys[b].m_name);
+        return compare ? (compare < 0) : (a < b);
+    };
+
+    std::sort(order.begin(), order.end(), predicate);
+
+    removed.clear();
+    removed.resize(subkeys.size(), false);
+    size_t groupStart = 0;
+
+    for (size_t i = 1; i < order.size(); i++)
+    {
+        KeyValue &current = subkeys[order[i]];
+        KeyValue &existing = subkeys[order[groupStart]];
+
+        if (existing.m_name != current.m_name)
         {
-            return &subkey;
+            groupStart = i;
+            continue;
+        }
+
+        if (existing.m_value.index() != current.m_value.index())
+        {
+            Platform::Print("Key named {} present with multiple types, can't merge\n", existing.m_name);
+            return false;
+        }
+
+        auto *dst = std::get_if<std::vector<KeyValue>>(&existing.m_value);
+        if (dst)
+        {
+            auto &src = std::get<std::vector<KeyValue>>(current.m_value);
+            dst->insert(dst->end(),
+                std::make_move_iterator(src.begin()),
+                std::make_move_iterator(src.end()));
+        }
+        else
+        {
+            existing.m_value = std::move(current.m_value);
+        }
+
+        removed[order[i]] = true;
+    }
+
+    size_t write = 0;
+    for (size_t read = 0; read < subkeys.size(); read++)
+    {
+        if (removed[read])
+        {
+            continue;
+        }
+
+        if (write != read)
+        {
+            subkeys[write] = std::move(subkeys[read]);
+        }
+
+        write++;
+    }
+    subkeys.resize(write);
+
+    for (KeyValue &subkey : subkeys)
+    {
+        if (!subkey.Dedupe(order, removed))
+        {
+            return false;
         }
     }
 
-    return &m_subkeys.emplace_back(name);
+    return true;
 }
 
 const KeyValue *KeyValue::GetSubkey(std::string_view name) const
 {
-    for (const KeyValue &subkey : m_subkeys)
+    for (const KeyValue &subkey : Subkeys())
     {
         if (subkey.m_name == name)
         {
@@ -347,7 +425,7 @@ std::string_view KeyValue::GetString(std::string_view name, std::string_view fal
         return fallback;
     }
 
-    return subkey->m_string;
+    return subkey->String();
 }
 
 KeyValueWrite::KeyValueWrite(FILE *file)

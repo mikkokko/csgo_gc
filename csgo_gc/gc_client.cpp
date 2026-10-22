@@ -610,15 +610,15 @@ void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
         return;
     }
 
-    KeyValue priceSheet{ "price_sheet" };
-    if (!priceSheet.ParseFromFile("csgo_gc/price_sheet.txt"))
+    KeyValueRead priceSheetRead{ "csgo_gc/price_sheet.txt" };
+    if (!priceSheetRead.Good())
     {
         return;
     }
 
     std::string binaryString;
     binaryString.reserve(1 << 17);
-    priceSheet.BinaryWriteToString(binaryString);
+    priceSheetRead.Root().BinaryWriteToString(binaryString);
 
     // fuck you idiot
     CMsgStoreGetUserDataResponse response;

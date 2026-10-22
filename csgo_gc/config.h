@@ -20,7 +20,7 @@ enum LogOutput
 class GCConfig
 {
 public:
-    GCConfig();
+    void Load();
 
     float GetRarityWeight(Rarity rarity) const;
 
@@ -67,4 +67,5 @@ private:
     };
 };
 
+void LoadConfig();
 const GCConfig &GetConfig();

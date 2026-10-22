@@ -1,10 +1,35 @@
 #include "stdafx.h"
 #include "appid.h"
-#include "keyvalue.h" // LoadFile
 #include "config.h"
 
 namespace AppId
 {
+
+static std::string LoadFile(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+    {
+        return {};
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    std::string buffer;
+    buffer.resize(size);
+    long bytesRead = static_cast<long>(fread(buffer.data(), 1, size, f));
+
+    fclose(f);
+
+    if (bytesRead != size)
+    {
+        return {};
+    }
+
+    return buffer;
+}
 
 static size_t ifind(std::string_view haystack, std::string_view needle)
 {

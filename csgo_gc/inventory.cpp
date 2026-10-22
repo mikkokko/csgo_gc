@@ -377,18 +377,20 @@ Item &Inventory::CreateItem(InventoryModify &modify, ItemDesc &&desc)
 
 void Inventory::ReadFromFile()
 {
-    KeyValue inventoryKey{ "inventory" };
-    if (!inventoryKey.ParseFromFile(InventoryFilePath))
+    KeyValueRead inventoryRead{ InventoryFilePath };
+    if (!inventoryRead.Good())
     {
         return;
     }
 
+    const KeyValue &inventoryKey = inventoryRead.Root();
+
     const KeyValue *itemsKey = inventoryKey.GetSubkey("items");
     if (itemsKey)
     {
-        m_items.reserve(itemsKey->SubkeyCount());
+        m_items.reserve(itemsKey->Subkeys().size());
 
-        for (const KeyValue &itemKey : *itemsKey)
+        for (const KeyValue &itemKey : itemsKey->Subkeys())
         {
             uint32_t highItemId = FromString<uint32_t>(itemKey.Name());
             CreateItem(highItemId, itemKey);
@@ -398,9 +400,9 @@ void Inventory::ReadFromFile()
     const KeyValue *defaultEquipsKey = inventoryKey.GetSubkey("default_equips");
     if (defaultEquipsKey)
     {
-        m_defaultEquips.reserve(defaultEquipsKey->SubkeyCount());
+        m_defaultEquips.reserve(defaultEquipsKey->Subkeys().size());
 
-        for (const KeyValue &defaultEquipKey : *defaultEquipsKey)
+        for (const KeyValue &defaultEquipKey : defaultEquipsKey->Subkeys())
         {
             uint32_t defIndex = FromString<uint32_t>(defaultEquipKey.Name());
             uint32_t classId = defaultEquipKey.GetNumber<uint32_t>("class_id");

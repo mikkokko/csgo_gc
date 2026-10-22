@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <deque>
 #include <format>
+#include <iterator>
 #include <list>
 #include <map>
 #include <optional>

@@ -143,12 +143,14 @@ Rarity LootListItem::CaseRarity() const
 
 ItemSchema::ItemSchema()
 {
-    KeyValue itemSchema{ "root" };
-    if (!itemSchema.ParseFromFile(GetConfig().m_itemSchemaPath.c_str()))
+    KeyValueRead itemSchemaRead{ GetConfig().m_itemSchemaPath.c_str() };
+    if (!itemSchemaRead.Good())
     {
         assert(false);
         return;
     }
+
+    const KeyValue &itemSchema = itemSchemaRead.Root();
 
     const KeyValue *itemsGame = itemSchema.GetSubkey("items_game");
     if (!itemsGame)
@@ -196,11 +198,11 @@ ItemSchema::ItemSchema()
     // unusual loot lists are not included in client_loot_lists
     // we need to parse these after items and paint kits but before client_loot_lists
     {
-        KeyValue unusualLootLists{ "unusual_loot_lists" };
+        KeyValueRead extraItemSchemaRead{ "csgo_gc/unusual_loot_lists.txt" };
 
-        if (unusualLootLists.ParseFromFile("csgo_gc/unusual_loot_lists.txt"))
+        if (extraItemSchemaRead.Good())
         {
-            ParseLootLists(&unusualLootLists, true);
+            ParseLootLists(&extraItemSchemaRead.Root(), true);
         }
         else
         {
@@ -397,9 +399,9 @@ bool ItemSchema::GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, Unacknowl
 
 void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey)
 {
-    m_itemInfo.reserve(itemsKey->SubkeyCount());
+    m_itemInfo.reserve(itemsKey->Subkeys().size());
 
-    for (const KeyValue &itemKey : *itemsKey)
+    for (const KeyValue &itemKey :  itemsKey->Subkeys())
     {
         if (itemKey.Name() == "default")
         {
@@ -529,9 +531,9 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
 
 void ItemSchema::ParseAttributes(const KeyValue *attributesKey)
 {
-    m_attributeInfo.reserve(attributesKey->SubkeyCount());
+    m_attributeInfo.reserve(attributesKey->Subkeys().size());
 
-    for (const KeyValue &attributeKey : *attributesKey)
+    for (const KeyValue &attributeKey : attributesKey->Subkeys())
     {
         uint32_t defIndex = FromString<uint32_t>(attributeKey.Name());
         assert(defIndex);
@@ -541,9 +543,9 @@ void ItemSchema::ParseAttributes(const KeyValue *attributesKey)
 
 void ItemSchema::ParseStickerKits(const KeyValue *stickerKitsKey)
 {
-    m_stickerKitInfo.reserve(stickerKitsKey->SubkeyCount());
+    m_stickerKitInfo.reserve(stickerKitsKey->Subkeys().size());
 
-    for (const KeyValue &stickerKitKey : *stickerKitsKey)
+    for (const KeyValue &stickerKitKey : stickerKitsKey->Subkeys())
     {
         std::string_view name = stickerKitKey.GetString("name");
 
@@ -555,9 +557,9 @@ void ItemSchema::ParseStickerKits(const KeyValue *stickerKitsKey)
 
 void ItemSchema::ParsePaintKits(const KeyValue *paintKitsKey)
 {
-    m_paintKitInfo.reserve(paintKitsKey->SubkeyCount());
+    m_paintKitInfo.reserve(paintKitsKey->Subkeys().size());
 
-    for (const KeyValue &paintKitKey : *paintKitsKey)
+    for (const KeyValue &paintKitKey : paintKitsKey->Subkeys())
     {
         std::string_view name = paintKitKey.GetString("name");
 
@@ -569,7 +571,7 @@ void ItemSchema::ParsePaintKits(const KeyValue *paintKitsKey)
 
 void ItemSchema::ParsePaintKitRarities(const KeyValue *raritiesKey)
 {
-    for (const KeyValue &key : *raritiesKey)
+    for (const KeyValue &key : raritiesKey->Subkeys())
     {
         PaintKitInfo *paintKitInfo = PaintKitInfoByName(key.Name());
         if (!paintKitInfo)
@@ -586,9 +588,9 @@ void ItemSchema::ParsePaintKitRarities(const KeyValue *raritiesKey)
 
 void ItemSchema::ParseMusicDefinitions(const KeyValue *musicDefinitionsKey)
 {
-    m_musicDefinitionInfo.reserve(musicDefinitionsKey->SubkeyCount());
+    m_musicDefinitionInfo.reserve(musicDefinitionsKey->Subkeys().size());
 
-    for (const KeyValue &musicDefinitionKey : *musicDefinitionsKey)
+    for (const KeyValue &musicDefinitionKey : musicDefinitionsKey->Subkeys())
     {
         std::string_view name = musicDefinitionKey.GetString("name");
 
@@ -647,9 +649,9 @@ static LootListItemType LootListItemTypeFromName(std::string_view name, std::str
 
 void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
 {
-    m_lootLists.reserve(lootListsKey->SubkeyCount());
+    m_lootLists.reserve(lootListsKey->Subkeys().size());
 
-    for (const KeyValue &lootListKey : *lootListsKey)
+    for (const KeyValue &lootListKey : lootListsKey->Subkeys())
     {
         auto emplace = m_lootLists.emplace(std::piecewise_construct,
             std::forward_as_tuple(lootListKey.Name()),
@@ -658,7 +660,7 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
         LootList &lootList = emplace.first->second;
         lootList.isUnusual = unusual;
 
-        for (const KeyValue &entryKey : lootListKey)
+        for (const KeyValue &entryKey : lootListKey.Subkeys())
         {
             std::string_view entryName = entryKey.Name();
 
@@ -807,9 +809,9 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
 
 void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
 {
-    m_revolvingLootLists.reserve(revolvingLootListsKey->SubkeyCount());
+    m_revolvingLootLists.reserve(revolvingLootListsKey->Subkeys().size());
 
-    for (const KeyValue &revolvingLootListKey : *revolvingLootListsKey)
+    for (const KeyValue &revolvingLootListKey : revolvingLootListsKey->Subkeys())
     {
         uint32_t index = FromString<uint32_t>(revolvingLootListKey.Name());
         assert(index);

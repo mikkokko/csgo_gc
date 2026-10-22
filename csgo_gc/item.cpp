@@ -21,9 +21,9 @@ Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSc
     const KeyValue *attributesKey = kv.GetSubkey("attributes");
     if (attributesKey)
     {
-        m_desc.attributes.reserve(attributesKey->SubkeyCount());
+        m_desc.attributes.reserve(attributesKey->Subkeys().size());
 
-        for (const KeyValue &attributeKey : *attributesKey)
+        for (const KeyValue &attributeKey : attributesKey->Subkeys())
         {
             AttributeDefIndex defIndex = ToEnum<AttributeDefIndex>(FromString<uint32_t>(attributeKey.Name()));
             std::string_view value = attributeKey.String();
@@ -66,9 +66,9 @@ Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSc
     const KeyValue *equippedStateKey = kv.GetSubkey("equipped_state");
     if (equippedStateKey)
     {
-        m_desc.equips.reserve(equippedStateKey->SubkeyCount());
+        m_desc.equips.reserve(equippedStateKey->Subkeys().size());
 
-        for (const KeyValue &equippedKey : *equippedStateKey)
+        for (const KeyValue &equippedKey : equippedStateKey->Subkeys())
         {
             uint32_t equipClass = FromString<uint32_t>(equippedKey.Name());
             uint32_t equpSlot = FromString<uint32_t>(equippedKey.String());
