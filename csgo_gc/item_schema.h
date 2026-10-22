@@ -29,13 +29,14 @@ public:
 
     ItemDefIndex m_defIndex;
     std::string m_name;
+    std::string m_imageInventory;
     Rarity m_rarity;
     Quality m_quality;
     uint32_t m_level;
     uint32_t m_supplyCrateSeries; // cases only
-
-    // kludge for coupons so we can buy stuff from the store
     bool m_isCoupon;
+    bool m_isSelfOpeningPurchase;
+    uint32_t m_storageIcon; // rio2022 caskets only...
     std::string m_lootListName;
     bool m_willProduceStatTrak;
 };
@@ -104,6 +105,7 @@ struct LootList
     std::vector<const LootList *> subLists;
     bool willProduceStatTrak{};
     bool isUnusual{};
+    bool allEntriesAsAdditionalDrops{};
 };
 
 class ItemSchema
@@ -126,6 +128,7 @@ public:
 
     // item creation
     bool GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, ItemDesc &desc) const;
+    bool GetPurchaseItemDescs(ItemDefIndex defIndex, std::vector<ItemDesc> &items, std::vector<ItemDesc> &casketedItems) const;
 
 private:
     void ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey);

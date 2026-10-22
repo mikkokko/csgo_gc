@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gc_const_csgo.h"
 #include "item_schema_const.h"
 
 class ItemSchema;
@@ -14,6 +15,12 @@ public:
     CaseOpening(const ItemSchema &itemSchema);
 
     bool SelectItemFromCrate(ItemDefIndex crateDefIndex, ItemDesc &desc);
+
+    bool SelectItemsFromLootList(const LootList &lootList,
+        bool forceStatTrak,
+        ItemOrigin origin,
+        UnacknowledgedType unacknowledgedType,
+        std::vector<ItemDesc> &descs);
 
 private:
     const LootListItem *SelectLootListItem(std::span<const LootListItem *const> sortedItems);

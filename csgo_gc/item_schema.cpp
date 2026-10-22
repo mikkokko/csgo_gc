@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "item_schema.h"
+#include "case_opening.h"
 #include "config.h"
 #include "item.h"
 #include "keyvalue.h"
@@ -101,6 +102,8 @@ ItemInfo::ItemInfo(ItemDefIndex defIndex)
     , m_level{ 1 }
     , m_supplyCrateSeries{ 0 }
     , m_isCoupon{ false }
+    , m_isSelfOpeningPurchase{ false }
+    , m_storageIcon{ 0 }
     , m_willProduceStatTrak{ false }
 {
     // RecursiveParseItem parses the rest
@@ -168,6 +171,23 @@ ItemSchema::ItemSchema()
     if (itemsKey)
     {
         ParseItems(itemsKey, itemsGame->GetSubkey("prefabs"));
+    }
+
+    // FIXME: abysmal dogshit
+    const KeyValue *alternateIcons2 = itemsGame->GetSubkey("alternate_icons2");
+    const KeyValue *casketIcons = alternateIcons2 ? alternateIcons2->GetSubkey("casket_icons") : nullptr;
+    if (casketIcons)
+    {
+        for (auto &pair : m_itemInfo)
+        {
+            for (const KeyValue &icon : casketIcons->Subkeys())
+            {
+                if (pair.second.m_imageInventory == icon.GetString("icon_path"))
+                {
+                    pair.second.m_storageIcon = FromString<uint32_t>(icon.Name());
+                }
+            }
+        }
     }
 
     const KeyValue *attributesKey = itemsGame->GetSubkey("attributes");
@@ -381,11 +401,16 @@ bool ItemSchema::GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, Unacknowl
 
         const LootList &lootList = lootListSearch->second;
         assert(lootList.subLists.size() == 0 && lootList.items.size() == 1);
-        assert(lootList.willProduceStatTrak == false && lootList.isUnusual == false);
+        assert(!lootList.willProduceStatTrak && !lootList.isUnusual && !lootList.allEntriesAsAdditionalDrops);
+
+        const LootListItem &lootListItem = lootList.items.front();
+
+        bool statTrak = itemInfo.m_willProduceStatTrak
+            && (lootListItem.type == LootListItemMusicKit || lootListItem.type == LootListItemPaintable);
 
         return ItemDescForLootListItem(
-            lootList.items.front(),
-            itemInfo.m_willProduceStatTrak,
+            lootListItem,
+            statTrak,
             origin,
             unacknowledgedType,
             desc);
@@ -403,11 +428,87 @@ bool ItemSchema::GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, Unacknowl
     return true;
 }
 
+bool ItemSchema::GetPurchaseItemDescs(ItemDefIndex defIndex, std::vector<ItemDesc> &items, std::vector<ItemDesc> &casketedItems) const
+{
+    auto itemSearch = m_itemInfo.find(defIndex);
+    if (itemSearch == m_itemInfo.end())
+    {
+        assert(false);
+        return false;
+    }
+
+    const ItemInfo &info = itemSearch->second;
+    if (info.m_isSelfOpeningPurchase)
+    {
+        auto listSearch = m_lootLists.find(info.m_lootListName);
+        if (listSearch == m_lootLists.end())
+        {
+            assert(false);
+            return false;
+        }
+
+        // self opening purchases??? CASE OPENING
+        CaseOpening caseOpening{ *this };
+
+        if (!caseOpening.SelectItemsFromLootList(
+                listSearch->second,
+                info.m_willProduceStatTrak,
+                ItemOriginPurchased,
+                UnacknowledgedPurchased,
+                items))
+        {
+            assert(false);
+            return false;
+        }
+
+        // rio2022 caskets... this list contains the caskets contents,
+        // the actual item we want is <name>_self_opening_purchase
+        auto casketList = m_lootLists.find(info.m_name + "_self_opening_purchase");
+        if (casketList != m_lootLists.end())
+        {
+            casketedItems = std::move(items);
+            items.clear();
+
+            if (!caseOpening.SelectItemsFromLootList(
+                    casketList->second,
+                    false,
+                    ItemOriginPurchased,
+                    UnacknowledgedPurchased,
+                    items))
+            {
+                assert(false);
+                return false;
+            }
+
+            assert(items.size() == 1);
+            ItemDesc &casketDesc = items.front();
+            assert(items.front().defIndex == ItemDefIndex::Casket);
+
+            if (info.m_storageIcon)
+            {
+                // we need to drip out the casket manually
+                casketDesc.attributes.emplace_back(AttributeDefIndex::AlternateIcon, info.m_storageIcon);
+            }
+        }
+
+        return true;
+    }
+
+    ItemDesc desc{};
+    if (!GetItemDesc(defIndex, ItemOriginPurchased, UnacknowledgedPurchased, desc))
+    {
+        return false;
+    }
+
+    items.push_back(std::move(desc));
+    return true;
+}
+
 void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey)
 {
     m_itemInfo.reserve(itemsKey->Subkeys().size());
 
-    for (const KeyValue &itemKey :  itemsKey->Subkeys())
+    for (const KeyValue &itemKey : itemsKey->Subkeys())
     {
         if (itemKey.Name() == "default")
         {
@@ -420,21 +521,8 @@ void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey
 
         ParseItemRecursive(emplace.first->second, itemKey, prefabsKey);
 
-        // FIXME: remove, temp slop to make sure we parse correctly
         auto &itemInfo = emplace.first->second;
-        if (!itemInfo.m_isCoupon)
-        {
-            // FIXME: self opening purchases
-            if (itemInfo.m_lootListName.size())
-            {
-                // shut the fuck up
-                //Platform::Print("Non coupon item associated loot list in {}!!!\n", itemInfo.m_name);
-            }
-
-            //assert(!itemInfo.m_lootListName.size());
-            assert(!itemInfo.m_willProduceStatTrak);
-        }
-        else
+        if (itemInfo.m_isCoupon || itemInfo.m_isSelfOpeningPurchase)
         {
             assert(itemInfo.m_lootListName.size());
         }
@@ -491,6 +579,12 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
         info.m_name = name;
     }
 
+    std::string_view image = itemKey.GetString("image_inventory");
+    if (image.size())
+    {
+        info.m_imageInventory = image;
+    }
+
     std::string_view quality = itemKey.GetString("item_quality");
     if (quality.size())
     {
@@ -515,6 +609,7 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
     if (itemType.size())
     {
         info.m_isCoupon = (itemType == "coupon");
+        info.m_isSelfOpeningPurchase = (itemType == "self_opening_purchase");
     }
 
     std::string_view lootListName = itemKey.GetString("loot_list_name");
@@ -523,7 +618,7 @@ void ItemSchema::ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, con
         info.m_lootListName = lootListName;
     }
 
-    info.m_willProduceStatTrak = itemKey.GetNumber("will_produce_stattrak", false);
+    info.m_willProduceStatTrak = itemKey.GetNumber("will_produce_stattrak", info.m_willProduceStatTrak);
 
     const KeyValue *attributes = itemKey.GetSubkey("attributes");
     if (attributes)
@@ -656,14 +751,11 @@ static LootListItemType LootListItemTypeFromName(std::string_view name, std::str
 
 void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
 {
-    m_lootLists.reserve(lootListsKey->Subkeys().size());
+    m_lootLists.reserve(m_lootLists.size() + lootListsKey->Subkeys().size());
 
     for (const KeyValue &lootListKey : lootListsKey->Subkeys())
     {
-        auto emplace = m_lootLists.emplace(std::piecewise_construct,
-            std::forward_as_tuple(lootListKey.Name()),
-            std::forward_as_tuple());
-
+        auto emplace = m_lootLists.try_emplace(std::string{ lootListKey.Name() });
         LootList &lootList = emplace.first->second;
 
         // not correct... but a pretty good guess
@@ -675,20 +767,24 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
             std::string_view entryName = entryKey.Name();
 
             // check for options that we ignore
+            if (entryName == "contains_patches_representing_organizations"
+                || entryName == "contains_stickers_autographed_by_proplayers"
+                || entryName == "contains_stickers_representing_organizations"
+                || entryName == "limit_description_to_number_rnd"
+                || entryName == "public_list_contents")
+            {
+                continue;
+            }
+
             if (entryName == "will_produce_stattrak")
             {
                 lootList.willProduceStatTrak = true;
                 continue;
             }
 
-            // check for options that we ignore
-            if (entryName == "all_entries_as_additional_drops"
-                || entryName == "contains_patches_representing_organizations"
-                || entryName == "contains_stickers_autographed_by_proplayers"
-                || entryName == "contains_stickers_representing_organizations"
-                || entryName == "limit_description_to_number_rnd"
-                || entryName == "public_list_contents")
+            if (entryName == "all_entries_as_additional_drops")
             {
+                lootList.allEntriesAsAdditionalDrops = true;
                 continue;
             }
 

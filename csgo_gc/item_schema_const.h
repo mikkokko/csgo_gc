@@ -54,6 +54,7 @@ enum class AttributeDefIndex : uint32_t
     TexturePrefab = 6,
     TextureSeed = 7,
     TextureWear = 8,
+    AlternateIcon = 70,
     KillEater = 80,
     KillEaterScoreType = 81,
 

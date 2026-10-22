@@ -96,7 +96,7 @@ private:
 class KeyValueStorage
 {
 public:
-    char* AllocateString(size_t length)
+    char *AllocateString(size_t length)
     {
         return m_strings.emplace_back(std::make_unique_for_overwrite<char[]>(length)).get();
     }

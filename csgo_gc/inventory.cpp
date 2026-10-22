@@ -1036,10 +1036,37 @@ InventoryChangeMessages Inventory::PurchaseItems(const std::vector<uint32_t> &de
 
     for (uint32_t defIndex : defIndexes)
     {
-        ItemDesc desc{};
-        m_itemSchema.GetItemDesc(ToEnum<ItemDefIndex>(defIndex), ItemOriginPurchased, UnacknowledgedPurchased, desc);
-        Item &item = CreateItem(modify, std::move(desc));
-        itemIds.push_back(item.FullIdFor(AccountId()));
+        std::vector<ItemDesc> descs;
+        std::vector<ItemDesc> casketedDescs;
+        m_itemSchema.GetPurchaseItemDescs(ToEnum<ItemDefIndex>(defIndex), descs, casketedDescs);
+
+        // fucked up handling of the rio2022 caskets
+        // FIXME: the tournament event id is missing!!!
+        uint64_t storageId = 0;
+
+        for (ItemDesc &desc : descs)
+        {
+            Item &item = CreateItem(modify, std::move(desc));
+            const uint64_t itemId = item.FullIdFor(AccountId());
+            itemIds.push_back(itemId);
+
+            if (casketedDescs.size())
+            {
+                storageId = itemId;
+
+                modify.SetItemAttribute(item,
+                    AttributeDefIndex::CasketItemsCount,
+                    static_cast<uint32_t>(casketedDescs.size()));
+            }
+        }
+
+        for (ItemDesc &desc : casketedDescs)
+        {
+            // ack them (FIXME: do this properly)
+            desc.inventory = 1;
+            Item &item = CreateItem(modify, std::move(desc));
+            EmbedStorageReference(modify, item, storageId);
+        }
     }
 
     return FinishChanges(modify);

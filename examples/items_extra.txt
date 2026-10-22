@@ -2,6 +2,38 @@
 // so this exists to add definitions we need for accurate gc emulation
 "items_game"
 {
+	// these are stubbed to silence the parser and
+	// acknowledge that they are indeed missing
+	"prefabs"
+	{
+		"valve" {}
+		"berlin2019_tournament_steamtv_items" {}
+		"stockh2021_tournament_steamtv_items" {}
+		"antwerp2022_sellable_item_with_payment_rules" {}
+		"antwerp2022_tournament_steamtv_items" {}
+		"rio2022_sellable_item_with_payment_rules" {}
+		"rio2022_tournament_steamtv_items" {}
+		"paris2023_sellable_item_with_payment_rules" {}
+		"paris2023_tournament_steamtv_items" {}
+	}
+	// hack for stattrak swap bundles
+	"client_loot_lists"
+	{
+		"bundle_tool_stattrak_swap_1"
+		{
+			"stattrak_swap_tool"		"1"
+		}
+		"bundle_tool_stattrak_swap_2"
+		{
+			"stattrak_swap_tool"		"1"
+		}
+		"bundle_tool_stattrak_swap"
+		{
+			"all_entries_as_additional_drops"		"1"
+			"bundle_tool_stattrak_swap_1"		"1"
+			"bundle_tool_stattrak_swap_2"		"1"
+		}
+	}
 	"client_loot_lists"
 	{
 		"unusual_revolving_list"

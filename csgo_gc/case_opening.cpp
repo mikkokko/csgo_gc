@@ -19,6 +19,7 @@ CaseOpening::CaseOpening(const ItemSchema &itemSchema)
 // returns true if there are unusuals (stattrak able)
 static bool GetLootListItems(const LootList &lootList, std::vector<const LootListItem *> &items)
 {
+    assert(!lootList.allEntriesAsAdditionalDrops);
     bool unusuals = lootList.isUnusual;
 
     for (const LootList *other : lootList.subLists)
@@ -48,16 +49,54 @@ bool CaseOpening::SelectItemFromCrate(ItemDefIndex crateDefIndex, ItemDesc &desc
         return false;
     }
 
-    assert(lootList->subLists.empty() != lootList->items.empty());
+    std::vector<ItemDesc> rewards;
+    if (!SelectItemsFromLootList(*lootList, false, ItemOriginCrate, UnacknowledgedFoundInCrate, rewards))
+    {
+        return false;
+    }
+
+    assert(rewards.size() == 1);
+    desc = std::move(rewards.front());
+    return true;
+}
+
+bool CaseOpening::SelectItemsFromLootList(
+    const LootList &lootList,
+    bool forceStatTrak,
+    ItemOrigin origin,
+    UnacknowledgedType unacknowledgedType,
+    std::vector<ItemDesc> &descs)
+{
+    assert(!lootList.items.empty() || !lootList.subLists.empty());
+    forceStatTrak |= lootList.willProduceStatTrak;
+
+    if (lootList.allEntriesAsAdditionalDrops)
+    {
+        for (const LootList *other : lootList.subLists)
+        {
+            if (!SelectItemsFromLootList(*other, forceStatTrak, origin, unacknowledgedType, descs))
+            {
+                return false;
+            }
+        }
+
+        for (const LootListItem &item : lootList.items)
+        {
+            ItemDesc desc{};
+            if (!m_itemSchema.ItemDescForLootListItem(item, forceStatTrak, origin, unacknowledgedType, desc))
+            {
+                return false;
+            }
+
+            descs.push_back(std::move(desc));
+        }
+
+        return true;
+    }
 
     std::vector<const LootListItem *> lootListItems;
     lootListItems.reserve(32); // overkill
-    bool containsUnusuals = GetLootListItems(*lootList, lootListItems);
-    if (!lootListItems.size())
-    {
-        assert(false);
-        return false;
-    }
+    bool containsUnusuals = GetLootListItems(lootList, lootListItems);
 
     // must be sorted for SelectLootListItem
     std::sort(lootListItems.begin(), lootListItems.end(), CompareRarity);
@@ -69,12 +108,25 @@ bool CaseOpening::SelectItemFromCrate(ItemDefIndex crateDefIndex, ItemDesc &desc
         return false;
     }
 
-    bool statTrak = ShouldMakeStatTrak(*lootListItem, *lootList, containsUnusuals);
-    return m_itemSchema.ItemDescForLootListItem(*lootListItem, statTrak, ItemOriginCrate, UnacknowledgedFoundInCrate, desc);
+    bool statTrak = forceStatTrak || ShouldMakeStatTrak(*lootListItem, lootList, containsUnusuals);
+
+    ItemDesc desc{};
+    if (!m_itemSchema.ItemDescForLootListItem(*lootListItem, statTrak, origin, unacknowledgedType, desc))
+    {
+        return false;
+    }
+
+    descs.push_back(std::move(desc));
+    return true;
 }
 
 const LootListItem *CaseOpening::SelectLootListItem(std::span<const LootListItem *const> sortedItems)
 {
+    if (sortedItems.size() == 1)
+    {
+        return sortedItems.front();
+    }
+
     std::vector<RarityGroup> groups;
     groups.reserve(sortedItems.size()); // overkill
 
