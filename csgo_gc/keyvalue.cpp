@@ -136,9 +136,14 @@ private:
 
 KeyValueRead::KeyValueRead(const char *path)
 {
+    m_good = MergeToFromFile(path);
+}
+
+bool KeyValueRead::MergeToFromFile(const char *path)
+{
     std::vector<size_t> order;
     std::vector<bool> removed;
-    m_good = m_root.ParseFromFile(path, m_storage) && m_root.Dedupe(order, removed);
+    return m_root.ParseFromFile(path, m_storage) && m_root.Dedupe(order, removed);
 }
 
 KeyValue::KeyValue(std::string_view name)

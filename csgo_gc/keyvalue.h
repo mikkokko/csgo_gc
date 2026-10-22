@@ -113,6 +113,9 @@ public:
     bool Good() const { return m_good; }
     const KeyValue &Root() const { return m_root; }
 
+    // hacks for the item schema!!!
+    bool MergeToFromFile(const char *path);
+
 private:
     KeyValueStorage m_storage;
     KeyValue m_root;

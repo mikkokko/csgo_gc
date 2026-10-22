@@ -96,7 +96,7 @@ jobs:
         cp $GITHUB_WORKSPACE/examples/config.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/inventory.txt $GITHUB_WORKSPACE/release/csgo_gc/
         cp $GITHUB_WORKSPACE/examples/price_sheet.txt $GITHUB_WORKSPACE/release/csgo_gc/
-        cp $GITHUB_WORKSPACE/examples/unusual_loot_lists.txt $GITHUB_WORKSPACE/release/csgo_gc/
+        cp $GITHUB_WORKSPACE/examples/items_extra.txt $GITHUB_WORKSPACE/release/csgo_gc/
 
         # bullshit to get licenses of dependencies installed via vcpkg
         case "${{ matrix.os }}" in

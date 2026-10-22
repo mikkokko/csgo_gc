@@ -143,8 +143,13 @@ Rarity LootListItem::CaseRarity() const
 
 ItemSchema::ItemSchema()
 {
-    KeyValueRead itemSchemaRead{ GetConfig().m_itemSchemaPath.c_str() };
-    if (!itemSchemaRead.Good())
+    // we want to load the extra item schema first, but it's optional for now
+    // (still can load unusual_loot_lists.txt instead), so parsing can fail
+    KeyValueRead itemSchemaRead{ "csgo_gc/items_extra.txt" };
+    bool gotExtraSchema = itemSchemaRead.Good();
+
+    // append the public item schema, which is not optional
+    if (!itemSchemaRead.MergeToFromFile(GetConfig().m_itemSchemaPath.c_str()))
     {
         assert(false);
         return;
@@ -197,12 +202,13 @@ ItemSchema::ItemSchema()
 
     // unusual loot lists are not included in client_loot_lists
     // we need to parse these after items and paint kits but before client_loot_lists
+    if (!gotExtraSchema)
     {
         KeyValueRead extraItemSchemaRead{ "csgo_gc/unusual_loot_lists.txt" };
 
         if (extraItemSchemaRead.Good())
         {
-            ParseLootLists(&extraItemSchemaRead.Root(), true);
+            ParseLootLists(&extraItemSchemaRead.Root());
         }
         else
         {
@@ -214,7 +220,7 @@ ItemSchema::ItemSchema()
     const KeyValue *lootListsKey = itemsGame->GetSubkey("client_loot_lists");
     if (lootListsKey)
     {
-        ParseLootLists(lootListsKey, false);
+        ParseLootLists(lootListsKey);
     }
 
     const KeyValue *revolvingLootListsKey = itemsGame->GetSubkey("revolving_loot_lists");
@@ -421,7 +427,8 @@ void ItemSchema::ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey
             // FIXME: self opening purchases
             if (itemInfo.m_lootListName.size())
             {
-                Platform::Print("Non coupon item associated loot list in {}!!!\n", itemInfo.m_name);
+                // shut the fuck up
+                //Platform::Print("Non coupon item associated loot list in {}!!!\n", itemInfo.m_name);
             }
 
             //assert(!itemInfo.m_lootListName.size());
@@ -647,7 +654,7 @@ static LootListItemType LootListItemTypeFromName(std::string_view name, std::str
     return LootListItemPaintable;
 }
 
-void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
+void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
 {
     m_lootLists.reserve(lootListsKey->Subkeys().size());
 
@@ -658,6 +665,9 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey, bool unusual)
             std::forward_as_tuple());
 
         LootList &lootList = emplace.first->second;
+
+        // not correct... but a pretty good guess
+        bool unusual = (lootListKey.Name().find("unusual") != std::string_view::npos);
         lootList.isUnusual = unusual;
 
         for (const KeyValue &entryKey : lootListKey.Subkeys())

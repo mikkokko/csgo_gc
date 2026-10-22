@@ -135,7 +135,7 @@ private:
     void ParsePaintKits(const KeyValue *paintKitsKey);
     void ParsePaintKitRarities(const KeyValue *raritiesKey);
     void ParseMusicDefinitions(const KeyValue *musicDefinitionsKey);
-    void ParseLootLists(const KeyValue *lootListsKey, bool unusual);
+    void ParseLootLists(const KeyValue *lootListsKey);
     void ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey);
 
     bool ParseLootListItem(LootListItem &item, std::string_view name);
