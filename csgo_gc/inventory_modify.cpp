@@ -82,7 +82,7 @@ void InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, I
         {
             if (attribute.Value() != value)
             {
-                attribute.Value() = value;
+                attribute.Value() = std::move(value);
                 MarkUpdatedInternal(item.m_highId, item.HasEquips());
             }
 
@@ -90,7 +90,7 @@ void InventoryModify::SetItemAttribute(Item &item, AttributeDefIndex defIndex, I
         }
     }
 
-    item.m_desc.attributes.emplace_back(defIndex, value);
+    item.m_desc.attributes.emplace_back(defIndex, std::move(value));
     MarkUpdatedInternal(item.m_highId, item.HasEquips());
 }
 

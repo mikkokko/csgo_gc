@@ -5,9 +5,8 @@
 #include "item_schema.h"
 #include "random.h"
 
-CaseOpening::CaseOpening(const ItemSchema &itemSchema, Random &random)
+CaseOpening::CaseOpening(const ItemSchema &itemSchema)
     : m_itemSchema{ itemSchema }
-    , m_random{ random }
 {
 }
 
@@ -64,11 +63,11 @@ bool CaseOpening::SelectItemFromCrate(ItemDefIndex crateDefIndex, ItemDesc &desc
     }
 
     bool statTrak = ShouldMakeStatTrak(*lootListItem, *lootList, containsUnusuals);
-    return m_itemSchema.ItemDescForLootListItem(m_random, *lootListItem, statTrak, ItemOriginCrate, UnacknowledgedFoundInCrate, desc);
+    return m_itemSchema.ItemDescForLootListItem(*lootListItem, statTrak, ItemOriginCrate, UnacknowledgedFoundInCrate, desc);
 }
 
 // get a range of loot list items with a specific rarity from a vector sorted by rarity
-static std::pair<size_t, size_t> FindRarityRange(const std::vector<const LootListItem *> &items, Rarity rarity)
+static std::span<const LootListItem *const > FindRarityRange(const std::vector<const LootListItem *> &items, Rarity rarity)
 {
     // MUST have items and they MUST be sorted
     assert(items.size() && std::is_sorted(items.begin(), items.end(), CompareRarity));
@@ -76,25 +75,19 @@ static std::pair<size_t, size_t> FindRarityRange(const std::vector<const LootLis
     auto lower = std::lower_bound(items.begin(), items.end(), rarity, RarityLower);
     auto upper = std::upper_bound(lower, items.end(), rarity, RarityUpper);
 
-    size_t begin = std::distance(items.begin(), lower);
-    size_t end = std::distance(items.begin(), upper);
-
-    return std::make_pair(begin, end);
+    return { lower, upper };
 }
 
 const LootListItem *CaseOpening::SelectLootListItem(const std::vector<const LootListItem *> &items)
 {
-    Rarity rarity = RandomRarityForItems(items);
-
-    auto [begin, end] = FindRarityRange(items, rarity);
-    if (begin == end)
+    auto span = FindRarityRange(items, RandomRarityForItems(items));
+    if (span.empty())
     {
         assert(false);
         return nullptr;
     }
 
-    size_t index = m_random.Integer(begin, end - 1);
-    return items[index];
+    return Random::Select(span);
 }
 
 Rarity CaseOpening::RandomRarityForItems(const std::vector<const LootListItem *> &items)
@@ -124,7 +117,7 @@ Rarity CaseOpening::RandomRarityForItems(const std::vector<const LootListItem *>
     }
 
     // play the game of chance...
-    float value = m_random.Float(0.0f, totalWeight);
+    float value = Random::Float(0.0f, totalWeight);
     float accum = 0.0f;
 
     for (const RarityWeight &pair : weights)
@@ -162,5 +155,5 @@ bool CaseOpening::ShouldMakeStatTrak(const LootListItem &item, const LootList &l
     }
 
     // roll the dice
-    return (m_random.Integer(1, 10) == 1);
+    return (Random::Uint32(1, 10) == 1);
 }

@@ -255,7 +255,7 @@ const LootList *ItemSchema::GetCrateLootList(ItemDefIndex crateDefIndex) const
     return &lootListSearch->second;
 }
 
-bool ItemSchema::ItemDescForLootListItem(Random &random,
+bool ItemSchema::ItemDescForLootListItem(
     const LootListItem &lootListItem,
     bool statTrak,
     ItemOrigin origin,
@@ -301,7 +301,7 @@ bool ItemSchema::ItemDescForLootListItem(Random &random,
 
         desc.attributes.emplace_back(
             AttributeDefIndex::SprayTintId,
-            random.Integer(FromEnum(GraffitiTint::Min), FromEnum(GraffitiTint::Max)));
+            Random::Uint32(FromEnum(GraffitiTint::Min), FromEnum(GraffitiTint::Max)));
     }
     else if (lootListItem.type == LootListItemMusicKit)
     {
@@ -319,12 +319,12 @@ bool ItemSchema::ItemDescForLootListItem(Random &random,
 
         desc.attributes.emplace_back(
             AttributeDefIndex::TextureSeed,
-            static_cast<float>(random.Integer<uint32_t>(0, 1000)));
+            static_cast<float>(Random::Uint32(0, 1000)));
 
         // mikkotodo how does the float distribution work?
         desc.attributes.emplace_back(
             AttributeDefIndex::TextureWear,
-            random.Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat));
+            Random::Float(paintKitInfo->m_minFloat, paintKitInfo->m_maxFloat));
     }
     else if (lootListItem.type == LootListItemNoAttribute)
     {
@@ -375,9 +375,7 @@ bool ItemSchema::GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, Unacknowl
         assert(lootList.subLists.size() == 0 && lootList.items.size() == 1);
         assert(lootList.willProduceStatTrak == false && lootList.isUnusual == false);
 
-        Random random;
-
-        return ItemDescForLootListItem(random,
+        return ItemDescForLootListItem(
             lootList.items.front(),
             itemInfo.m_willProduceStatTrak,
             origin,

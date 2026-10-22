@@ -4,7 +4,6 @@
 #include "inventory_editor.h"
 #include "item.h"
 #include "item_schema.h"
-#include "random.h"
 
 class CMsgApplySticker;
 class CMsgSetItemPositions;
@@ -88,7 +87,6 @@ private:
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
-    Random m_random;
     uint32_t m_lastHighItemId{};
     uint64_t m_version{ 1 };
     std::unordered_map<uint64_t, Item> m_items;

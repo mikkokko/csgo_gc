@@ -6,7 +6,6 @@
 #include "inventory_messages.h"
 #include "inventory_modify.h"
 #include "keyvalue.h"
-#include "random.h"
 
 #include "base_gcmessages.pb.h"
 #include "cstrike15_gcmessages.pb.h"
@@ -653,7 +652,7 @@ InventoryChangeMessages Inventory::UnlockCrate(uint64_t crateId, uint64_t keyId)
     }
 
     // CASE OPENING
-    CaseOpening caseOpening{ m_itemSchema, m_random };
+    CaseOpening caseOpening{ m_itemSchema };
 
     ItemDesc temp;
     if (!caseOpening.SelectItemFromCrate(crate->DefIndex(), temp))

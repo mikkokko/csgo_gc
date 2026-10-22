@@ -6,6 +6,7 @@
 #include "inventory_messages.h"
 #include "keyvalue.h"
 #include "networking_shared.h"
+#include "random.h"
 
 #include "base_gcmessages.pb.h"
 #include "cstrike15_gcmessages.pb.h"
@@ -638,10 +639,8 @@ void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
     }
 
     // value doesn't matter
-    uint64_t transactionId = Random{}.Integer<uint64_t>();
-
     assert(!m_transactionId);
-    m_transactionId = transactionId;
+    m_transactionId = Random::Uint32(1, UINT32_MAX);
 
     std::vector<uint32_t> purchasedDefIndexes;
 
@@ -656,11 +655,11 @@ void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
     InventoryChangeMessages messages = m_inventory.PurchaseItems(purchasedDefIndexes, m_transactionItemIds);
 
     char url[128]; // url doesn't matter, but it needs to be set
-    snprintf(url, sizeof(url), "https://checkout.steampowered.com/checkout/approvetxn/%llu/?returnurl=steam", transactionId);
+    snprintf(url, sizeof(url), "https://checkout.steampowered.com/checkout/approvetxn/%llu/?returnurl=steam", m_transactionId);
 
     CMsgGCStorePurchaseInitResponse response;
     response.set_result(1); // success
-    response.set_txn_id(transactionId);
+    response.set_txn_id(m_transactionId);
     response.set_url(url);
     response.mutable_item_ids()->Assign(m_transactionItemIds.begin(), m_transactionItemIds.end());
 
@@ -721,7 +720,7 @@ void ClientGC::OnPartyRegister(GCMessageRead &messageRead)
     uint32_t lobbyId = message.id();
     if (!lobbyId)
     {
-        lobbyId = Random{}.Integer<uint32_t>(1, UINT32_MAX);
+        lobbyId = Random::Uint32(1, UINT32_MAX);
     }
 
     CMsgGCCStrike15_v2_Party_Register response;

@@ -24,21 +24,13 @@ enum class AttributeIncrement
 
 // record changes made to the inventory so we can build the correct
 // messages for the game to update its shared object cache
-class InventoryModify
+class InventoryModify : public NonCopyable
 {
 public:
-    InventoryModify() = default;
-
     ~InventoryModify()
     {
         assert(m_finished || !HasChanges());
     }
-
-    InventoryModify(const InventoryModify &) = delete;
-    InventoryModify(InventoryModify &&) = delete;
-
-    InventoryModify &operator=(const InventoryModify &) = delete;
-    InventoryModify &operator=(InventoryModify &&) = delete;
 
     bool HasChanges() const
     {

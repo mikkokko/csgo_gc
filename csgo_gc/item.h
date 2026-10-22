@@ -24,7 +24,7 @@ class ItemAttribute
 public:
     ItemAttribute(AttributeDefIndex defIndex, ItemAttributeValue value)
         : m_defIndex{ defIndex }
-        , m_value{ value }
+        , m_value{ std::move(value) }
     {
     }
 

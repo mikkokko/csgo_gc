@@ -1,25 +1,16 @@
 #pragma once
 
-class Random
+namespace Random
 {
-public:
-    template<typename T>
-    T Integer(T min, T max)
-    {
-        return std::uniform_int_distribution<T>{ min, max }(m_engine);
-    }
 
-    template<typename T>
-    T Integer()
-    {
-        return std::uniform_int_distribution<T>{}(m_engine);
-    }
+uint32_t Uint32(uint32_t min = 0, uint32_t max = UINT32_MAX);
+float Float(float min = 0.0f, float max = 1.0f);
 
-    float Float(float min = 0.0f, float max = 1.0f)
-    {
-        return std::uniform_real_distribution<float>{ min, max }(m_engine);
-    }
+template<typename T>
+T& Select(std::span<T> elements)
+{
+    assert(!elements.empty() && elements.size() <= UINT32_MAX);
+    return elements[Uint32(0, static_cast<uint32_t>(elements.size() - 1))];
+}
 
-private:
-    std::mt19937 m_engine{ std::random_device{}() };
-};
+}

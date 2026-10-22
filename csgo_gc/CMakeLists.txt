@@ -40,6 +40,7 @@ add_library(csgo_gc STATIC
     message.cpp
     networking_client.cpp
     networking_server.cpp
+    random.cpp
     steam_hook.cpp)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")

@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "config.h"
 #include "keyvalue.h"
-#include "random.h"
 
 constexpr const char *ConfigFilePath = "csgo_gc/config.txt";
 

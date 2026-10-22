@@ -4,7 +4,6 @@
 #include "item_schema_const.h"
 
 class KeyValue;
-class Random;
 
 struct ItemDesc;
 
@@ -118,7 +117,7 @@ public:
     const LootList *GetCrateLootList(ItemDefIndex crateDefIndex) const;
 
     // for case opening FIXME: do we want to keep this here???
-    bool ItemDescForLootListItem(Random &random,
+    bool ItemDescForLootListItem(
         const LootListItem &lootListItem,
         bool statTrak,
         ItemOrigin origin,

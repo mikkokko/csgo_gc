@@ -3,7 +3,6 @@
 #include "item_schema_const.h"
 
 class ItemSchema;
-class Random;
 
 struct ItemDesc;
 struct LootListItem;
@@ -12,7 +11,7 @@ struct LootList;
 class CaseOpening
 {
 public:
-    CaseOpening(const ItemSchema &itemSchema, Random &random);
+    CaseOpening(const ItemSchema &itemSchema);
 
     bool SelectItemFromCrate(ItemDefIndex crateDefIndex, ItemDesc &desc);
 
@@ -22,5 +21,4 @@ private:
     bool ShouldMakeStatTrak(const LootListItem &item, const LootList &lootList, bool containsUnusuals);
 
     const ItemSchema &m_itemSchema;
-    Random &m_random;
 };
