@@ -12,25 +12,15 @@
 
 constexpr const char *InventoryFilePath = "csgo_gc/inventory.txt";
 
-// if the high item id is higher than this, it'll get interpreted as a default item fake id
-constexpr uint32_t MaxHighItemId = static_cast<uint32_t>((ItemIdDefaultItemMask >> 32) - 1);
-
 // mikkotodo move
 constexpr uint32_t SlotUneqip = 0xffff;
-
-// mix the account id into item ids to avoid collisions in multiplayer games
-inline uint64_t ComposeItemId(uint32_t accountId, uint32_t highItemId)
-{
-    uint64_t low = accountId;
-    uint64_t high = highItemId;
-    return low | (high << 32);
-}
 
 // get the full item id of the casket item is in
 static uint64_t GetCasketId(const Item &item)
 {
+    uint64_t low = item.GetAttributeValue<uint32_t>(AttributeDefIndex::CasketIdLow);
     uint64_t high = item.GetAttributeValue<uint32_t>(AttributeDefIndex::CasketIdHigh);
-    return high ? ((high << 32) | item.GetAttributeValue<uint32_t>(AttributeDefIndex::CasketIdLow)) : 0;
+    return low ? ((high << 32) | low) : 0;
 }
 
 // helper, see ItemIdDefaultItemMask for more information
@@ -93,7 +83,7 @@ bool Inventory::Update(InventoryChangeMessages &changeMessages)
     {
         if (editorItem.type == EditorItemChangeType::Destroyed)
         {
-            Item *item = FindItem(ComposeItemId(AccountId(), editorItem.highId));
+            Item *item = FindItem(ComposeItemId(AccountId(), editorItem.lowId));
             if (item)
             {
                 DestroyItem(modify, item);
@@ -108,16 +98,16 @@ bool Inventory::Update(InventoryChangeMessages &changeMessages)
 
         if (editorItem.type == EditorItemChangeType::Created)
         {
-            // editorItem.highId is NOT the item id we should use!!!!
+            // editorItem.lowId is NOT the item id we should use!!!!
             // it's an opaque "item request id" from the editor, we
             // need to send the actual item id back now that we've determined it
             Item &item = CreateItem(modify, std::move(editorItem.desc));
-            m_editor.SendItemId(editorItem.highId, item.HighId());
+            m_editor.SendItemId(editorItem.lowId, item.LowId());
             continue;
         }
 
         // modification
-        Item *item = FindItem(ComposeItemId(AccountId(), editorItem.highId));
+        Item *item = FindItem(ComposeItemId(AccountId(), editorItem.lowId));
         if (!item)
         {
             assert(false);
@@ -147,10 +137,10 @@ void Inventory::SendFullInventoryToEditor()
 
         EditorItem &item = changes.items.emplace_back();
         item.type = EditorItemChangeType::Created;
-        item.highId = pair.second.HighId();
+        item.lowId = pair.second.LowId();
         item.desc = pair.second.GetDesc();
 
-        m_editorVisibleItems.insert(item.highId);
+        m_editorVisibleItems.insert(item.lowId);
     }
 
     m_editor.SendChanges(changes, true);
@@ -160,25 +150,25 @@ void Inventory::SendChangesToEditor(const InventoryModify &modify)
 {
     EditorChanges changes;
 
-    for (const auto &[highId, change] : modify.m_itemChanges)
+    for (const auto &[lowId, change] : modify.m_itemChanges)
     {
-        const Item *source = FindItem(ComposeItemId(AccountId(), highId));
+        const Item *source = FindItem(ComposeItemId(AccountId(), lowId));
         if (!source || GetCasketId(*source))
         {
-            if (m_editorVisibleItems.erase(highId))
+            if (m_editorVisibleItems.erase(lowId))
             {
                 EditorItem &dest = changes.items.emplace_back();
-                dest.highId = highId;
+                dest.lowId = lowId;
                 dest.type = EditorItemChangeType::Destroyed;
             }
 
             continue;
         }
 
-        bool inserted = m_editorVisibleItems.insert(highId).second;
+        bool inserted = m_editorVisibleItems.insert(lowId).second;
 
         EditorItem &dest = changes.items.emplace_back();
-        dest.highId = highId;
+        dest.lowId = lowId;
         dest.type = inserted ? EditorItemChangeType::Created : EditorItemChangeType::Modified;
         dest.desc = source->GetDesc();
     }
@@ -198,9 +188,9 @@ InventoryChangeMessages Inventory::FinishChanges(
         m_version++;
     }
 
-    for (auto [highId, change] : modify.m_itemChanges)
+    for (auto [lowId, change] : modify.m_itemChanges)
     {
-        uint64_t itemId = ComposeItemId(AccountId(), highId);
+        uint64_t itemId = ComposeItemId(AccountId(), lowId);
 
         if (change.type == ItemChangeType::Destroyed)
         {
@@ -307,70 +297,68 @@ uint32_t Inventory::AccountId() const
     return m_steamId & 0xffffffff;
 }
 
-uint32_t Inventory::GetHighItemId(uint32_t highItemId)
+uint32_t Inventory::GetLowItemId(uint32_t lowItemId)
 {
     // Players fuck up their inventory files constantly and end up with item id collisions...
     // This doesn't return until the item id is unique for this session, try with the provided
     // item id first, if it's invalid or already in use increment it
 
-    if (!highItemId)
+    if (!lowItemId)
     {
-        m_lastHighItemId++;
-        highItemId = m_lastHighItemId;
+        m_lastLowItemId++;
+        lowItemId = m_lastLowItemId;
     }
 
-    for (;; highItemId++)
+    for (;; lowItemId++)
     {
-        if (highItemId > MaxHighItemId)
+        if (!lowItemId)
         {
-            // would be interpreted as a default item (it's not)
             // item ids should be strictly monotonically increasing, but
             // if the situation gets this cooked then we need to reset
-            m_lastHighItemId = 1;
-            highItemId = m_lastHighItemId;
+            m_lastLowItemId = 1;
+            lowItemId = m_lastLowItemId;
         }
 
-        if (m_items.count(ComposeItemId(AccountId(), highItemId)))
+        if (m_items.count(ComposeItemId(AccountId(), lowItemId)))
         {
             // item id collision
-            assert(false);
             continue;
         }
 
-        if (highItemId > m_lastHighItemId)
+        if (lowItemId > m_lastLowItemId)
         {
-            m_lastHighItemId = highItemId;
+            m_lastLowItemId = lowItemId;
         }
 
         // ok
-        return highItemId;
+        return lowItemId;
     }
 }
 
-void Inventory::CreateItem(uint32_t highId, const KeyValue &kv)
+void Inventory::CreateItem(uint32_t lowId, const KeyValue &kv)
 {
-    highId = GetHighItemId(highId);
-    uint64_t itemId = ComposeItemId(AccountId(), highId);
+    lowId = GetLowItemId(lowId);
+    uint64_t itemId = ComposeItemId(AccountId(), lowId);
 
-    // this will succeed, GetHighItemId confirmed there are no collisions
-    [[maybe_unused]] auto [it, inserted] = m_items.try_emplace(itemId, highId, AccountId(), kv, m_itemSchema);
+    // this will succeed, GetLowItemId confirmed there are no collisions
+    [[maybe_unused]] auto [it, inserted] = m_items.try_emplace(itemId, lowId, AccountId(), kv, m_itemSchema);
     assert(inserted);
 }
 
 Item &Inventory::CreateItem(InventoryModify &modify, ItemDesc &&desc)
 {
-    uint32_t highId = GetHighItemId(0);
-    uint64_t itemId = ComposeItemId(AccountId(), highId);
+    uint32_t lowId = GetLowItemId(0);
+    uint64_t itemId = ComposeItemId(AccountId(), lowId);
 
-    // this will succeed, GetHighItemId confirmed there are no collisions
-    auto [it, inserted] = m_items.try_emplace(itemId, highId, std::move(desc));
+    // this will succeed, GetLowItemId confirmed there are no collisions
+    auto [it, inserted] = m_items.try_emplace(itemId, lowId, std::move(desc));
     assert(inserted);
 
-    modify.MarkItemCreated(highId, it->second.HasEquips());
+    modify.MarkItemCreated(lowId, it->second.HasEquips());
 
     // new item: if a cached icon exists, it's because
     // of item id reuse and the icon is likely wrong
-    RemoveCachedIcon(highId);
+    RemoveCachedIcon(lowId);
 
     return it->second;
 }
@@ -392,8 +380,8 @@ void Inventory::ReadFromFile()
 
         for (const KeyValue &itemKey : itemsKey->Subkeys())
         {
-            uint32_t highItemId = FromString<uint32_t>(itemKey.Name());
-            CreateItem(highItemId, itemKey);
+            uint32_t lowItemId = FromString<uint32_t>(itemKey.Name());
+            CreateItem(lowItemId, itemKey);
         }
     }
 
@@ -434,7 +422,7 @@ void Inventory::WriteToFile() const
 
         for (const auto &pair : m_items)
         {
-            write.BeginBlock(std::to_string(pair.second.HighId()));
+            write.BeginBlock(std::to_string(pair.second.LowId()));
             pair.second.ToKeyValue(write);
             write.EndBlock();
         }
@@ -683,7 +671,9 @@ InventoryChangeMessages Inventory::SetItemPositions(
 {
     for (const CMsgSetItemPositions_ItemPosition &position : message.item_positions())
     {
-        if (!FindItem(position.item_id()))
+        assert(position.item_id() || position.legacy_item_id());
+        uint64_t itemId = position.has_item_id() ? position.item_id() : ComposeItemId(AccountId(), position.legacy_item_id());
+        if (!FindItem(itemId))
         {
             assert(false);
             return {};
@@ -694,9 +684,10 @@ InventoryChangeMessages Inventory::SetItemPositions(
 
     for (const CMsgSetItemPositions_ItemPosition &position : message.item_positions())
     {
-        Item *item = FindItem(position.item_id());
+        uint64_t itemId = position.has_item_id() ? position.item_id() : ComposeItemId(AccountId(), position.legacy_item_id());
+        Item *item = FindItem(itemId);
 
-        Platform::Print("SetItemPositions: {} --> {}\n", position.item_id(), position.position());
+        Platform::Print("SetItemPositions: {} --> {}\n", itemId, position.position());
         modify.SetItemInventory(*item, position.position());
 
         CMsgItemAcknowledged &acknowledgement = acknowledgements.emplace_back();
@@ -1145,9 +1136,9 @@ bool Inventory::DestroyItemById(InventoryModify &modify, uint64_t itemId)
     bool hadEquips = item.HasEquips();
     m_items.erase(it);
 
-    RemoveCachedIcon(itemId >> 32);
+    RemoveCachedIcon(static_cast<uint32_t>(itemId));
 
-    modify.MarkItemDestroyed(itemId >> 32, hadEquips);
+    modify.MarkItemDestroyed(static_cast<uint32_t>(itemId), hadEquips);
     return true;
 }
 
@@ -1161,10 +1152,10 @@ void Inventory::DestroyItem(InventoryModify &modify, Item *item)
     }
 }
 
-void Inventory::RemoveCachedIcon(uint32_t highId) const
+void Inventory::RemoveCachedIcon(uint32_t lowId) const
 {
     // FIXME: first value depends on game version
-    std::string path = std::format("csgo/resource/flash/econ/weapons/cached/13-{:x}-{:x}.iic", highId, AccountId());
+    std::string path = std::format("csgo/resource/flash/econ/weapons/cached/13-{:x}-{:x}.iic", HighItemIdFromAccountId(AccountId()), lowId);
     if (Platform::RemoveFile(path.c_str()))
     {
         Platform::Print("Deleted {}\n", path);

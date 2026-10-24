@@ -18,7 +18,7 @@ enum CmdType : uint32_t
     // bidirectional
     CmdItemCreate, // item payload
     CmdItemModify, // item payload
-    CmdItemDestroy, // high id only
+    CmdItemDestroy, // low id only
 
     // sent as a response to CmdItemCreate by the GC
     // so the inventory editor can set the correct id
@@ -29,7 +29,7 @@ enum CmdType : uint32_t
 
 static void ParseItem(MessageRead &message, EditorItem &item, ItemSchema &itemSchema)
 {
-    item.highId = message.ReadUint32();
+    item.lowId = message.ReadUint32();
 
     item.desc.inventory = message.ReadUint32();
     item.desc.defIndex = ToEnum<ItemDefIndex>(message.ReadUint32());
@@ -87,7 +87,7 @@ static void ParseItem(MessageRead &message, EditorItem &item, ItemSchema &itemSc
 
 static void SerializeItem(MessageWrite &message, const EditorItem &item)
 {
-    message.WriteUint32(item.highId);
+    message.WriteUint32(item.lowId);
 
     message.WriteUint32(item.desc.inventory);
     message.WriteUint32(FromEnum(item.desc.defIndex));
@@ -256,7 +256,7 @@ bool InventoryEditor::ParseMessage(const Message &message, EditorChanges &change
         case CmdItemDestroy:
             item.emplace();
             item->type = EditorItemChangeType::Destroyed;
-            item->highId = read.ReadUint32();
+            item->lowId = read.ReadUint32();
             break;
 
         default:
@@ -309,7 +309,7 @@ bool InventoryEditor::SerializeMessage(const EditorChanges &changes, Message &me
 
         case EditorItemChangeType::Destroyed:
             write.WriteUint32(CmdItemDestroy);
-            write.WriteUint32(item.highId);
+            write.WriteUint32(item.lowId);
             break;
 
         default:
@@ -322,7 +322,7 @@ bool InventoryEditor::SerializeMessage(const EditorChanges &changes, Message &me
     return true;
 }
 
-void InventoryEditor::SendItemId(uint32_t requestId, uint32_t highId)
+void InventoryEditor::SendItemId(uint32_t requestId, uint32_t lowId)
 {
     if (!m_client)
     {
@@ -334,7 +334,7 @@ void InventoryEditor::SendItemId(uint32_t requestId, uint32_t highId)
     MessageWrite message;
     message.WriteUint32(CmdItemSetId);
     message.WriteUint32(requestId);
-    message.WriteUint32(highId);
+    message.WriteUint32(lowId);
 
     m_outbox.push_back(std::move(message).TakeBuffer());
     lws_callback_on_writable(m_client);

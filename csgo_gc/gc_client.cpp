@@ -383,6 +383,12 @@ void ClientGC::BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHell
     message.mutable_global_stats()->set_required_appid_version2(13862); // csgo s2
 
     message.set_vac_banned(GetConfig().m_vacBanned);
+
+    // set competitive rank and wins here for old builds
+    message.mutable_ranking()->set_account_id(AccountId());
+    message.mutable_ranking()->set_rank_id(GetConfig().m_competitiveRank);
+    message.mutable_ranking()->set_wins(GetConfig().m_competitiveWins);
+
     message.mutable_commendation()->set_cmd_friendly(GetConfig().m_commendedFriendly);
     message.mutable_commendation()->set_cmd_teaching(GetConfig().m_commendedTeaching);
     message.mutable_commendation()->set_cmd_leader(GetConfig().m_commendedLeader);
@@ -554,8 +560,25 @@ void ClientGC::SetItemPositions(GCMessageRead &messageRead)
     for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
     {
         // send these to the server only
-        GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
-        SendMessageToServer(std::move(messageWrite).TakeBuffer());
+        {
+            GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
+            SendMessageToServer(std::move(messageWrite).TakeBuffer());
+        }
+
+        // support for older builds...
+        {
+            CMsgItemAcknowledged__DEPRECATED deprecated;
+            deprecated.set_account_id(acknowledgement.iteminfo().accountid());
+            deprecated.set_inventory(acknowledgement.iteminfo().inventory());
+            deprecated.set_def_index(acknowledgement.iteminfo().defindex());
+            deprecated.set_quality(acknowledgement.iteminfo().quality());
+            deprecated.set_rarity(acknowledgement.iteminfo().rarity());
+            deprecated.set_origin(acknowledgement.iteminfo().origin());
+            deprecated.set_item_id(acknowledgement.iteminfo().itemid());
+
+            GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged__DEPRECATED, deprecated };
+            SendMessageToServer(std::move(messageWrite).TakeBuffer());
+        }
     }
 
     SendInventoryChangeMessages(messages);
@@ -623,10 +646,12 @@ void ClientGC::StoreGetUserData(GCMessageRead &messageRead)
     // fuck you idiot
     CMsgStoreGetUserDataResponse response;
     response.set_result(1);
+    response.set_currency_deprecated(GetConfig().m_currency); // for old builds
+    response.set_country_deprecated(GetConfig().m_country); // for old builds
     response.set_price_sheet_version(1729); // what
     *response.mutable_price_sheet() = std::move(binaryString);
 
-    SendMessageToGame(false, k_EMsgGCStoreGetUserDataResponse, response);
+    SendMessageToGame(false, k_EMsgGCStoreGetUserDataResponse, response, messageRead.JobId());
 }
 
 void ClientGC::StorePurchaseInit(GCMessageRead &messageRead)
@@ -764,6 +789,13 @@ void ClientGC::UnlockCrate(GCMessageRead &messageRead)
 
     InventoryChangeMessages messages = m_inventory.UnlockCrate(crateId, keyId);
     SendInventoryChangeMessages(messages);
+
+    // send this for old builds
+    // FIXME: payload contents? don't think game reads it so we
+    // can just pass an empty protobuf though... should probably
+    // have a more idiomatic way of sending empty messages
+    CMsgRequestInventoryRefresh response;
+    SendMessageToGame(false, k_EMsgGCUnlockCrateResponse, response);
 }
 
 void ClientGC::NameItem(GCMessageRead &messageRead)
@@ -1147,6 +1179,7 @@ const char *MessageName(uint32_t type)
         HANDLE_MSG(k_ESOMsg_CacheSubscriptionRefresh);
     }
 
-    assert(false);
-    return "UNKNOWN MESSAGE";
+    static thread_local char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%u", type);
+    return buffer;
 }

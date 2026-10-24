@@ -755,8 +755,8 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
 
     for (const KeyValue &lootListKey : lootListsKey->Subkeys())
     {
-        auto emplace = m_lootLists.try_emplace(std::string{ lootListKey.Name() });
-        LootList &lootList = emplace.first->second;
+        LootList lootList{};
+        bool isMissingEntries = false;
 
         // not correct... but a pretty good guess
         bool unusual = (lootListKey.Name().find("unusual") != std::string_view::npos);
@@ -812,10 +812,22 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
             }
             else
             {
-                // what the fuck is this...
-                Platform::Print("Unhandled loot list entry {}!!!!\n", entryNameKey);
+                // this is expected to happen when using the new
+                // items_extra.txt with an old game and items_game.txt
+                isMissingEntries = true;
             }
         }
+
+        if (isMissingEntries)
+        {
+            Platform::Print("Ignoring loot list {} due to missing entries\n", lootListKey.Name());
+            continue;
+        }
+
+        [[maybe_unused]] auto [it, inserted] = m_lootLists.try_emplace(
+            std::string{ lootListKey.Name() },
+            std::move(lootList));
+        assert(inserted);
     }
 }
 
@@ -848,10 +860,10 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
     std::string_view attributeName, itemName;
     ParseAttributeAndItemName(name, attributeName, itemName);
 
-    const ItemInfo *itemInfo = ItemInfoByName(itemName);
+    const ItemInfo *itemInfo = ItemInfoByName(itemName, true);
     if (!itemInfo)
     {
-        Platform::Print("No such item {}!!!\n", itemName);
+        Platform::Print("WARNING: no such item {}\n", itemName);
         return false;
     }
 
@@ -901,7 +913,6 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         item.paintKitInfo = PaintKitInfoByName(attributeName);
         if (!item.paintKitInfo)
         {
-            assert(false);
             Platform::Print("WARNING: No such paint kit {}\n", attributeName);
             return false;
         }
@@ -935,7 +946,7 @@ void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
     }
 }
 
-ItemInfo *ItemSchema::ItemInfoByName(std::string_view name)
+ItemInfo *ItemSchema::ItemInfoByName(std::string_view name, bool allowFail)
 {
     for (auto &pair : m_itemInfo)
     {
@@ -946,7 +957,7 @@ ItemInfo *ItemSchema::ItemInfoByName(std::string_view name)
         }
     }
 
-    assert(false);
+    assert(allowFail);
     return nullptr;
 }
 

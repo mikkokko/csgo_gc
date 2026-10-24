@@ -336,6 +336,7 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         break;
 
     case k_EMsgGCItemAcknowledged:
+    case k_EMsgGCItemAcknowledged__DEPRECATED:
         isValid = true;
         break;
     }

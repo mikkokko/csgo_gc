@@ -17,7 +17,7 @@ enum class EditorItemChangeType
 struct EditorItem
 {
     EditorItemChangeType type;
-    uint32_t highId;
+    uint32_t lowId;
     ItemDesc desc;
 };
 
@@ -41,7 +41,7 @@ public:
     void SendChanges(const EditorChanges &changes, bool isFull);
 
     // let the editor know about an id we decided on for this item
-    void SendItemId(uint32_t requestId, uint32_t highId);
+    void SendItemId(uint32_t requestId, uint32_t lowId);
 
     // indicates that the whole inventory should be sent
     bool WantsFullInventory() const { return m_wantsFullInventory; }

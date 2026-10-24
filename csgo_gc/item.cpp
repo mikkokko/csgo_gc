@@ -6,8 +6,8 @@
 #include "base_gcmessages.pb.h"
 #include "cstrike15_gcmessages.pb.h"
 
-Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema)
-    : m_highId{ highId }
+Item::Item(uint32_t lowId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema)
+    : m_lowId{ lowId }
 {
     m_desc.inventory = kv.GetNumber<uint32_t>("inventory");
     m_desc.defIndex = ToEnum<ItemDefIndex>(kv.GetNumber<uint32_t>("def_index"));
@@ -28,11 +28,17 @@ Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSc
             AttributeDefIndex defIndex = ToEnum<AttributeDefIndex>(FromString<uint32_t>(attributeKey.Name()));
             std::string_view value = attributeKey.String();
 
-            // fix up stored item ids so loading an inventory file saved
-            // on another steam account doesn't fuck things up
+            // we have switched around the low and high parts of the item ids,
+            // so remap here to avoid breaking existing inventory files...
+            // we also save these to inventory.txt the wrong way around
             if (defIndex == AttributeDefIndex::CasketIdLow)
             {
-                m_desc.attributes.emplace_back(defIndex, accountId);
+                m_desc.attributes.emplace_back(AttributeDefIndex::CasketIdHigh, HighItemIdFromAccountId(accountId));
+                continue;
+            }
+            else if (defIndex == AttributeDefIndex::CasketIdHigh)
+            {
+                m_desc.attributes.emplace_back(AttributeDefIndex::CasketIdLow, FromString<uint32_t>(value));
                 continue;
             }
 
@@ -77,8 +83,8 @@ Item::Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSc
     }
 }
 
-Item::Item(uint32_t highId, ItemDesc &&desc)
-    : m_highId{ highId }
+Item::Item(uint32_t lowId, ItemDesc &&desc)
+    : m_lowId{ lowId }
     , m_desc{ std::move(desc) }
 {
 }
@@ -100,7 +106,19 @@ void Item::ToKeyValue(KeyValueWrite &kv) const
 
         for (const ItemAttribute &attribute : m_desc.attributes)
         {
-            std::string name = std::to_string(FromEnum(attribute.DefIndex()));
+            AttributeDefIndex diskDefIndex = attribute.DefIndex();
+
+            // switch low and high ids, see the constructor
+            if (diskDefIndex == AttributeDefIndex::CasketIdLow)
+            {
+                diskDefIndex = AttributeDefIndex::CasketIdHigh;
+            }
+            else if (diskDefIndex == AttributeDefIndex::CasketIdHigh)
+            {
+                diskDefIndex = AttributeDefIndex::CasketIdLow;
+            }
+
+            std::string name = std::to_string(FromEnum(diskDefIndex));
 
             // illegible bullshit
             std::string value = std::visit(Bruh{

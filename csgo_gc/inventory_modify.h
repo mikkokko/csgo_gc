@@ -38,8 +38,8 @@ public:
     }
 
     // manual bookkeeping
-    void MarkItemCreated(uint32_t highId, bool gameServerDirty);
-    void MarkItemDestroyed(uint32_t highId, bool gameServerDirty);
+    void MarkItemCreated(uint32_t lowId, bool gameServerDirty);
+    void MarkItemDestroyed(uint32_t lowId, bool gameServerDirty);
     void MarkDefaultEquipChanged(const DefaultEquip &defaultEquip);
 
     // full update from the editor, except for equips as those need manual handling
@@ -66,5 +66,5 @@ public:
     std::vector<DefaultEquip> m_defaultEquipChanges;
 
 private:
-    void MarkUpdatedInternal(uint32_t highId, bool gameServerDirty);
+    void MarkUpdatedInternal(uint32_t lowId, bool gameServerDirty);
 };

@@ -144,7 +144,7 @@ private:
     bool ParseLootListItem(LootListItem &item, std::string_view name);
 
     // internal slop
-    ItemInfo *ItemInfoByName(std::string_view name);
+    ItemInfo *ItemInfoByName(std::string_view name, bool allowFail);
     StickerKitInfo *StickerKitInfoByName(std::string_view name);
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
     MusicDefinitionInfo *MusicDefinitionInfoByName(std::string_view name);

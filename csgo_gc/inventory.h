@@ -53,12 +53,12 @@ private:
         std::optional<EGCItemCustomizationNotification> customizationType = std::nullopt,
         std::initializer_list<uint64_t> customizationItemIds = {});
 
-    // allocates an unique high item id
-    // pass zero as highItemId if you don't want a specific one
-    uint32_t GetHighItemId(uint32_t highItemId);
+    // allocates an unique low item id
+    // pass zero as lowItemId if you don't want a specific one
+    uint32_t GetLowItemId(uint32_t lowItemId);
 
     // used to create items from inventory.txt
-    void CreateItem(uint32_t highId, const KeyValue &kv);
+    void CreateItem(uint32_t lowId, const KeyValue &kv);
 
     // used to create items at runtime
     Item &CreateItem(InventoryModify &modify, ItemDesc &&desc);
@@ -83,11 +83,11 @@ private:
     void SendFullInventoryToEditor();
     void SendChangesToEditor(const InventoryModify &modify);
 
-    void RemoveCachedIcon(uint32_t highId) const;
+    void RemoveCachedIcon(uint32_t lowId) const;
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
-    uint32_t m_lastHighItemId{};
+    uint32_t m_lastLowItemId{};
     uint64_t m_version{ 1 };
     std::unordered_map<uint64_t, Item> m_items;
     std::vector<DefaultEquip> m_defaultEquips;

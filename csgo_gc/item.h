@@ -1,6 +1,7 @@
 #pragma once
 
 #include "item_schema_const.h"
+#include "gc_const_csgo.h"
 
 class ItemSchema;
 class KeyValue;
@@ -88,17 +89,15 @@ class Item
 {
 public:
     // used on init
-    Item(uint32_t highId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema);
+    Item(uint32_t lowId, uint32_t accountId, const KeyValue &kv, const ItemSchema &itemSchema);
 
     // used by InventoryModify to create items
-    Item(uint32_t highId, ItemDesc &&desc);
+    Item(uint32_t lowId, ItemDesc &&desc);
 
     // stupid
     uint64_t FullIdFor(uint32_t accountId) const
     {
-        uint64_t low = accountId;
-        uint64_t high = m_highId;
-        return low | (high << 32);
+        return ComposeItemId(accountId, m_lowId);
     }
 
     // serialization...
@@ -106,7 +105,7 @@ public:
     void ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const;
     void ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t accountId) const;
 
-    uint32_t HighId() const { return m_highId; }
+    uint32_t LowId() const { return m_lowId; }
     const ItemDesc &GetDesc() const { return m_desc; }
 
     // FIXME: cull some of the stuff below in favour of using GetDesc???
@@ -147,6 +146,6 @@ public:
 private:
     friend class InventoryModify;
 
-    const uint32_t m_highId;
+    const uint32_t m_lowId;
     ItemDesc m_desc{};
 };
