@@ -14,6 +14,9 @@
 #include "gcsdk_gcmessages.pb.h"
 #include "gcsystemmsgs.pb.h"
 
+// FIXME: add to protos?
+constexpr int k_EMsgGCRequestInventoryRefresh = 1050;
+
 ClientGC::ClientGC(uint64_t steamId)
     : m_steamId{ steamId }
     , m_inventory{ steamId }
@@ -82,6 +85,14 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
         case k_EMsgGCClientHelloR4:
         case k_EMsgGCClientHelloPartner:
             OnClientHello(messageRead);
+            break;
+
+        case k_EMsgGCCStrike15_v2_MatchmakingClient2GCHello:
+            OnMatchmakingHello();
+            break;
+
+        case k_EMsgGCRequestInventoryRefresh:
+            OnRequestInventoryRefresh();
             break;
 
         case k_EMsgGCAdjustItemEquippedState:
@@ -378,7 +389,10 @@ void ClientGC::BuildMatchmakingHello(CMsgGCCStrike15_v2_MatchmakingGC2ClientHell
     message.mutable_global_stats()->set_required_appid_version(13857);
     message.mutable_global_stats()->set_pricesheet_version(1680057676); // mikkotodo revisit
     message.mutable_global_stats()->set_twitch_streams_version(2);
+
+    // NOTE: on 2013 this is actually game_monthly_uniques!!! probably not read there so keep the event id
     message.mutable_global_stats()->set_active_tournament_eventid(20);
+
     message.mutable_global_stats()->set_active_survey_id(0);
     message.mutable_global_stats()->set_required_appid_version2(13862); // csgo s2
 
@@ -464,6 +478,24 @@ void ClientGC::OnClientHello(GCMessageRead &messageRead)
 
     // send all ranks here as well, it's a bit back and forth with real gc
     SendRankUpdate();
+}
+
+void ClientGC::OnMatchmakingHello()
+{
+    // only old builds explicitly request for this
+    CMsgGCCStrike15_v2_MatchmakingGC2ClientHello mmHello;
+    BuildMatchmakingHello(mmHello);
+    SendMessageToGame(false, k_EMsgGCCStrike15_v2_MatchmakingGC2ClientHello, mmHello);
+}
+
+void ClientGC::OnRequestInventoryRefresh()
+{
+    // only pre dota gcsdk merge builds send this
+    m_inventory.SetOldProtocol(true);
+
+    CMsgSOCacheSubscribed message;
+    m_inventory.BuildCacheSubscription(message, GetConfig().m_level, false);
+    SendMessageToGame(false, k_ESOMsg_CacheSubscribed, message);
 }
 
 void ClientGC::AdjustItemEquippedState(GCMessageRead &messageRead)

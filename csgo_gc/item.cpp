@@ -150,24 +150,47 @@ void Item::ToKeyValue(KeyValueWrite &kv) const
     }
 }
 
-static void SetAttributeFloat(CSOEconItemAttribute *attribute, float value)
+static void SetAttributeFloat(CSOEconItemAttribute *attribute, float value, bool oldProtocol)
 {
-    attribute->set_value_bytes(&value, sizeof(value));
+    if (oldProtocol)
+    {
+        attribute->set_value(std::bit_cast<uint32_t>(value));
+    }
+    else
+    {
+        attribute->set_value_bytes(&value, sizeof(value));
+    }
 }
 
-static void SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value)
+static void SetAttributeUint32(CSOEconItemAttribute *attribute, uint32_t value, bool oldProtocol)
 {
-    attribute->set_value_bytes(&value, sizeof(value));
+    if (oldProtocol)
+    {
+        attribute->set_value(value);
+    }
+    else
+    {
+        attribute->set_value_bytes(&value, sizeof(value));
+    }
 }
 
-static void SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value)
+static void SetAttributeString(CSOEconItemAttribute *attribute, std::string_view value, bool oldProtocol)
 {
-    CAttribute_String string;
-    string.set_value(value);
-    string.SerializeToString(attribute->mutable_value_bytes());
+    if (oldProtocol)
+    {
+        // shouldn't be possible to reach
+        // if this is reached, ignoring the attribute is fine
+        assert(false);
+    }
+    else
+    {
+        CAttribute_String string;
+        string.set_value(value);
+        string.SerializeToString(attribute->mutable_value_bytes());
+    }
 }
 
-void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const
+void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId, const ItemSchema &itemSchema, bool oldProtocol) const
 {
     item.set_id(FullIdFor(accountId));
     item.set_account_id(accountId);
@@ -183,20 +206,59 @@ void Item::ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const
 
     for (const ItemAttribute &attribute : m_desc.attributes)
     {
+        if (oldProtocol
+            && attribute.DefIndex() == AttributeDefIndex::CustomName
+            && std::holds_alternative<std::string>(attribute.Value()))
+        {
+            // no string attributes, need to set the item field
+            item.set_custom_name(std::get<std::string>(attribute.Value()));
+            continue;
+        }
+
         CSOEconItemAttribute *econ = item.add_attribute();
         econ->set_def_index(FromEnum(attribute.DefIndex()));
 
         // illegible bullshit
         std::visit(Bruh{
                        [&](float v)
-                       { SetAttributeFloat(econ, v); },
+                       { SetAttributeFloat(econ, v, oldProtocol); },
                        [&](uint32_t v)
-                       { SetAttributeUint32(econ, v); },
+                       { SetAttributeUint32(econ, v, oldProtocol); },
                        [&](const std::string &v)
-                       { SetAttributeString(econ, v); },
+                       { SetAttributeString(econ, v, oldProtocol); },
                    },
             attribute.Value());
     }
+
+    // stupid hack: old builds can't read this from the static attribute
+    // FIXME: correct way would be force_gc_to_generate
+    if (oldProtocol && !HasAttribute(AttributeDefIndex::SupplyCrateSeries))
+    {
+        uint32_t supplyCrateSeries = itemSchema.GetCrateSupplyCrateSeries(m_desc.defIndex);
+        if (supplyCrateSeries)
+        {
+            CSOEconItemAttribute *econ = item.add_attribute();
+            econ->set_def_index(FromEnum(AttributeDefIndex::SupplyCrateSeries));
+
+            switch (itemSchema.GetAttributeType(AttributeDefIndex::SupplyCrateSeries))
+            {
+            case AttributeType::Float:
+                SetAttributeFloat(econ, static_cast<float>(supplyCrateSeries), oldProtocol);
+                break;
+
+            case AttributeType::Uint32:
+                SetAttributeUint32(econ, supplyCrateSeries, oldProtocol);
+                break;
+
+            default:
+                assert(false);
+                break;
+            }
+        }
+    }
+
+    // for old builds
+    item.set_contains_equipped_state(!m_desc.equips.empty());
 
     for (const ItemEquip &equip : m_desc.equips)
     {

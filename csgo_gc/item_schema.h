@@ -117,6 +117,7 @@ public:
 
     // for case opening
     const LootList *GetCrateLootList(ItemDefIndex crateDefIndex) const;
+    uint32_t GetCrateSupplyCrateSeries(ItemDefIndex crateDefIndex) const;
 
     // for case opening FIXME: do we want to keep this here???
     bool ItemDescForLootListItem(

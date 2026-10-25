@@ -24,6 +24,9 @@ public:
     Inventory(uint64_t steamId);
     ~Inventory();
 
+    // called on client welcome
+    void SetOldProtocol(bool oldProtocol) { m_oldProtocol = oldProtocol; }
+
     bool Update(InventoryChangeMessages &changeMessages);
 
     void BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level, bool server);
@@ -87,6 +90,7 @@ private:
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
+    bool m_oldProtocol{ false };
     uint32_t m_lastLowItemId{};
     uint64_t m_version{ 1 };
     std::unordered_map<uint64_t, Item> m_items;

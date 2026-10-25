@@ -189,12 +189,46 @@ void ServerGC::HandleClientSOCacheUnsubscribe(uint64_t steamId)
     Platform::Print("HandleClientSOCacheUnsubscribe: {}\n", steamId);
 
     CMsgSOCacheUnsubscribed message;
+    message.set_owner(steamId); // for old builds
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
     message.mutable_owner_soid()->set_id(steamId);
 
     GCMessageWrite write{ k_ESOMsg_CacheUnsubscribed, message };
     uint32_t typeMasked = write.TypeMasked();
     PostToHost(HostEvent::Message, typeMasked, std::move(write).TakeBuffer());
+}
+
+template<typename T>
+static bool ValidateOwner(const T &message, uint64_t steamId)
+{
+    // these should always have owner soids (always written even when
+    // running on old builds), but check it for completeness sake
+    if (message.has_owner_soid())
+    {
+        if (message.owner_soid().type() != SoIdTypeSteamId
+            || message.owner_soid().id() != steamId)
+        {
+            Platform::Print("ValidateMessageOwnerSOID {}: steam id mismatch (message has {})\n",
+                steamId, message.owner_soid().id());
+            return false;
+        }
+    }
+    else if (message.has_owner())
+    {
+        if (message.owner() != steamId)
+        {
+            Platform::Print("ValidateMessageOwnerSOID {}: steam id mismatch (message has {})\n",
+                steamId, message.owner());
+            return false;
+        }
+    }
+    else
+    {
+        Platform::Print("ValidateMessageOwnerSOID {}: no owner provided in message\n", steamId);
+        return false;
+    }
+
+    return true;
 }
 
 template<typename T>
@@ -207,15 +241,7 @@ static bool ValidateMessageOwnerSOID(GCMessageRead &messageRead, uint64_t steamI
         return false;
     }
 
-    if (message.owner_soid().type() != SoIdTypeSteamId
-        || message.owner_soid().id() != steamId)
-    {
-        Platform::Print("ValidateMessageOwnerSOID {}: steam id mismatch (message has {})\n",
-            steamId, message.owner_soid().id());
-        return false;
-    }
-
-    return true;
+    return ValidateOwner(message, steamId);
 }
 
 // FIXME: made up
@@ -261,11 +287,8 @@ bool ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(GCMessageRead &messageRead,
         return false;
     }
 
-    if (message.owner_soid().type() != SoIdTypeSteamId
-        || message.owner_soid().id() != steamId)
+    if (!ValidateOwner(message, steamId))
     {
-        Platform::Print("ValidateMessageOwnerSOID {}: steam id mismatch (message has {})\n",
-            steamId, message.owner_soid().id());
         return false;
     }
 

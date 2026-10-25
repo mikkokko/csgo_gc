@@ -202,6 +202,7 @@ message CSOEconItem {
     optional bool in_use = 14 [default = false];
     optional uint32 style = 15 [default = 0];
     optional uint64 original_id = 16 [default = 0];
+    optional bool contains_equipped_state = 17; // mikko: added for 2013
     repeated CSOEconItemEquipped equipped_state = 18;
     optional uint32 rarity = 19;
 }

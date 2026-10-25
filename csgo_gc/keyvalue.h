@@ -18,6 +18,20 @@ inline T FromString(std::string_view string)
     return value;
 }
 
+template<typename T>
+inline bool FromString(std::string_view string, T &value)
+{
+    const char *begin = string.data();
+    const char *end = string.data() + string.size();
+    std::from_chars_result result = std::from_chars(begin, end, value);
+    if (result.ec != std::errc{} || result.ptr !=end)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 #if defined(__APPLE__)
 // can't do from_chars with floats on macos...
 template<>

@@ -102,7 +102,7 @@ public:
 
     // serialization...
     void ToKeyValue(KeyValueWrite &kv) const;
-    void ToCSOEconItem(CSOEconItem &item, uint32_t accountId) const;
+    void ToCSOEconItem(CSOEconItem &item, uint32_t accountId, const ItemSchema &itemSchema, bool oldProtocol) const;
     void ToEconItemPreviewDataBlock(CEconItemPreviewDataBlock &block, uint32_t accountId) const;
 
     uint32_t LowId() const { return m_lowId; }

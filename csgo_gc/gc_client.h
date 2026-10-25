@@ -42,6 +42,8 @@ private:
     void SendMessageToServer(std::vector<uint8_t> &&buffer);
 
     void OnClientHello(GCMessageRead &messageRead);
+    void OnMatchmakingHello();
+    void OnRequestInventoryRefresh();
     void AdjustItemEquippedState(GCMessageRead &messageRead);
     void ClientPlayerDecalSign(GCMessageRead &messageRead);
     void UseItemRequest(GCMessageRead &messageRead);

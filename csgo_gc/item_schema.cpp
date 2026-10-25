@@ -283,6 +283,18 @@ const LootList *ItemSchema::GetCrateLootList(ItemDefIndex crateDefIndex) const
     return &lootListSearch->second;
 }
 
+uint32_t ItemSchema::GetCrateSupplyCrateSeries(ItemDefIndex crateDefIndex) const
+{
+    auto itemSearch = m_itemInfo.find(crateDefIndex);
+    if (itemSearch == m_itemInfo.end())
+    {
+        assert(false);
+        return 0;
+    }
+
+    return itemSearch->second.m_supplyCrateSeries;
+}
+
 bool ItemSchema::ItemDescForLootListItem(
     const LootListItem &lootListItem,
     bool statTrak,
@@ -771,7 +783,8 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
                 || entryName == "contains_stickers_autographed_by_proplayers"
                 || entryName == "contains_stickers_representing_organizations"
                 || entryName == "limit_description_to_number_rnd"
-                || entryName == "public_list_contents")
+                || entryName == "public_list_contents"
+                || entryName == "attribute_templates")
             {
                 continue;
             }
@@ -930,11 +943,22 @@ void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
 
     for (const KeyValue &revolvingLootListKey : revolvingLootListsKey->Subkeys())
     {
-        uint32_t index = FromString<uint32_t>(revolvingLootListKey.Name());
-        assert(index);
+        uint32_t index;
+        std::string lootListName;
 
-        // ugh
-        std::string lootListName = std::string{ revolvingLootListKey.String() };
+        if (FromString<uint32_t>(revolvingLootListKey.Name(), index))
+        {
+            // ok, name stores index and string stores name
+            lootListName = revolvingLootListKey.String();
+        }
+        else
+        {
+            // otherwise assume name stores name and string stores index...
+            index = FromString<uint32_t>(revolvingLootListKey.String());
+            lootListName = revolvingLootListKey.Name();
+        }
+
+        assert(index && lootListName.size());
 
         auto it = m_lootLists.find(lootListName);
         if (it == m_lootLists.end())

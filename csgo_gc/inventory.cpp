@@ -213,7 +213,7 @@ InventoryChangeMessages Inventory::FinishChanges(
         }
 
         CSOEconItem econItem;
-        item->ToCSOEconItem(econItem, AccountId());
+        item->ToCSOEconItem(econItem, AccountId(), m_itemSchema, m_oldProtocol);
 
         if (change.type == ItemChangeType::Created)
         {
@@ -263,6 +263,7 @@ void Inventory::AddToMultipleObjects(CMsgSOMultipleObjects &message, SOTypeId ty
     if (!message.has_version())
     {
         assert(!message.has_owner_soid());
+        message.set_owner(m_steamId); // for old builds
         message.set_version(m_version);
         message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
         message.mutable_owner_soid()->set_id(m_steamId);
@@ -284,6 +285,7 @@ void Inventory::ToSingleObject(CMsgSOSingleObject &message, SOTypeId type, const
     assert(!message.has_type_id());
     assert(!message.has_object_data());
 
+    message.set_owner(m_steamId); // for old builds
     message.set_version(m_version);
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
     message.mutable_owner_soid()->set_id(m_steamId);
@@ -464,6 +466,7 @@ void Inventory::WriteToFile() const
 
 void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level, bool server)
 {
+    message.set_owner(m_steamId); // for old builds
     message.set_version(m_version);
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
     message.mutable_owner_soid()->set_id(m_steamId);
@@ -480,7 +483,7 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
             }
 
             CSOEconItem serialized;
-            pair.second.ToCSOEconItem(serialized, AccountId());
+            pair.second.ToCSOEconItem(serialized, AccountId(), m_itemSchema, m_oldProtocol);
             serialized.SerializeToString(object->add_object_data());
         }
     }
