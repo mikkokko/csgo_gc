@@ -3,38 +3,22 @@
 > [!CAUTION]
 > This project is incomplete and not ready for general use.
 
-## What is this?
-In Valve games, the Game Coordinator (GC) is a backend service most notably responsible for matchmaking and inventory management (like loadouts and skins). This project redirects the GC traffic to a custom, in-process implementation.
+In Valve games, the Game Coordinator (GC) is a backend service most notably responsible for matchmaking and inventory management (like loadouts and skins). This project redirects the GC traffic to a custom, in-process implementation, eliminating the need for a separate GC server.
 
-## Why would you want this?
-While it's still possible to connect CS:GO to CS2's GC by spoofing the version number, this may break in the future if Valve updates the GC protocol. This project aims to restore most GC-related functionality without relying on a centralized server.
+## Features
 
-## Current features
-- Editable inventory (inventory.txt)
-- Item equipping
-- Opening cases (including sticker capsules, patch packs, graffiti boxes and music kit boxes)
-- Graffiti support
-- Weapon StatTrak support
-- Storage Units
-- Stickers and patches
-- Name tags
-- Music kits
-- In-game store
-- Real time inventory editing via WebSockets
-- Works without full Steam API emulation
+- **Inventory:** Editing, equipping, case opening, stickers, patches, graffiti, StatTrak, storage units, name tags, music kits and the in-game store
+- **Multiplayer:** Lobbies, dedicated servers and a functional server browser
+- Steam P2P networking for inventory data
+- Live inventory editing via a WebSocket server
+- [Multi-version support](docs/versions.md) (experimental)
 - Full Windows, Linux and macOS support
-- Functional lobbies
-- Dedicated server support
-- Functional server browser (only shows csgo_gc servers by default)
-- Networking using Steam's P2P interface
+- Works without full Steam API emulation
 
-## Planned features
-- Rest of the core features (trade ups, souvenirs, StatTrak swaps...)
-
-## Not planned
-- Matchmaking (can't be implemented without a centralized server)
+Missing inventory features (trade ups, souvenirs, StatTrak swaps, etc.) are planned. Operation-related features are not currently planned. Matchmaking is not planned, as a proper implementation would require a centralized server, which this project intentionally avoids.
 
 ## Installation
+
 - Download [CS:GO from Steam](steam://install/4465480)
 - Download the latest release for your platform from the [releases page](https://github.com/mikkokko/csgo_gc/releases/latest)
 - Navigate to the game's installation directory
@@ -46,36 +30,32 @@ While it's still possible to connect CS:GO to CS2's GC by spoofing the version n
 ## Inventory editing
 
 ### Realtime editing
+
 The GC exposes a local WebSocket API for inventory editors. An editor can read the inventory and send changes while the game is running. Changes appear in-game immediately and are saved to inventory.txt. In-game inventory changes are also sent to the connected editor.
 
 A web-based realtime editor is available [here](https://github.com/mikkokko/csgo_invedit). The default `inventory_editor_origin` in `csgo_gc/config.txt` allows connections from its site. To use another editor, set it to the `Origin` that editor provides.
 
 ### Offline editing
-For GUI inventory editors made by others, see https://github.com/mikkokko/csgo_gc/issues/82. For manual editing, there is a guide made by someone else [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76).
+
+See [available GUI editors](https://github.com/mikkokko/csgo_gc/issues/82). There is also a guide for editing inventory.txt by hand [here](https://gist.github.com/dricotec/1ae3deb06c42012970c00df914348e76) if you want to do that for some reason.
 
 ## Configuration
+
 See [csgo_gc/config.txt](examples/config.txt) for available options.
 
 ## Bug reports and support
 
-**Got a crash or found a bug?**
-* **Broken csgo_gc feature?** Open an issue and follow the instructions.
-* **Game crashing or broken non-GC features?** If you are unsure if csgo_gc caused it, test the game without it installed first. If the bug still happens on a clean build, it's an issue with the game itself. **Do not report base game bugs here.** If you confirm csgo_gc is definitely causing the crash, open an issue.
+Report bugs by opening an issue and following the instructions. If the issue doesn't appear to be strictly GC related, verify that it doesn't happen on a clean game (no csgo_gc installed).
 
-**Need help, want to share ideas, or self-promote?**
-Use [Discussions](https://github.com/mikkokko/csgo_gc/discussions). Do not open issues for support.
+For support, ideas, and general discussion, use [Discussions](https://github.com/mikkokko/csgo_gc/discussions).
 
 ## Building
-Requirements:
-- Git
-- vcpkg
-- CMake 3.20 or newer
-- C++ compiler with C++20 support
 
-See [the continuous build workflow](.github/workflows/build.yml) for details.
+Requires Git, vcpkg, CMake 3.20+, and a compiler with C++20 support. See [the continuous build workflow](.github/workflows/build.yml) for details.
 
 ## License
-This project is licensed under the 2-Clause BSD License. See [LICENSE.md](LICENSE.md) for details.
+
+[2-Clause BSD](LICENSE.md)
 
 ## Credits
 * **Mikko Kokko** - Author
