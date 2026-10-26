@@ -6,8 +6,8 @@ class GCMessageRead;
 
 struct GCClientState
 {
-    GCClientState(const std::vector<uint8_t> &ticket)
-        : authTicket{ ticket }
+    GCClientState(std::vector<uint8_t> &&ticket)
+        : authTicket{ std::move(ticket) }
     {
     }
 
@@ -24,13 +24,13 @@ public:
     ~ServerGC();
 
 private:
-    void HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer) override;
+    void HandleEvent(GCEvent type, uint64_t id, std::vector<uint8_t> &&buffer) override;
 
     // event handlers
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
-    void HandleNetMessage(uint64_t steamId, const void *data, uint32_t size);
+    void HandleNetMessage(uint64_t steamId, std::vector<uint8_t> &&buffer);
     void HandleClientSOCacheUnsubscribe(uint64_t steamId);
-    void ClientConnected(uint64_t steamId, const std::vector<uint8_t> &ticket);
+    void ClientConnected(uint64_t steamId, std::vector<uint8_t> &&ticket);
     void ClientDisconnected(uint64_t steamId);
     void HandleSessionRequest(uint64_t steamId);
     void UpdateConnections();

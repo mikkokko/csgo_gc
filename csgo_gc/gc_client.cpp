@@ -35,7 +35,7 @@ ClientGC::~ClientGC()
     Platform::Print("ClientGC destroyed\n");
 }
 
-void ClientGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer)
+void ClientGC::HandleEvent(GCEvent type, uint64_t id, std::vector<uint8_t> &&buffer)
 {
     switch (type)
     {
@@ -48,7 +48,7 @@ void ClientGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t>
         break;
 
     case GCEvent::SetAuthTicket:
-        SetAuthTicket(static_cast<uint32_t>(id), buffer);
+        SetAuthTicket(static_cast<uint32_t>(id), std::move(buffer));
         break;
 
     case GCEvent::ClearAuthTicket:
@@ -181,6 +181,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
             RemoveItemName(messageRead);
             break;
 
+        case k_EMsgGCStorePurchaseFinalize:
+            StorePurchaseFinalizeStruct(messageRead);
+            break;
+
         default:
             Platform::Print("ClientGC::HandleMessage: unhandled struct message {}\n",
                 MessageName(messageRead.TypeUnmasked()));
@@ -225,11 +229,11 @@ void ClientGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         MessageName(messageRead.TypeUnmasked()));
 }
 
-void ClientGC::SetAuthTicket(uint32_t handle, const std::vector<uint8_t> &buffer)
+void ClientGC::SetAuthTicket(uint32_t handle, std::vector<uint8_t> &&buffer)
 {
     AuthTicket &ticket = m_tickets[handle];
     ticket.steamId = 0;
-    ticket.buffer = buffer;
+    ticket.buffer = std::move(buffer);
 }
 
 void ClientGC::ClearAuthTicket(uint32_t handle)
@@ -743,6 +747,36 @@ void ClientGC::StorePurchaseFinalize(GCMessageRead &messageRead)
     response.set_result(1); // success
     response.mutable_item_ids()->Assign(m_transactionItemIds.begin(), m_transactionItemIds.end());
     SendMessageToGame(false, k_EMsgGCStorePurchaseFinalizeResponse, response, messageRead.JobId());
+
+    // done with this one
+    m_transactionId = 0;
+}
+
+void ClientGC::StorePurchaseFinalizeStruct(GCMessageRead &messageRead)
+{
+    messageRead.ReadUint64();
+    if (!messageRead.IsValid())
+    {
+        Platform::Print("Parsing CMsgGCStorePurchaseFinalize (struct) failed, ignoring\n");
+        return;
+    }
+
+    assert(m_transactionId);
+
+    {
+        GCMessageWrite response{ k_EMsgGCStorePurchaseFinalizeResponse, messageRead.JobId() };
+
+        response.WriteUint16(1); // success
+        response.WriteUint32(static_cast<uint32_t>(m_transactionItemIds.size()));
+
+        for (uint64_t id : m_transactionItemIds)
+        {
+            response.WriteUint64(id);
+        }
+
+        uint32_t typeMasked = response.TypeMasked();
+        PostToHost(HostEvent::Message, typeMasked, std::move(response).TakeBuffer());
+    }
 
     // done with this one
     m_transactionId = 0;

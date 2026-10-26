@@ -1,25 +1,43 @@
 #include "stdafx.h"
 #include "gc_message.h"
+#include "networking_shared.h"
 
 #include "steammessages.pb.h"
+
+inline bool IsProtobufMessage(uint32_t type)
+{
+    return type & ProtobufMask;
+}
 
 GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
     : MessageRead{ data, size }
 {
-    m_type = ReadUint32();
-    if (!IsValid())
+    // net messages and protobuf messages write the type on wire
+    if (!type || IsProtobufMessage(type) || IsNetworkMessage(type))
     {
-        assert(false);
-        return;
-    }
+        uint32 headerType = ReadUint32();
+        if (!IsValid() || (!IsProtobufMessage(headerType) && !IsNetworkMessage(headerType)))
+        {
+            assert(false);
+            m_error = true;
+            return;
+        }
 
-    // override the type if provided
-    if (type)
+        assert(headerType);
+        assert(!type || headerType == type);
+        m_type = type ? type : headerType;
+    }
+    else
     {
         m_type = type;
     }
 
-    if (IsProtobuf())
+    if (IsNetworkMessage(m_type))
+    {
+        // csgo_gc legacy trauma header
+        ReadData(14);
+    }
+    else if (IsProtobuf())
     {
         // reading a ProtoMsgHeader
         uint32_t headerSize = ReadUint32();
@@ -27,7 +45,7 @@ GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
         {
             CMsgProtoBufHeader header;
             const void *headerData = ReadData(headerSize);
-            if (!header.ParseFromArray(headerData, headerSize))
+            if (!headerData || !header.ParseFromArray(headerData, headerSize))
             {
                 assert(false);
                 m_error = true;
@@ -51,10 +69,14 @@ GCMessageRead::GCMessageRead(uint32_t type, const void *data, uint32_t size)
     }
     else
     {
-        // reading a GameStructMsgHeader
-        ReadUint32();
-        ReadUint64();
-        ReadUint16();
+        // reading a StructMsgHeader
+        uint16_t version = ReadUint16();
+        uint64_t jobIdTarget = ReadUint64();
+        uint64_t jobIdSource = ReadUint64();
+
+        assert(version == 1);
+        assert(jobIdTarget == JobIdInvalid);
+        m_jobId = jobIdSource;
     }
 
     // caller needs to check for this
@@ -99,9 +121,10 @@ static void AppendProtobuf(std::vector<uint8_t> &buffer, const google::protobuf:
 }
 
 GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message, uint64_t jobId)
+    : m_type{ type | ProtobufMask }
 {
     // write the protobuf message hader
-    WriteUint32(type | ProtobufMask);
+    WriteUint32(m_type);
 
     if (jobId != JobIdInvalid)
     {
@@ -123,20 +146,21 @@ GCMessageWrite::GCMessageWrite(uint32_t type, const google::protobuf::MessageLit
     AppendProtobuf(m_buffer, message);
 }
 
-GCMessageWrite::GCMessageWrite(uint32_t type)
+GCMessageWrite::GCMessageWrite(uint32_t type, uint64_t jobId)
+    : m_type{type}
 {
-    // write the non protobuf messge hader
-    // mikkotoodo using GameStructMsgHeader is wrong here!!! we should be using the fat one
-    // however we're not sending these to the game (yet) so it doesn't matter
-    WriteUint32(type);
-    WriteUint32(0);
-    WriteUint64(0);
-    WriteUint16(0);
-}
-
-GCMessageWrite::GCMessageWrite(const void *data, uint32_t size)
-{
-    assert(size >= sizeof(uint32_t));
-    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
-    m_buffer.assign(bytes, bytes + size);
+    if (IsNetworkMessage(type))
+    {
+        // csgo_gc legacy trauma header
+        WriteUint32(type);
+        WriteUint32(0);
+        WriteUint64(0);
+        WriteUint16(0);
+    }
+    else
+    {
+        WriteUint16(1);
+        WriteUint64(jobId);
+        WriteUint64(JobIdInvalid);
+    }
 }

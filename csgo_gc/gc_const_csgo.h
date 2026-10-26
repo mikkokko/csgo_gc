@@ -11,20 +11,6 @@ constexpr uint64_t GameServerCookieId = 0x293A206F6C6C6548;
 // next lowest 16 bits = paint kit index
 constexpr uint64_t ItemIdDefaultItemMask = 0xfull << 60;
 
-// need to rape the account id so the resulting item id won't be treated as a default item
-// this is quite schizophrenic, at least at the time of writing this it shouldn't modify any ids
-constexpr uint32_t HighItemIdFromAccountId(uint32_t accountId)
-{
-    constexpr uint32_t mask = static_cast<uint32_t>(ItemIdDefaultItemMask >> 32);
-    return (accountId & mask) == mask ? (accountId & ~mask) : accountId;
-}
-
-// mix the account id into item ids to avoid collisions in multiplayer games
-constexpr uint64_t ComposeItemId(uint32_t accountId, uint32_t lowId)
-{
-    return (static_cast<uint64_t>(HighItemIdFromAccountId(accountId)) << 32) | lowId;
-}
-
 // technically 5 but there are attributes for 6 stickers...
 constexpr int MaxStickers = 6;
 

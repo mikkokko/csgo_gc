@@ -23,12 +23,12 @@ public:
     ~ClientGC();
 
 private:
-    void HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer) override;
+    void HandleEvent(GCEvent type, uint64_t id, std::vector<uint8_t> &&buffer) override;
 
     // event handlers
     void HandleMessage(uint32_t type, const void *data, uint32_t size);
     void HandleNetMessage(uint64_t steamId, const void *data, uint32_t size);
-    void SetAuthTicket(uint32_t handle, const std::vector<uint8_t> &buffer);
+    void SetAuthTicket(uint32_t handle, std::vector<uint8_t> &&buffer);
     void ClearAuthTicket(uint32_t handle);
     void HandleConnect(uint64_t steamId, GCMessageRead &message);
     void HandleSOCacheRequest();
@@ -54,6 +54,7 @@ private:
     void StoreGetUserData(GCMessageRead &messageRead);
     void StorePurchaseInit(GCMessageRead &messageRead);
     void StorePurchaseFinalize(GCMessageRead &messageRead);
+    void StorePurchaseFinalizeStruct(GCMessageRead &messageRead);
     void OnGetEventFavorites(GCMessageRead &messageRead);
     void OnPartyRegister(GCMessageRead &messageRead);
 

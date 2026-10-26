@@ -40,7 +40,7 @@ void SharedGC::WorkerThread()
 
         for (EventData &event : events)
         {
-            HandleEvent(static_cast<GCEvent>(event.type), event.id, event.buffer);
+            HandleEvent(static_cast<GCEvent>(event.type), event.id, std::move(event.buffer));
         }
 
         events.clear();

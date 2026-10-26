@@ -44,10 +44,7 @@ public:
     GCMessageWrite(uint32_t type, const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
     // non protobuf messages, data written with the writer functions
-    GCMessageWrite(uint32_t type);
-
-    // already serialized data that just gets copied over, type parsed from the message
-    GCMessageWrite(const void *data, uint32_t size);
+    GCMessageWrite(uint32_t type, uint64_t jobId = JobIdInvalid);
 
     GCMessageWrite(GCMessageWrite &&) = default;
     GCMessageWrite &operator=(GCMessageWrite &&) = default;
@@ -58,14 +55,9 @@ public:
 
     uint32_t TypeMasked() const
     {
-        if (m_buffer.size() < sizeof(uint32_t))
-        {
-            assert(false);
-            return 0;
-        }
-
-        uint32_t type = *reinterpret_cast<const uint32_t *>(m_buffer.data());
-        assert(type);
-        return type;
+        return m_type;
     }
+
+private:
+    uint32_t m_type;
 };

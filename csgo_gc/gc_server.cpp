@@ -34,7 +34,7 @@ ServerGC::~ServerGC()
     Platform::Print("ServerGC destroyed\n");
 }
 
-void ServerGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer)
+void ServerGC::HandleEvent(GCEvent type, uint64_t id, std::vector<uint8_t> &&buffer)
 {
     switch (type)
     {
@@ -43,11 +43,11 @@ void ServerGC::HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t>
         break;
 
     case GCEvent::NetMessage:
-        HandleNetMessage(id, buffer.data(), static_cast<uint32_t>(buffer.size()));
+        HandleNetMessage(id, std::move(buffer));
         break;
 
     case GCEvent::ClientConnected:
-        ClientConnected(id, buffer);
+        ClientConnected(id, std::move(buffer));
         break;
 
     case GCEvent::ClientDisconnected:
@@ -101,9 +101,9 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     }
 }
 
-void ServerGC::ClientConnected(uint64_t steamId, const std::vector<uint8_t> &ticket)
+void ServerGC::ClientConnected(uint64_t steamId, std::vector<uint8_t> &&ticket)
 {
-    auto [it, inserted] = m_clients.try_emplace(steamId, ticket);
+    auto [it, inserted] = m_clients.try_emplace(steamId, std::move(ticket));
     if (!inserted)
     {
         Platform::Print("got ClientConnected for {} but they're already on the list! ignoring\n", steamId);
@@ -312,7 +312,7 @@ bool ValidateMessageOwnerSOID<CMsgSOCacheSubscribed>(GCMessageRead &messageRead,
     return true;
 }
 
-void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t size)
+void ServerGC::HandleNetMessage(uint64_t steamId, std::vector<uint8_t> &&buffer)
 {
     auto it = m_clients.find(steamId);
     if (it == m_clients.end())
@@ -321,9 +321,9 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
         return;
     }
 
-    Platform::Print("HandleNetMessage: {}, {} bytes\n", steamId, size);
+    Platform::Print("HandleNetMessage: {}, {} bytes\n", steamId, buffer.size());
 
-    GCMessageRead validate{ 0, data, size };
+    GCMessageRead validate{ 0, buffer.data(), static_cast<uint32_t>(buffer.size()) };
     if (!validate.IsValid())
     {
         assert(false);
@@ -387,7 +387,7 @@ void ServerGC::HandleNetMessage(uint64_t steamId, const void *data, uint32_t siz
     else
     {
         // otherwise the old message was fine
-        PostToHost(HostEvent::Message, validate.TypeMasked(), GCMessageWrite{ data, size }.TakeBuffer());
+        PostToHost(HostEvent::Message, validate.TypeMasked(), std::move(buffer));
     }
 
     if (validate.TypeUnmasked() == k_ESOMsg_CacheSubscribed && !it->second.hasSOCache)

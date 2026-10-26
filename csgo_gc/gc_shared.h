@@ -48,7 +48,7 @@ protected:
     void PostToHost(HostEvent type, uint64_t id, std::vector<uint8_t> &&buffer);
 
 private:
-    virtual void HandleEvent(GCEvent type, uint64_t id, const std::vector<uint8_t> &buffer) = 0;
+    virtual void HandleEvent(GCEvent type, uint64_t id, std::vector<uint8_t> &&buffer) = 0;
 
     void WorkerThread();
 
