@@ -55,7 +55,7 @@ Requires Git, vcpkg, CMake 3.20+, and a compiler with C++20 support. See [the co
 
 ## License
 
-[2-Clause BSD](LICENSE.md)
+[2-Clause BSD](LICENSE)
 
 ## Credits
 * **Mikko Kokko** - Author
