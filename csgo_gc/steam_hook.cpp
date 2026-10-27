@@ -7,6 +7,7 @@
 #include "gc_client.h"
 #include "gc_server.h"
 #include "platform.h"
+#include "steam_callbacks.h"
 #include <funchook.h>
 
 struct SteamNetworkingIdentity;
@@ -51,8 +52,8 @@ static ISteamClient *s_actualSteamClient;
 // FIXME: this can be factored out!!! legacy trauma for global gc insstances
 static HSteamPipe s_serverSteamPipe;
 
-// UserStatsReceived_t fails with the new csgo appid, which causes gc callbacks to not run
-// to work around this, spoof user stats requests when running under this appid specifically
+static CCallbackMgr s_callbackMgr;
+
 // we also need to patch serverbrowser to allow for appids over 900...
 static void CheckServerBrowserPatch()
 {
@@ -119,11 +120,15 @@ public:
         return true;
     }
 
-    void AddMessage(uint32_t type, std::vector<uint8_t> &&buffer)
+    void AddMessage(uint32_t type, std::vector<uint8_t> &&buffer, bool gameServer)
     {
         Message &dest = m_messages.emplace_back();
         dest.type = type;
         dest.buffer = std::move(buffer);
+
+        GCMessageAvailable_t param{};
+        param.m_nMessageSize = static_cast<uint32_t>(m_messages.front().buffer.size());
+        s_callbackMgr.QueueCallback(param, gameServer);
     }
 
 private:
@@ -356,17 +361,8 @@ public:
     }
 };
 
-static std::vector<UserStatsReceived_t> s_userStatsReceivedCallbacks;
-
-static void QueueUserStatsCallback()
-{
-    UserStatsReceived_t callback{};
-    // m_nGameID not used
-    callback.m_eResult = k_EResultOK;
-    // m_steamIDUser not used
-    s_userStatsReceivedCallbacks.push_back(callback);
-}
-
+// UserStatsReceived_t fails with the new csgo appid, which causes gc callbacks to not run
+// to work around this, spoof user stats requests when running under this appid specifically
 class SteamUserStatsProxy final
 {
 public:
@@ -374,8 +370,11 @@ public:
     {
         if (!AppId::IsOriginal())
         {
-            Platform::Print("Spoofing RequestCurrentStats\n");
-            QueueUserStatsCallback();
+            Platform::Print("Spoofing UserStatsReceived_t\n");
+
+            UserStatsReceived_t callback{};
+            callback.m_eResult = k_EResultOK; // only field the game cares about
+            s_callbackMgr.QueueCallback(callback, false);
             return true;
         }
 
@@ -914,124 +913,6 @@ static void *Hk_CreateInterface(const char *name, int *errorCode)
     return result;
 }
 
-struct CallbackHook
-{
-    int id;
-    CCallbackBase *callback;
-};
-
-static bool ShouldHookCallback(int id)
-{
-    if (id == UserStatsReceived_t::k_iCallback && !AppId::IsOriginal())
-    {
-        return true;
-    }
-
-    // we want to spoof all gc callbacks
-    switch (id)
-    {
-    case GCMessageAvailable_t::k_iCallback:
-    case GCMessageFailed_t::k_iCallback:
-    case MicroTxnAuthorizationResponse_t::k_iCallback:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
-class CallbackAccessor : public CCallbackBase
-{
-public:
-    bool IsGameServer()
-    {
-        return m_nCallbackFlags & CCallbackBase::k_ECallbackFlagsGameServer;
-    }
-
-    void SetRegistered()
-    {
-        m_nCallbackFlags |= CCallbackBase::k_ECallbackFlagsRegistered;
-    }
-
-    void UnsetRegistered()
-    {
-        m_nCallbackFlags &= ~CCallbackBase::k_ECallbackFlagsRegistered;
-    }
-};
-
-class CallbackHooks
-{
-public:
-    // returns true if callback was spoofed
-    bool RegisterCallback(CCallbackBase *callback, int id)
-    {
-        if (!ShouldHookCallback(id))
-        {
-            return false;
-        }
-
-        assert((void *)callback != (void *)0xDDDDDDDD);
-        CallbackHook callbackHook{ id, callback };
-        m_hooks.push_back(callbackHook);
-
-        static_cast<CallbackAccessor *>(callback)->SetRegistered();
-        return true;
-    }
-
-    // returns true if callback was spoofed
-    bool UnregisterCallback(CCallbackBase *callback)
-    {
-        bool unregistered = false;
-
-        // iterate over all hooks, just in case...
-        for (auto it = m_hooks.begin(); it != m_hooks.end();)
-        {
-            if (it->callback == callback)
-            {
-                unregistered = true;
-                it = m_hooks.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        if (unregistered)
-        {
-            static_cast<CallbackAccessor *>(callback)->UnsetRegistered();
-            return true;
-        }
-
-        return false;
-    }
-
-    // runs callbacks matching id immediately
-    void RunCallback(bool server, int id, void *param)
-    {
-        // ported over the schizo list even though csgo_gc doesn't hook such
-        // callbacks (ones removing/inserting callbacks during the dispatch)
-        for (auto it = m_hooks.begin(); it != m_hooks.end();)
-        {
-            auto next = std::next(it);
-
-            const CallbackHook &hook = *it;
-            bool serverCallback = static_cast<CallbackAccessor *>(hook.callback)->IsGameServer();
-            if (server == serverCallback && hook.id == id)
-            {
-                hook.callback->Run(param);
-            }
-
-            it = next;
-        }
-    }
-
-private:
-    std::list<CallbackHook> m_hooks;
-};
-
-static CallbackHooks s_callbackHooks;
-
 static void (*Og_SteamAPI_RegisterCallback)(class CCallbackBase *pCallback, int iCallback);
 static void (*Og_SteamAPI_UnregisterCallback)(class CCallbackBase *pCallback);
 static void (*Og_SteamAPI_RunCallbacks)();
@@ -1039,42 +920,38 @@ static void (*Og_SteamGameServer_RunCallbacks)();
 
 static void Hk_SteamAPI_RegisterCallback(class CCallbackBase *pCallback, int iCallback)
 {
-    if (s_callbackHooks.RegisterCallback(pCallback, iCallback))
-    {
-        return;
-    }
+    s_callbackMgr.RegisterCallback(pCallback, iCallback);
 
-    Og_SteamAPI_RegisterCallback(pCallback, iCallback);
+    if (!s_callbackMgr.SkipSteamRegistration(iCallback))
+    {
+        Og_SteamAPI_RegisterCallback(pCallback, iCallback);
+    }
 }
 
 static void Hk_SteamAPI_UnregisterCallback(class CCallbackBase *pCallback)
 {
-    if (s_callbackHooks.UnregisterCallback(pCallback))
-    {
-        return;
-    }
+    s_callbackMgr.UnregisterCallback(pCallback);
 
-    Og_SteamAPI_UnregisterCallback(pCallback);
+    if (!s_callbackMgr.SkipSteamRegistration(pCallback->GetICallback()))
+    {
+        Og_SteamAPI_UnregisterCallback(pCallback);
+    }
 }
 
 static void Hk_SteamAPI_RunCallbacks()
 {
-    Og_SteamAPI_RunCallbacks();
-
     if (s_clientGC)
     {
+        // poll events
         std::vector<EventData> events;
         s_clientGC->m_gc.GetHostEvents(events);
-
-        // poll events
-        bool runMicroTransactionResponse = false;
 
         for (EventData &event : events)
         {
             switch (static_cast<HostEvent>(event.type))
             {
             case HostEvent::Message:
-                s_clientGC->m_messageQueue.AddMessage(static_cast<uint32_t>(event.id), std::move(event.buffer));
+                s_clientGC->m_messageQueue.AddMessage(static_cast<uint32_t>(event.id), std::move(event.buffer), false);
                 break;
 
             case HostEvent::NetMessage:
@@ -1086,8 +963,14 @@ static void Hk_SteamAPI_RunCallbacks()
                 break;
 
             case HostEvent::MicroTransactionResponse:
-                runMicroTransactionResponse = true;
+            {
+                Platform::Print("Spoofing MicroTxnAuthorizationResponse_t\n");
+
+                MicroTxnAuthorizationResponse_t response{};
+                response.m_bAuthorized = 1; // only field the game cares about
+                s_callbackMgr.QueueCallback(response, false);
                 break;
+            }
 
             default:
                 assert(false);
@@ -1100,50 +983,24 @@ static void Hk_SteamAPI_RunCallbacks()
 
         // poll networking
         s_clientGC->m_networking.Update();
+    }
 
-        // run client gc callbacks
-        uint32_t messageSize;
-        if (s_clientGC->m_messageQueue.IsMessageAvailable(messageSize))
-        {
-            GCMessageAvailable_t param{};
-            param.m_nMessageSize = messageSize;
-            s_callbackHooks.RunCallback(false, GCMessageAvailable_t::k_iCallback, &param);
-        }
-
-        if (runMicroTransactionResponse)
-        {
-            Platform::Print("Running MicroTxnAuthorizationResponse_t\n");
-            MicroTxnAuthorizationResponse_t response{};
-            response.m_bAuthorized = 1; // only field the game cares about
-            s_callbackHooks.RunCallback(false, MicroTxnAuthorizationResponse_t::k_iCallback, &response);
-        }
-
-        if (s_userStatsReceivedCallbacks.size())
-        {
-            for (UserStatsReceived_t &data : s_userStatsReceivedCallbacks)
-            {
-                s_callbackHooks.RunCallback(false, UserStatsReceived_t::k_iCallback, &data);
-            }
-
-            s_userStatsReceivedCallbacks.clear();
-        }
+    static bool runningCallbacks;
+    if (!runningCallbacks)
+    {
+        runningCallbacks = true;
+        s_callbackMgr.RunCallbacks(false);
+        Og_SteamAPI_RunCallbacks();
+        runningCallbacks = false;
     }
 }
 
 static void Hk_SteamGameServer_RunCallbacks()
 {
-    Og_SteamGameServer_RunCallbacks();
-
-    if (s_serverGC)
+    // only run server gc when logged on as an attempt to more accurately mimic real gc behaviour
+    // FIXME: does csgo handle CMsgConnectionStatus?
+    if (s_serverGC && s_steamGameServer && s_steamGameServer->BLoggedOn())
     {
-        // only run server gc when logged on as an attempt to more accurately mimic real gc behaviour
-        // FIXME: does csgo handle CMsgConnectionStatus?
-        assert(s_steamGameServer);
-        if (!s_steamGameServer->BLoggedOn())
-        {
-            return;
-        }
-
         std::vector<EventData> events;
         s_serverGC->m_gc.GetHostEvents(events);
 
@@ -1153,7 +1010,7 @@ static void Hk_SteamGameServer_RunCallbacks()
             switch ((HostEvent)event.type)
             {
             case HostEvent::Message:
-                s_serverGC->m_messageQueue.AddMessage((uint32_t)event.id, std::move(event.buffer));
+                s_serverGC->m_messageQueue.AddMessage((uint32_t)event.id, std::move(event.buffer), true);
                 break;
 
             case HostEvent::NetMessage:
@@ -1170,17 +1027,17 @@ static void Hk_SteamGameServer_RunCallbacks()
             }
         }
 
-        // run server gc callbacks
-        uint32_t messageSize;
-        if (s_serverGC->m_messageQueue.IsMessageAvailable(messageSize))
-        {
-            GCMessageAvailable_t param{};
-            param.m_nMessageSize = messageSize;
-            s_callbackHooks.RunCallback(true, GCMessageAvailable_t::k_iCallback, &param);
-        }
-
         s_serverGC->m_networking.Update();
         s_serverGC->m_gc.PostToGC(GCEvent::Tick, 0, nullptr, 0);
+    }
+
+    static bool runningCallbacks;
+    if (!runningCallbacks)
+    {
+        runningCallbacks = true;
+        s_callbackMgr.RunCallbacks(true);
+        Og_SteamGameServer_RunCallbacks();
+        runningCallbacks = false;
     }
 }
 
