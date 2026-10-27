@@ -19,7 +19,7 @@ void CCallbackMgr::RegisterCallback(CCallbackBase *callback, int id)
         callback->m_iCallback = id;
     }
 
-    m_listeners.emplace_back(callback, false);
+    m_listeners.emplace_back(callback);
 }
 
 void CCallbackMgr::UnregisterCallback(CCallbackBase *callback)
@@ -39,7 +39,7 @@ void CCallbackMgr::UnregisterCallback(CCallbackBase *callback)
     {
         if (listener.callback == callback)
         {
-            listener.removed = true;
+            listener.callback = nullptr;
         }
     }
 }
@@ -65,13 +65,6 @@ bool CCallbackMgr::SkipSteamRegistration(int id)
 
 void CCallbackMgr::RunCallbacks(bool gameServer)
 {
-    if (m_runningCallbacks)
-    {
-        return;
-    }
-
-    m_runningCallbacks = true;
-
     auto &events = gameServer ? m_eventsGameServer : m_events;
     size_t eventCount = events.size();
 
@@ -83,7 +76,7 @@ void CCallbackMgr::RunCallbacks(bool gameServer)
         for (size_t j = 0; j < listenerCount; j++)
         {
             CallbackListener listener = m_listeners[j];
-            if (listener.removed)
+            if (!listener.callback)
             {
                 // no longer presenet
                 continue;
@@ -102,7 +95,5 @@ void CCallbackMgr::RunCallbacks(bool gameServer)
     events.erase(events.begin(), events.begin() + eventCount);
 
     std::erase_if(m_listeners, [](const auto &listener)
-        { return listener.removed; });
-
-    m_runningCallbacks = false;
+        { return !listener.callback; });
 }

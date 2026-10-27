@@ -52,6 +52,7 @@ static ISteamClient *s_actualSteamClient;
 // FIXME: this can be factored out!!! legacy trauma for global gc insstances
 static HSteamPipe s_serverSteamPipe;
 
+// FIXME: this should be per pipe...
 static CCallbackMgr s_callbackMgr;
 
 // we also need to patch serverbrowser to allow for appids over 900...

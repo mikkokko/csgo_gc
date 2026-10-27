@@ -10,8 +10,8 @@ struct CallbackEvent
 
 struct CallbackListener
 {
+    // nullptr if removal queued
     CCallbackBase *callback;
-    bool removed;
 };
 
 class CCallbackMgr
@@ -35,8 +35,6 @@ public:
     }
 
 private:
-    bool m_runningCallbacks{};
-
     std::vector<CallbackEvent> m_events;
     std::vector<CallbackEvent> m_eventsGameServer;
     std::vector<CallbackListener> m_listeners;
