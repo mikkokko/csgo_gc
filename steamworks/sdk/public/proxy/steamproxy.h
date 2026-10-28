@@ -45,4 +45,16 @@ struct OrigOf<P>
 template<auto Pmf>
 auto MakeOrig(void *s) { return OrigOf<Pmf>::get(s); }
 
+template<class Sig>
+struct OrigFromSig;
+
+template<class Ret, class... Args>
+struct OrigFromSig<Ret(Args...)>
+{
+    using Type = Orig<Ret, Args...>;
+};
+
+#define PROXY_FUNC(ret, name, ...) \
+    ret name([[maybe_unused]] OrigFromSig<ret(__VA_ARGS__)>::Type original, ##__VA_ARGS__)
+
 #endif // STEAMPROXY_H

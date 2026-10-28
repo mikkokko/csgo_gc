@@ -63,14 +63,13 @@ bool CCallbackMgr::SkipSteamRegistration(int id)
     }
 }
 
-void CCallbackMgr::RunCallbacks(bool gameServer)
+void CCallbackMgr::RunCallbacks()
 {
-    auto &events = gameServer ? m_eventsGameServer : m_events;
-    size_t eventCount = events.size();
+    size_t eventCount = m_events.size();
 
     for (size_t i = 0; i < eventCount; i++)
     {
-        CallbackEvent event = std::move(events[i]);
+        CallbackEvent event = std::move(m_events[i]);
 
         size_t listenerCount = m_listeners.size();
         for (size_t j = 0; j < listenerCount; j++)
@@ -83,17 +82,20 @@ void CCallbackMgr::RunCallbacks(bool gameServer)
             }
 
             CCallbackBase *callback = listener.callback;
-            bool isGameServer = (callback->m_nCallbackFlags & CCallbackBase::k_ECallbackFlagsGameServer) != 0;
-
-            if (callback->m_iCallback == event.id && isGameServer == gameServer)
+            if (callback->m_iCallback == event.id)
             {
                 callback->Run(event.param.get());
             }
         }
     }
 
-    events.erase(events.begin(), events.begin() + eventCount);
+    m_events.erase(m_events.begin(), m_events.begin() + eventCount);
 
     std::erase_if(m_listeners, [](const auto &listener)
         { return !listener.callback; });
+}
+
+bool CCallbackMgr::IsGameServer(const CCallbackBase *callback)
+{
+    return callback->m_nCallbackFlags & CCallbackBase::k_ECallbackFlagsGameServer;
 }

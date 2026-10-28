@@ -42,7 +42,14 @@ add_library(csgo_gc STATIC
     networking_server.cpp
     random.cpp
     steam_callbacks.cpp
-    steam_hook.cpp)
+    steam_hook.cpp
+    steamgamecoordinatorproxy.cpp
+    steamgameserverproxy.cpp
+    steammatchmakingserversproxy.cpp
+    steampipecontext.cpp
+    steamuserproxy.cpp
+    steamuserstatsproxy.cpp
+    steamutilsproxy.cpp)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_sources(csgo_gc PRIVATE platform_windows.cpp)
