@@ -39,7 +39,6 @@ private:
         const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
     void SendInventoryChangeMessages(const InventoryChangeMessages &messages);
-    void SendMessageToServer(std::vector<uint8_t> &&buffer);
 
     void OnClientHello(GCMessageRead &messageRead);
     void OnMatchmakingHello();

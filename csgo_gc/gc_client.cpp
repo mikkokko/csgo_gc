@@ -292,15 +292,7 @@ void ClientGC::HandleSOCacheRequest()
     m_inventory.BuildCacheSubscription(message, GetConfig().m_level, true);
 
     GCMessageWrite messageWrite{ k_ESOMsg_CacheSubscribed, message };
-    SendMessageToServer(std::move(messageWrite).TakeBuffer());
-}
-
-void ClientGC::SendMessageToServer(std::vector<uint8_t> &&buffer)
-{
-    if (m_serverSteamId)
-    {
-        PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(buffer));
-    }
+    PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(messageWrite).TakeBuffer());
 }
 
 void ClientGC::InventoryUpdate()
@@ -317,9 +309,9 @@ void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
 {
     GCMessageWrite messageWrite{ type, message, jobId };
 
-    if (sendToGameServer)
+    if (sendToGameServer && m_serverSteamId)
     {
-        SendMessageToServer(messageWrite.CopyBuffer());
+        PostToHost(HostEvent::NetMessage, m_serverSteamId, messageWrite.CopyBuffer());
     }
 
     uint32_t typeMasked = messageWrite.TypeMasked();
@@ -340,15 +332,13 @@ void ClientGC::SendInventoryChangeMessages(const InventoryChangeMessages &result
 
     if (result.updatedClient.objects_modified_size())
     {
-        GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedClient };
-        uint32_t typeMasked = messageWrite.TypeMasked();
-        PostToHost(HostEvent::Message, typeMasked, std::move(messageWrite).TakeBuffer());
+        SendMessageToGame(false, k_ESOMsg_UpdateMultiple, result.updatedClient);
     }
 
-    if (result.updatedGameServer.objects_modified_size())
+    if (result.updatedGameServer.objects_modified_size() && m_serverSteamId)
     {
         GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedGameServer };
-        SendMessageToServer(std::move(messageWrite).TakeBuffer());
+        PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(messageWrite).TakeBuffer());
     }
 
     if (result.notification.has_request())
@@ -593,27 +583,30 @@ void ClientGC::SetItemPositions(GCMessageRead &messageRead)
 
     InventoryChangeMessages messages = m_inventory.SetItemPositions(message, acknowledgements);
 
-    for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
+    // send these to the server only
+    if (m_serverSteamId)
     {
-        // send these to the server only
+        for (const CMsgItemAcknowledged &acknowledgement : acknowledgements)
         {
-            GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
-            SendMessageToServer(std::move(messageWrite).TakeBuffer());
-        }
+            {
+                GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged, acknowledgement };
+                PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(messageWrite).TakeBuffer());
+            }
 
-        // support for older builds...
-        {
-            CMsgItemAcknowledged__DEPRECATED deprecated;
-            deprecated.set_account_id(acknowledgement.iteminfo().accountid());
-            deprecated.set_inventory(acknowledgement.iteminfo().inventory());
-            deprecated.set_def_index(acknowledgement.iteminfo().defindex());
-            deprecated.set_quality(acknowledgement.iteminfo().quality());
-            deprecated.set_rarity(acknowledgement.iteminfo().rarity());
-            deprecated.set_origin(acknowledgement.iteminfo().origin());
-            deprecated.set_item_id(acknowledgement.iteminfo().itemid());
+            // support for older builds...
+            {
+                CMsgItemAcknowledged__DEPRECATED deprecated;
+                deprecated.set_account_id(acknowledgement.iteminfo().accountid());
+                deprecated.set_inventory(acknowledgement.iteminfo().inventory());
+                deprecated.set_def_index(acknowledgement.iteminfo().defindex());
+                deprecated.set_quality(acknowledgement.iteminfo().quality());
+                deprecated.set_rarity(acknowledgement.iteminfo().rarity());
+                deprecated.set_origin(acknowledgement.iteminfo().origin());
+                deprecated.set_item_id(acknowledgement.iteminfo().itemid());
 
-            GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged__DEPRECATED, deprecated };
-            SendMessageToServer(std::move(messageWrite).TakeBuffer());
+                GCMessageWrite messageWrite{ k_EMsgGCItemAcknowledged__DEPRECATED, deprecated };
+                PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(messageWrite).TakeBuffer());
+            }
         }
     }
 
