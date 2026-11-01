@@ -3,25 +3,17 @@
 #include "gcsdk_gcmessages.pb.h"
 #include "econ_gcmessages.pb.h"
 
-struct SingleObject
+struct SOCacheMessages
 {
-    CMsgSOSingleObject proto;
-    bool sendToGameServer;
+    std::vector<CMsgSOSingleObject> created;
+    std::vector<CMsgSOSingleObject> destroyed;
+    CMsgSOMultipleObjects updated;
 };
 
-// this should be revisited later... these semantics
-// are not exactly correct, but it'll do for now
 struct InventoryChangeMessages
 {
-    // full shared object cache update for clients
-    CMsgSOMultipleObjects updatedClient;
-
-    // janky... same as above but only contains equipped items
-    CMsgSOMultipleObjects updatedGameServer;
-
-    // client, or both client and game server
-    std::vector<SingleObject> created;
-    std::vector<SingleObject> destroyed;
+    SOCacheMessages client;
+    SOCacheMessages gameServer;
 
     // client only
     CMsgGCItemCustomizationNotification notification;

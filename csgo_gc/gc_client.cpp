@@ -255,6 +255,9 @@ void ClientGC::ClearAuthTicket(uint32_t handle)
         {
             Platform::Print("ClientGC: clearing gs identity\n");
             m_serverSteamId = 0;
+
+            // kind of cringe to store this in inventory...
+            m_inventory.ResetGameServerCache();
         }
     }
 
@@ -304,42 +307,46 @@ void ClientGC::InventoryUpdate()
     }
 }
 
-void ClientGC::SendMessageToGame(bool sendToGameServer, uint32_t type,
-    const google::protobuf::MessageLite &message, uint64_t jobId)
+void ClientGC::SendMessageToGame(bool server, uint32_t type, const google::protobuf::MessageLite &message, uint64_t jobId)
 {
     GCMessageWrite messageWrite{ type, message, jobId };
 
-    if (sendToGameServer && m_serverSteamId)
+    if (server)
     {
-        PostToHost(HostEvent::NetMessage, m_serverSteamId, messageWrite.CopyBuffer());
+        if (m_serverSteamId)
+        {
+            PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(messageWrite).TakeBuffer());
+        }
+    }
+    else
+    {
+        uint32_t typeMasked = messageWrite.TypeMasked();
+        PostToHost(HostEvent::Message, typeMasked, std::move(messageWrite).TakeBuffer());
+    }
+}
+
+void ClientGC::SendSOCacheMessages(const SOCacheMessages &messages, bool server)
+{
+    for (const CMsgSOSingleObject &destroyed : messages.destroyed)
+    {
+        SendMessageToGame(server, k_ESOMsg_Destroy, destroyed);
     }
 
-    uint32_t typeMasked = messageWrite.TypeMasked();
-    PostToHost(HostEvent::Message, typeMasked, std::move(messageWrite).TakeBuffer());
+    for (const CMsgSOSingleObject &created : messages.created)
+    {
+        SendMessageToGame(server, k_ESOMsg_Create, created);
+    }
+
+    if (messages.updated.objects_modified_size())
+    {
+        SendMessageToGame(server, k_ESOMsg_UpdateMultiple, messages.updated);
+    }
 }
 
 void ClientGC::SendInventoryChangeMessages(const InventoryChangeMessages &result)
 {
-    for (const SingleObject &destroyed : result.destroyed)
-    {
-        SendMessageToGame(destroyed.sendToGameServer, k_ESOMsg_Destroy, destroyed.proto);
-    }
-
-    for (const SingleObject &created : result.created)
-    {
-        SendMessageToGame(created.sendToGameServer, k_ESOMsg_Create, created.proto);
-    }
-
-    if (result.updatedClient.objects_modified_size())
-    {
-        SendMessageToGame(false, k_ESOMsg_UpdateMultiple, result.updatedClient);
-    }
-
-    if (result.updatedGameServer.objects_modified_size() && m_serverSteamId)
-    {
-        GCMessageWrite messageWrite{ k_ESOMsg_UpdateMultiple, result.updatedGameServer };
-        PostToHost(HostEvent::NetMessage, m_serverSteamId, std::move(messageWrite).TakeBuffer());
-    }
+    SendSOCacheMessages(result.client, false);
+    SendSOCacheMessages(result.gameServer, true);
 
     if (result.notification.has_request())
     {

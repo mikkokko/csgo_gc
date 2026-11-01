@@ -60,5 +60,5 @@ private:
     std::unique_ptr<SteamGameServerProxy> m_proxySteamGameServer;
     std::unique_ptr<SteamUserProxy> m_proxySteamUser;
     std::unique_ptr<SteamMatchmakingServersProxy> m_proxySteamMatchmakingServers;
-    std::unordered_map<std::string, InterfaceProxy> m_interfaces;
+    StringMap<InterfaceProxy> m_interfaces;
 };

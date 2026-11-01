@@ -149,7 +149,6 @@ public:
         {
             if (attribute.DefIndex() == defIndex)
             {
-
                 return attribute.ValueAs<T>();
             }
         }

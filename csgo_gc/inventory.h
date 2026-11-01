@@ -17,6 +17,13 @@ enum EGCItemCustomizationNotification : int;
 
 class InventoryModify;
 struct InventoryChangeMessages;
+struct SOCacheMessages;
+
+struct SOCacheState
+{
+    bool subscribed{};
+    std::unordered_set<uint64_t> items;
+};
 
 class Inventory
 {
@@ -47,6 +54,13 @@ public:
     InventoryChangeMessages SetItemPositions(const CMsgSetItemPositions &message, std::vector<CMsgItemAcknowledged> &acknowledgements);
     InventoryChangeMessages PurchaseItems(const std::vector<uint32_t> &defIndexes, std::vector<uint64_t> &itemIds);
 
+    // FIXME: unfuck this!!!
+    void ResetGameServerCache()
+    {
+        m_gameServerCache.subscribed = false;
+        m_gameServerCache.items.clear();
+    }
+
 private:
     uint32_t AccountId() const;
 
@@ -55,6 +69,12 @@ private:
         InventoryModify &modify,
         std::optional<EGCItemCustomizationNotification> customizationType = std::nullopt,
         std::initializer_list<uint64_t> customizationItemIds = {});
+
+    void BuildSOCacheMessages(
+        const InventoryModify &modify,
+        SOCacheState &state,
+        SOCacheMessages &messages,
+        bool server);
 
     // allocates an unique low item id
     // pass zero as lowItemId if you don't want a specific one
@@ -86,7 +106,7 @@ private:
     void SendFullInventoryToEditor();
     void SendChangesToEditor(const InventoryModify &modify);
 
-    void RemoveCachedIcon(uint32_t lowId) const;
+    void RemoveCachedIcon(uint32_t lowId);
 
     const uint64_t m_steamId;
     ItemSchema m_itemSchema;
@@ -96,8 +116,13 @@ private:
     std::unordered_map<uint64_t, Item> m_items;
     std::vector<DefaultEquip> m_defaultEquips;
 
+    SOCacheState m_clientCache;
+    SOCacheState m_gameServerCache;
+
     InventoryEditor m_editor;
 
     // stupid hack since we don't want to show casketed items in the editor
     std::unordered_set<uint32_t> m_editorVisibleItems;
+
+    int m_iconCacheVersion{ -1 };
 };

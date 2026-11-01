@@ -2,6 +2,7 @@
 
 #include "gc_const_csgo.h"
 #include "item_schema_const.h"
+#include "item.h" // FIXME: avoid dragging this in...
 
 class KeyValue;
 
@@ -14,12 +15,10 @@ enum class AttributeType
     String
 };
 
-class AttributeInfo
+struct ItemAttributeInfo
 {
-public:
-    explicit AttributeInfo(const KeyValue &key);
-
-    AttributeType m_type;
+    AttributeDefIndex defIndex;
+    ItemAttributeValue value;
 };
 
 class ItemInfo
@@ -33,12 +32,13 @@ public:
     Rarity m_rarity;
     Quality m_quality;
     uint32_t m_level;
-    uint32_t m_supplyCrateSeries; // cases only
     bool m_isCoupon;
     bool m_isSelfOpeningPurchase;
     uint32_t m_storageIcon; // rio2022 caskets only...
     std::string m_lootListName;
     bool m_willProduceStatTrak;
+
+    std::vector<ItemAttributeInfo> m_attributes;
 };
 
 class PaintKitInfo
@@ -87,10 +87,12 @@ struct LootListItem
     const ItemInfo *itemInfo{};
     LootListItemType type{ LootListItemNoAttribute };
 
-    // these could be sticked into a variant to save a grand total of few bytes
-    const PaintKitInfo *paintKitInfo{};
-    const StickerKitInfo *stickerKitInfo{};
-    const MusicDefinitionInfo *musicDefinitionInfo{};
+    // paint/sticker/music kit
+    uint32_t kitDefIndex{};
+
+    // paint kit wear
+    float minFloat{};
+    float maxFloat{};
 
     // might differ from those specified in itemInfo
     // (based on paint kits, stattrak etc.)
@@ -134,6 +136,7 @@ public:
 private:
     void ParseItems(const KeyValue *itemsKey, const KeyValue *prefabsKey);
     void ParseItemRecursive(ItemInfo &info, const KeyValue &itemKey, const KeyValue *prefabsKey);
+    void ParseItemAttribute(ItemInfo &itemInfo, const KeyValue &attributeKey);
     void ParseAttributes(const KeyValue *attributesKey);
     void ParseStickerKits(const KeyValue *stickerKitsKey);
     void ParsePaintKits(const KeyValue *paintKitsKey);
@@ -145,18 +148,21 @@ private:
     bool ParseLootListItem(LootListItem &item, std::string_view name);
 
     // internal slop
-    ItemInfo *ItemInfoByName(std::string_view name, bool allowFail);
+    ItemInfo *ItemInfoByName(std::string_view name);
     StickerKitInfo *StickerKitInfoByName(std::string_view name);
     PaintKitInfo *PaintKitInfoByName(std::string_view name);
     MusicDefinitionInfo *MusicDefinitionInfoByName(std::string_view name);
 
     std::unordered_map<ItemDefIndex, ItemInfo> m_itemInfo;
-    std::unordered_map<AttributeDefIndex, AttributeInfo> m_attributeInfo;
+    std::unordered_map<AttributeDefIndex, AttributeType> m_attributeTypes;
 
-    std::unordered_map<std::string, StickerKitInfo> m_stickerKitInfo;
-    std::unordered_map<std::string, PaintKitInfo> m_paintKitInfo;
-    std::unordered_map<std::string, MusicDefinitionInfo> m_musicDefinitionInfo;
-    std::unordered_map<std::string, LootList> m_lootLists;
+    // these shouldn't be needed at runtime, need to try factoring out later
+    StringMap<AttributeDefIndex> m_attributeDefIndexes;
+    StringMap<StickerKitInfo> m_stickerKitInfo;
+    StringMap<PaintKitInfo> m_paintKitInfo;
+    StringMap<MusicDefinitionInfo> m_musicDefinitionInfo;
+
+    StringMap<LootList> m_lootLists;
 
     std::unordered_map<uint32_t, const LootList &> m_revolvingLootLists;
 };

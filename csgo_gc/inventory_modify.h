@@ -9,12 +9,6 @@ enum class ItemChangeType
     Destroyed
 };
 
-struct ItemChange
-{
-    ItemChangeType type;
-    bool gameServerDirty;
-};
-
 enum class AttributeIncrement
 {
     Ok,
@@ -38,8 +32,8 @@ public:
     }
 
     // manual bookkeeping
-    void MarkItemCreated(uint32_t lowId, bool gameServerDirty);
-    void MarkItemDestroyed(uint32_t lowId, bool gameServerDirty);
+    void MarkItemCreated(uint32_t lowId);
+    void MarkItemDestroyed(uint32_t lowId);
     void MarkDefaultEquipChanged(const DefaultEquip &defaultEquip);
 
     // full update from the editor, except for equips as those need manual handling
@@ -62,9 +56,9 @@ public:
     // schizo debug
     bool m_finished{ false };
 
-    std::unordered_map<uint32_t, ItemChange> m_itemChanges;
+    std::unordered_map<uint32_t, ItemChangeType> m_itemChanges;
     std::vector<DefaultEquip> m_defaultEquipChanges;
 
 private:
-    void MarkUpdatedInternal(uint32_t lowId, bool gameServerDirty);
+    void MarkUpdatedInternal(uint32_t lowId);
 };

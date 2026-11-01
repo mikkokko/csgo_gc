@@ -8,8 +8,10 @@ template<typename T>
 inline T FromString(std::string_view string)
 {
     T value;
-    std::from_chars_result result = std::from_chars(string.data(), string.data() + string.size(), value);
-    if (result.ec != std::errc{})
+    const char *begin = string.data();
+    const char *end = string.data() + string.size();
+    std::from_chars_result result = std::from_chars(begin, end, value);
+    if (result.ec != std::errc{} || result.ptr != end)
     {
         assert(false);
         return 0;

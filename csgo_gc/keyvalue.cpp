@@ -336,7 +336,7 @@ bool KeyValue::Dedupe(std::vector<size_t> &order, std::vector<bool> &removed)
         order[i] = i;
     }
 
-    auto predicate = [subkeys](size_t a, size_t b)
+    auto predicate = [&subkeys](size_t a, size_t b)
     {
         auto compare = subkeys[a].m_name.compare(subkeys[b].m_name);
         return compare ? (compare < 0) : (a < b);

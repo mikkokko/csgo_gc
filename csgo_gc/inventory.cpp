@@ -188,57 +188,8 @@ InventoryChangeMessages Inventory::FinishChanges(
         m_version++;
     }
 
-    for (auto [lowId, change] : modify.m_itemChanges)
-    {
-        uint64_t itemId = ComposeItemId(AccountId(), lowId);
-
-        if (change.type == ItemChangeType::Destroyed)
-        {
-            assert(!FindItem(itemId));
-
-            CSOEconItem econItem;
-            econItem.set_id(itemId);
-
-            SingleObject &object = messages.destroyed.emplace_back();
-            object.sendToGameServer = change.gameServerDirty;
-            ToSingleObject(object.proto, SOTypeItem, econItem);
-            continue;
-        }
-
-        Item *item = FindItem(itemId);
-        if (!item)
-        {
-            assert(false);
-            continue;
-        }
-
-        CSOEconItem econItem;
-        item->ToCSOEconItem(econItem, AccountId(), m_itemSchema, m_oldProtocol);
-
-        if (change.type == ItemChangeType::Created)
-        {
-            SingleObject &object = messages.created.emplace_back();
-            object.sendToGameServer = change.gameServerDirty;
-            ToSingleObject(object.proto, SOTypeItem, econItem);
-        }
-        else
-        {
-            AddToMultipleObjects(messages.updatedClient, SOTypeItem, econItem);
-
-            if (change.gameServerDirty)
-            {
-                AddToMultipleObjects(messages.updatedGameServer, SOTypeItem, econItem);
-            }
-        }
-    }
-
-    for (const DefaultEquip &defaultEquip : modify.m_defaultEquipChanges)
-    {
-        CSOEconDefaultEquippedDefinitionInstanceClient proto;
-        DefaultEquipToProto(proto, defaultEquip, AccountId());
-        AddToMultipleObjects(messages.updatedClient, SOTypeDefaultEquippedDefinitionInstanceClient, proto);
-        AddToMultipleObjects(messages.updatedGameServer, SOTypeDefaultEquippedDefinitionInstanceClient, proto);
-    }
+    BuildSOCacheMessages(modify, m_clientCache, messages.client, false);
+    BuildSOCacheMessages(modify, m_gameServerCache, messages.gameServer, true);
 
     if (customizationType.has_value())
     {
@@ -256,6 +207,70 @@ InventoryChangeMessages Inventory::FinishChanges(
     modify.m_finished = true;
 
     return messages;
+}
+
+void Inventory::BuildSOCacheMessages(
+    const InventoryModify &modify,
+    SOCacheState &state,
+    SOCacheMessages &messages,
+    bool server)
+{
+    if (!state.subscribed)
+    {
+        return;
+    }
+
+    for (auto [lowId, change] : modify.m_itemChanges)
+    {
+        uint64_t itemId = ComposeItemId(AccountId(), lowId);
+
+        if (change == ItemChangeType::Destroyed)
+        {
+            assert(!FindItem(itemId));
+            if (state.items.erase(itemId))
+            {
+                CSOEconItem econItem;
+                econItem.set_id(itemId);
+                ToSingleObject(messages.destroyed.emplace_back(), SOTypeItem, econItem);
+            }
+
+            continue;
+        }
+
+        Item *item = FindItem(itemId);
+        if (!item)
+        {
+            assert(false);
+            continue;
+        }
+
+        // keep items in the server socache even if they get unequipped later
+        if (server && !item->HasEquips() && !state.items.contains(itemId))
+        {
+            continue;
+        }
+
+        CSOEconItem econItem;
+        item->ToCSOEconItem(econItem, AccountId(), m_itemSchema, m_oldProtocol);
+
+        if (state.items.insert(itemId).second)
+        {
+            ToSingleObject(messages.created.emplace_back(), SOTypeItem, econItem);
+        }
+        else
+        {
+            AddToMultipleObjects(messages.updated, SOTypeItem, econItem);
+        }
+    }
+
+    for (const DefaultEquip &defaultEquip : modify.m_defaultEquipChanges)
+    {
+        CSOEconDefaultEquippedDefinitionInstanceClient proto;
+        DefaultEquipToProto(proto, defaultEquip, AccountId());
+
+        // always create these, not sure if strictly needed for old builds but no harm in doing it
+        ToSingleObject(messages.created.emplace_back(), SOTypeDefaultEquippedDefinitionInstanceClient, proto);
+    }
 }
 
 void Inventory::AddToMultipleObjects(CMsgSOMultipleObjects &message, SOTypeId type, const google::protobuf::MessageLite &object)
@@ -356,7 +371,7 @@ Item &Inventory::CreateItem(InventoryModify &modify, ItemDesc &&desc)
     auto [it, inserted] = m_items.try_emplace(itemId, lowId, std::move(desc));
     assert(inserted);
 
-    modify.MarkItemCreated(lowId, it->second.HasEquips());
+    modify.MarkItemCreated(lowId);
 
     // new item: if a cached icon exists, it's because
     // of item id reuse and the icon is likely wrong
@@ -466,6 +481,10 @@ void Inventory::WriteToFile() const
 
 void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level, bool server)
 {
+    SOCacheState &state = server ? m_gameServerCache : m_clientCache;
+    state.subscribed = true;
+    state.items.clear();
+
     message.set_owner(m_steamId); // for old builds
     message.set_version(m_version);
     message.mutable_owner_soid()->set_type(SoIdTypeSteamId);
@@ -485,6 +504,7 @@ void Inventory::BuildCacheSubscription(CMsgSOCacheSubscribed &message, int level
             CSOEconItem serialized;
             pair.second.ToCSOEconItem(serialized, AccountId(), m_itemSchema, m_oldProtocol);
             serialized.SerializeToString(object->add_object_data());
+            state.items.insert(pair.first);
         }
     }
 
@@ -1136,12 +1156,11 @@ bool Inventory::DestroyItemById(InventoryModify &modify, uint64_t itemId)
         }
     }
 
-    bool hadEquips = item.HasEquips();
     m_items.erase(it);
 
     RemoveCachedIcon(static_cast<uint32_t>(itemId));
 
-    modify.MarkItemDestroyed(static_cast<uint32_t>(itemId), hadEquips);
+    modify.MarkItemDestroyed(static_cast<uint32_t>(itemId));
     return true;
 }
 
@@ -1155,12 +1174,49 @@ void Inventory::DestroyItem(InventoryModify &modify, Item *item)
     }
 }
 
-void Inventory::RemoveCachedIcon(uint32_t lowId) const
+static bool RemoveCachedIconVersion(int version, uint32_t highId, uint32_t lowId)
 {
-    // FIXME: first value depends on game version
-    std::string path = std::format("csgo/resource/flash/econ/weapons/cached/13-{:x}-{:x}.iic", HighItemIdFromAccountId(AccountId()), lowId);
-    if (Platform::RemoveFile(path.c_str()))
+    char path[128];
+
+    auto result = std::format_to_n(
+        path,
+        sizeof(path) - 1,
+        "csgo/resource/flash/econ/weapons/cached/{:x}-{:x}-{:x}.iic",
+        version,
+        highId,
+        lowId);
+
+    assert(result.size < sizeof(path));
+    *result.out = '\0';
+
+    if (Platform::RemoveFile(path))
     {
         Platform::Print("Deleted {}\n", path);
+        return true;
+    }
+
+    return false;
+}
+
+void Inventory::RemoveCachedIcon(uint32_t lowId)
+{
+    uint32_t highId = HighItemIdFromAccountId(AccountId());
+
+    if (m_iconCacheVersion >= 0)
+    {
+        RemoveCachedIconVersion(m_iconCacheVersion, highId, lowId);
+        return;
+    }
+
+    constexpr int MinVersion = 0x6;
+    constexpr int MaxVersion = 0x13;
+
+    for (int i = MaxVersion; i >= MinVersion; i--)
+    {
+        if (RemoveCachedIconVersion(i, highId, lowId))
+        {
+            m_iconCacheVersion = i;
+            break;
+        }
     }
 }

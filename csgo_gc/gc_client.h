@@ -34,10 +34,11 @@ private:
     void HandleSOCacheRequest();
     void InventoryUpdate();
 
-    // send to the local game and the game server we're connected to (if we're connected)
-    void SendMessageToGame(bool sendToGameServer, uint32_t type,
+    // send to either the local game or the game server we're connected to
+    void SendMessageToGame(bool server, uint32_t type,
         const google::protobuf::MessageLite &message, uint64_t jobId = JobIdInvalid);
 
+    void SendSOCacheMessages(const SOCacheMessages &messages, bool server);
     void SendInventoryChangeMessages(const InventoryChangeMessages &messages);
 
     void OnClientHello(GCMessageRead &messageRead);

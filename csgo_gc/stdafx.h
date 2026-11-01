@@ -36,17 +36,6 @@ template<typename Enum>
     return static_cast<Enum>(value);
 }
 
-#include "base_gcmessages.pb.h"
-#include "cstrike15_gcmessages.pb.h"
-#include "econ_gcmessages.pb.h"
-#include "engine_gcmessages.pb.h"
-#include "gcsdk_gcmessages.pb.h"
-#include "gcsystemmsgs.pb.h"
-#include "steammessages.pb.h"
-
-// used in many files for logging
-#include "platform.h"
-
 // the struct name should make it obvious what it does
 template<class... T>
 struct Bruh : T...
@@ -65,3 +54,27 @@ public:
     NonCopyable &operator=(const NonCopyable &) = delete;
     NonCopyable &operator=(NonCopyable &&) = delete;
 };
+
+struct StringHash
+{
+    using is_transparent = void;
+
+    size_t operator()(std::string_view s) const noexcept
+    {
+        return std::hash<std::string_view>{}(s);
+    }
+};
+
+template<typename T>
+using StringMap = std::unordered_map<std::string, T, StringHash, std::equal_to<>>;
+
+#include "base_gcmessages.pb.h"
+#include "cstrike15_gcmessages.pb.h"
+#include "econ_gcmessages.pb.h"
+#include "engine_gcmessages.pb.h"
+#include "gcsdk_gcmessages.pb.h"
+#include "gcsystemmsgs.pb.h"
+#include "steammessages.pb.h"
+
+// used in many files for logging
+#include "platform.h"

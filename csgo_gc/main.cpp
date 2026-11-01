@@ -5,7 +5,7 @@
 
 void InstallGC(bool dedicated)
 {
-    LoadConfig();
     Platform::Initialize();
+    LoadConfig();
     SteamHookInstall(dedicated);
 }
