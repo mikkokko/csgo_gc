@@ -79,6 +79,7 @@ enum ItemOrigin
 {
     ItemOriginDropped = 0,
     ItemOriginPurchased = 2,
+    ItemOriginCrafted = 4,
     ItemOriginCrate = 8,
     ItemOriginBaseItem = 22
 };

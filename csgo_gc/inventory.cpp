@@ -6,6 +6,7 @@
 #include "inventory_messages.h"
 #include "inventory_modify.h"
 #include "keyvalue.h"
+#include "random.h"
 
 #include "base_gcmessages.pb.h"
 #include "cstrike15_gcmessages.pb.h"
@@ -710,11 +711,11 @@ InventoryChangeMessages Inventory::SetItemPositions(
         uint64_t itemId = position.has_item_id() ? position.item_id() : ComposeItemId(AccountId(), position.legacy_item_id());
         Item *item = FindItem(itemId);
 
-        Platform::Print("SetItemPositions: {} --> {}\n", itemId, position.position());
-        modify.SetItemInventory(*item, position.position());
-
         CMsgItemAcknowledged &acknowledgement = acknowledgements.emplace_back();
         item->ToEconItemPreviewDataBlock(*acknowledgement.mutable_iteminfo(), AccountId());
+
+        Platform::Print("SetItemPositions: {} --> {}\n", itemId, position.position());
+        modify.SetItemInventory(*item, position.position());
     }
 
     return FinishChanges(modify);
@@ -1039,6 +1040,133 @@ InventoryChangeMessages Inventory::CasketItemExtract(uint64_t casketId, uint64_t
     modify.RemoveItemAttributes(*target, { AttributeDefIndex::CasketIdLow, AttributeDefIndex::CasketIdHigh });
 
     return FinishChanges(modify, k_EGCItemCustomizationNotification_CasketRemoved, { casketId });
+}
+
+constexpr size_t CraftInputItemCount = 10;
+
+// get the item set the item belongs to
+static const ItemSet *GetItemSet(const Item &item, const ItemSchema &itemSchema)
+{
+    uint32_t paintKit = static_cast<uint32_t>(item.GetAttributeValue<float>(AttributeDefIndex::TexturePrefab));
+    assert(paintKit); // FIXME: allow unpainted? why not
+    return itemSchema.ItemSetFromItemAndKit(item.DefIndex(), paintKit);
+}
+
+static std::span<const LootListItem> RaritySpan(std::span<const LootListItem> items, Rarity rarity)
+{
+    assert(std::is_sorted(items.begin(), items.end(), [](const LootListItem &a, const LootListItem &b)
+        { return a.CaseRarity() < b.CaseRarity(); }));
+
+    auto first = items.begin();
+    while (first->rarity != rarity)
+    {
+        first++;
+    }
+
+    auto last = first + 1;
+    while (last != items.end() && last->rarity == rarity)
+    {
+        last++;
+    }
+
+    return { first, last };
+}
+
+static bool SelectCraftOutputItem(const Item *(&inputItems)[CraftInputItemCount], const ItemSchema &itemSchema, ItemDesc &outputDesc)
+{
+    size_t total = 0;
+    std::span<const LootListItem> lists[CraftInputItemCount];
+
+    // assume that the game validated these...
+    Rarity rarity = ToEnum<Rarity>(FromEnum(inputItems[0]->GetRarity()) + 1u);
+
+    // select the output item by getting all eligible ones, and then picking one
+    for (size_t i = 0; i < CraftInputItemCount; i++)
+    {
+        const ItemSet *set = GetItemSet(*inputItems[i], itemSchema);
+        if (!set)
+        {
+            assert(0);
+            return false;
+        }
+
+        lists[i] = RaritySpan(set->items, rarity);
+        total += lists[i].size();
+    }
+
+    size_t index = Random::Uint32(0, static_cast<uint32_t>(total - 1));
+    const LootListItem *selected = nullptr;
+
+    for (std::span<const LootListItem> list : lists)
+    {
+        if (index < list.size())
+        {
+            selected = &list[index];
+            break;
+        }
+
+        index -= list.size();
+    }
+
+    assert(selected);
+
+    // GetCraftOutput will set the wear as lerp(minWear, maxWear, averageWear)
+    float averageWear = 0.0f;
+
+    for (const Item *item : inputItems)
+    {
+        // don't bother checking if the attribute exists
+        averageWear += item->GetAttributeValue<float>(AttributeDefIndex::TextureWear);
+    }
+
+    averageWear /= CraftInputItemCount;
+
+    bool statTrak = inputItems[0]->HasAttribute(AttributeDefIndex::KillEater);
+
+    return itemSchema.GetCraftOutput(*selected, averageWear, statTrak, outputDesc);
+}
+
+InventoryChangeMessages Inventory::CraftItem(std::span<const uint64_t> inputItemIds, uint64_t &outputItemId)
+{
+    if (inputItemIds.size() != CraftInputItemCount)
+    {
+        assert(0);
+        return {};
+    }
+
+    // just resolve them all...
+    const Item *inputItems[CraftInputItemCount]{};
+    for (size_t i = 0; i < CraftInputItemCount; i++)
+    {
+        inputItems[i] = FindItem(inputItemIds[i]);
+        if (!inputItems[i])
+        {
+            assert(0);
+            return {};
+        }
+    }
+
+    ItemDesc outputDesc;
+    if (!SelectCraftOutputItem(inputItems, m_itemSchema, outputDesc))
+    {
+        assert(0);
+        return {};
+    }
+
+    InventoryModify modify;
+
+    Item &outputItem = CreateItem(modify, std::move(outputDesc));
+    outputItemId = outputItem.FullIdFor(AccountId());
+
+    if (GetConfig().m_destroyUsedItems)
+    {
+        for (uint64_t id : inputItemIds)
+        {
+            DestroyItemById(modify, id);
+        }
+    }
+
+    return FinishChanges(modify);
 }
 
 InventoryChangeMessages Inventory::PurchaseItems(const std::vector<uint32_t> &defIndexes, std::vector<uint64_t> &itemIds)

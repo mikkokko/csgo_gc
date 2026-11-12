@@ -161,6 +161,10 @@ void ClientGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
     {
         switch (messageRead.TypeUnmasked())
         {
+        case k_EMsgGCCraft:
+            CraftItem(messageRead);
+            break;
+
         case k_EMsgGCDelete:
             DeleteItem(messageRead);
             break;
@@ -825,6 +829,36 @@ void ClientGC::OnPartyRegister(GCMessageRead &messageRead)
     response.set_game_type(message.game_type());
 
     SendMessageToGame(false, k_EMsgGCCStrike15_v2_Party_Register, response);
+}
+
+void ClientGC::CraftItem(GCMessageRead &messageRead)
+{
+    /*uint16_t recipeDefIndex =*/messageRead.ReadUint16();
+    uint16_t itemIdCount = messageRead.ReadUint16();
+    const void *itemIdsPtr = messageRead.ReadData(itemIdCount * sizeof(uint64_t));
+    if (!messageRead.IsValid())
+    {
+        Platform::Print("Parsing CMsgGCCraft failed, ignoring\n");
+        return;
+    }
+
+    auto itemIds = std::make_unique_for_overwrite<uint64_t[]>(itemIdCount);
+    memcpy(itemIds.get(), itemIdsPtr, itemIdCount * sizeof(uint64_t));
+
+    uint64_t outputItemId;
+    InventoryChangeMessages messages = m_inventory.CraftItem({ itemIds.get(), itemIdCount }, outputItemId);
+    SendInventoryChangeMessages(messages);
+
+    {
+        GCMessageWrite craftResponse{ k_EMsgGCCraftResponse };
+        craftResponse.WriteUint32(0); // wtf
+        craftResponse.WriteUint16(0); // wtf
+        craftResponse.WriteUint16(1); // item count
+        craftResponse.WriteUint64(outputItemId);
+
+        uint32_t typeMasked = craftResponse.TypeMasked();
+        PostToHost(HostEvent::Message, typeMasked, std::move(craftResponse).TakeBuffer());
+    }
 }
 
 void ClientGC::DeleteItem(GCMessageRead &messageRead)

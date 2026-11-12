@@ -183,7 +183,7 @@ bool CaseOpening::ShouldMakeStatTrak(const LootListItem &item, const LootList &l
 
     // unusual stattraks only valid below id 1000
     if (item.quality == Quality::Unusual
-        && item.itemInfo->m_defIndex >= ToEnum<ItemDefIndex>(1000u))
+        && item.itemDefIndex >= ToEnum<ItemDefIndex>(1000u))
     {
         return false;
     }

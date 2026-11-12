@@ -44,7 +44,7 @@ public:
 class PaintKitInfo
 {
 public:
-    explicit PaintKitInfo(const KeyValue &key);
+    explicit PaintKitInfo(const KeyValue &key, float fallbackMinFloat, float fallbackMaxFloat);
 
     uint32_t m_defIndex;
     Rarity m_rarity;
@@ -84,7 +84,7 @@ struct LootListItem
     // for case opening: returns RarityUnusual for items of unusual quality
     Rarity CaseRarity() const;
 
-    const ItemInfo *itemInfo{};
+    ItemDefIndex itemDefIndex{};
     LootListItemType type{ LootListItemNoAttribute };
 
     // paint/sticker/music kit
@@ -110,6 +110,17 @@ struct LootList
     bool allEntriesAsAdditionalDrops{};
 };
 
+struct ItemSet
+{
+    // might as well parse to full blown loot list items
+    std::vector<LootListItem> items;
+};
+
+inline uint64_t ItemToSetKey(ItemDefIndex item, uint32_t kit)
+{
+    return (static_cast<uint64_t>(item) << 32) | kit;
+}
+
 class ItemSchema
 {
 public:
@@ -129,6 +140,11 @@ public:
         UnacknowledgedType unacknowledgedType,
         ItemDesc &desc) const;
 
+    const ItemSet *ItemSetFromItemAndKit(ItemDefIndex item, uint32_t kit) const;
+
+    // FIXME: see about merging with ItemDescForLootListItem
+    bool GetCraftOutput(const LootListItem &item, float wear, bool statTrak, ItemDesc &desc) const;
+
     // item creation
     bool GetItemDesc(ItemDefIndex defIndex, ItemOrigin origin, UnacknowledgedType unacknowledgedType, ItemDesc &desc) const;
     bool GetPurchaseItemDescs(ItemDefIndex defIndex, std::vector<ItemDesc> &items, std::vector<ItemDesc> &casketedItems) const;
@@ -144,8 +160,9 @@ private:
     void ParseMusicDefinitions(const KeyValue *musicDefinitionsKey);
     void ParseLootLists(const KeyValue *lootListsKey);
     void ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey);
+    void ParseItemSets(const KeyValue *itemSetsKey);
 
-    bool ParseLootListItem(LootListItem &item, std::string_view name);
+    bool ParseLootListItem(LootListItem &item, std::string_view name, bool isUnusual);
 
     // internal slop
     ItemInfo *ItemInfoByName(std::string_view name);
@@ -165,4 +182,10 @@ private:
     StringMap<LootList> m_lootLists;
 
     std::unordered_map<uint32_t, const LootList &> m_revolvingLootLists;
+
+    // garbage for arms deal contracts
+    std::vector<ItemSet> m_itemSets;
+
+    // look up what set item belongs to, paint kit and item def index combined into u64
+    std::unordered_map<uint64_t, size_t> m_itemToSet;
 };

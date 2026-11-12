@@ -108,12 +108,12 @@ ItemInfo::ItemInfo(ItemDefIndex defIndex)
     // RecursiveParseItem parses the rest
 }
 
-PaintKitInfo::PaintKitInfo(const KeyValue &key)
+PaintKitInfo::PaintKitInfo(const KeyValue &key, float fallbackMinFloat, float fallbackMaxFloat)
     : m_defIndex{ FromString<uint32_t>(key.Name()) }
     , m_rarity{ Rarity::Common } // rarity is not set here, done in ParsePaintKitRarities
 {
-    m_minFloat = key.GetNumber<float>("wear_remap_min", 0.0f);
-    m_maxFloat = key.GetNumber<float>("wear_remap_max", 1.0f);
+    m_minFloat = key.GetNumber<float>("wear_remap_min", fallbackMinFloat);
+    m_maxFloat = key.GetNumber<float>("wear_remap_max", fallbackMaxFloat);
 }
 
 StickerKitInfo::StickerKitInfo(const KeyValue &key)
@@ -233,6 +233,12 @@ ItemSchema::ItemSchema()
     {
         ParseRevolvingLootLists(revolvingLootListsKey);
     }
+
+    const KeyValue *itemSetsKey = itemsGame->GetSubkey("item_sets");
+    if (itemSetsKey)
+    {
+        ParseItemSets(itemSetsKey);
+    }
 }
 
 AttributeType ItemSchema::GetAttributeType(AttributeDefIndex defIndex) const
@@ -261,7 +267,7 @@ static auto GetAttributeInfo(auto &itemInfo, AttributeDefIndex defIndex)
     return static_cast<decltype(itemInfo.m_attributes.data())>(nullptr);
 }
 
-static uint32_t SupplyCrateSeriesFromItemInfo(const ItemInfo& info)
+static uint32_t SupplyCrateSeriesFromItemInfo(const ItemInfo &info)
 {
     const ItemAttributeInfo *attribute = GetAttributeInfo(info, AttributeDefIndex::SupplyCrateSeries);
     if (!attribute)
@@ -309,7 +315,6 @@ const LootList *ItemSchema::GetCrateLootList(ItemDefIndex crateDefIndex) const
     return &lootListSearch->second;
 }
 
-
 uint32_t ItemSchema::GetCrateSupplyCrateSeries(ItemDefIndex crateDefIndex) const
 {
     auto itemSearch = m_itemInfo.find(crateDefIndex);
@@ -329,7 +334,7 @@ bool ItemSchema::ItemDescForLootListItem(
     UnacknowledgedType unacknowledgedType,
     ItemDesc &desc) const
 {
-    if (!GetItemDesc(lootListItem.itemInfo->m_defIndex, origin, unacknowledgedType, desc))
+    if (!GetItemDesc(lootListItem.itemDefIndex, origin, unacknowledgedType, desc))
     {
         assert(false);
         return false;
@@ -409,6 +414,61 @@ bool ItemSchema::ItemDescForLootListItem(
         // mikkotodo fix magic
         uint32_t scoreType = (lootListItem.type == LootListItemMusicKit) ? 1 : 0;
         desc.attributes.emplace_back(AttributeDefIndex::KillEaterScoreType, scoreType);
+    }
+
+    return true;
+}
+
+const ItemSet *ItemSchema::ItemSetFromItemAndKit(ItemDefIndex item, uint32_t kit) const
+{
+    auto it = m_itemToSet.find(ItemToSetKey(item, kit));
+    return (it != m_itemToSet.end()) ? &m_itemSets[it->second] : nullptr;
+}
+
+bool ItemSchema::GetCraftOutput(const LootListItem &item, float wear, bool statTrak, ItemDesc &desc) const
+{
+    if (!GetItemDesc(item.itemDefIndex, ItemOriginCrafted, UnacknowledgedCrafted, desc))
+    {
+        assert(false);
+        return false;
+    }
+
+    // FIXME: ideally we'd go via ItemDescForLootListItem, and pass e.g.
+    // struct containing optional<>s of overrides for wear and more if needed later
+
+    // quality override, stattrak makes it strange if it's not an unusual
+    if (statTrak && item.quality != Quality::Unusual)
+    {
+        desc.quality = Quality::Strange;
+    }
+    else
+    {
+        desc.quality = item.quality;
+    }
+
+    // rarity override
+    assert(item.rarity >= Rarity::Common && item.rarity <= Rarity::Immortal);
+    desc.rarity = item.rarity;
+
+    // setup type specficic attributes
+    assert(item.type == LootListItemPaintable);
+
+    desc.attributes.emplace_back(
+        AttributeDefIndex::TexturePrefab,
+        static_cast<float>(item.kitDefIndex));
+
+    desc.attributes.emplace_back(
+        AttributeDefIndex::TextureSeed,
+        static_cast<float>(Random::Uint32(0, 1000)));
+
+    desc.attributes.emplace_back(AttributeDefIndex::TextureWear, std::lerp(item.minFloat, item.maxFloat, wear));
+
+    if (statTrak)
+    {
+        desc.attributes.emplace_back(AttributeDefIndex::KillEater, 0u);
+
+        // mikkotodo fix magic
+        desc.attributes.emplace_back(AttributeDefIndex::KillEaterScoreType, 0u);
     }
 
     return true;
@@ -761,13 +821,25 @@ void ItemSchema::ParsePaintKits(const KeyValue *paintKitsKey)
 {
     m_paintKitInfo.reserve(paintKitsKey->Subkeys().size());
 
+    // ugh wtf is this bullshit
+    const PaintKitInfo *defaultKit = nullptr;
+
     for (const KeyValue &paintKitKey : paintKitsKey->Subkeys())
     {
         std::string_view name = paintKitKey.GetString("name");
 
-        m_paintKitInfo.emplace(std::piecewise_construct,
+        // fallback values in case either one is not specified
+        float minFloat = defaultKit ? defaultKit->m_minFloat : 0.0f;
+        float maxFloat = defaultKit ? defaultKit->m_maxFloat : 1.0f;
+
+        auto [it, inserted] = m_paintKitInfo.emplace(std::piecewise_construct,
             std::forward_as_tuple(name),
-            std::forward_as_tuple(paintKitKey));
+            std::forward_as_tuple(paintKitKey, minFloat, maxFloat));
+
+        if (!defaultKit && inserted && it->second.m_defIndex == 0)
+        {
+            defaultKit = &it->second;
+        }
     }
 }
 
@@ -899,14 +971,8 @@ void ItemSchema::ParseLootLists(const KeyValue *lootListsKey)
 
             // check for an item
             LootListItem item;
-            if (ParseLootListItem(item, entryName))
+            if (ParseLootListItem(item, entryName, unusual))
             {
-                if (unusual)
-                {
-                    // override the quality here...
-                    item.quality = Quality::Unusual;
-                }
-
                 lootList.items.push_back(item);
             }
             else
@@ -953,7 +1019,7 @@ static Rarity PaintedItemRarity(Rarity itemRarity, Rarity paintKitRarity)
 }
 
 // mikkotodo rewrite this function
-bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
+bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name, bool isUnusual)
 {
     // check for an attribute + item combo
     std::string_view attributeName, itemName;
@@ -966,12 +1032,12 @@ bool ItemSchema::ParseLootListItem(LootListItem &item, std::string_view name)
         return false;
     }
 
-    item.itemInfo = itemInfo;
+    item.itemDefIndex = itemInfo->m_defIndex;
     item.type = LootListItemTypeFromName(itemName, attributeName);
 
     // until proven otherwise...
     item.rarity = itemInfo->m_rarity;
-    item.quality = itemInfo->m_quality;
+    item.quality = isUnusual ? Quality::Unusual : itemInfo->m_quality;
 
     if (item.type == LootListItemNoAttribute)
     {
@@ -1056,6 +1122,53 @@ void ItemSchema::ParseRevolvingLootLists(const KeyValue *revolvingLootListsKey)
         }
 
         m_revolvingLootLists.try_emplace(index, it->second);
+    }
+}
+
+void ItemSchema::ParseItemSets(const KeyValue *itemSetsKey)
+{
+    m_itemSets.reserve(itemSetsKey->Subkeys().size());
+
+    for (const KeyValue &setKv : itemSetsKey->Subkeys())
+    {
+        const KeyValue *itemsKv = setKv.GetSubkey("items");
+        if (!itemsKv)
+        {
+            assert(0);
+            continue;
+        }
+
+        assert(setKv.GetString("is_collection") == "1");
+
+        ItemSet itemSet{};
+        itemSet.items.reserve(itemsKv->Subkeys().size());
+
+        size_t setIndex = m_itemSets.size();
+
+        for (const KeyValue &itemKv : itemsKv->Subkeys())
+        {
+            LootListItem item;
+            if (!ParseLootListItem(item, itemKv.Name(), false))
+            {
+                // not expected to happen actually
+                assert(0);
+                continue;
+            }
+
+            uint64_t key = ItemToSetKey(item.itemDefIndex, item.kitDefIndex);
+
+            assert(!m_itemToSet.contains(key));
+            m_itemToSet.try_emplace(key, setIndex);
+
+            // must be sorted for runtime rarity filtering crap
+            std::sort(itemSet.items.begin(), itemSet.items.end(),
+                [](const LootListItem &a, const LootListItem &b)
+                { return a.CaseRarity() < b.CaseRarity(); });
+
+            itemSet.items.push_back(item);
+        }
+
+        m_itemSets.push_back(std::move(itemSet));
     }
 }
 

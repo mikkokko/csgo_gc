@@ -58,6 +58,7 @@ private:
     void OnGetEventFavorites(GCMessageRead &messageRead);
     void OnPartyRegister(GCMessageRead &messageRead);
 
+    void CraftItem(GCMessageRead &messageRead);
     void DeleteItem(GCMessageRead &messageRead);
     void UnlockCrate(GCMessageRead &messageRead);
     void NameItem(GCMessageRead &messageRead);

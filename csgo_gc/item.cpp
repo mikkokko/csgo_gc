@@ -81,16 +81,30 @@ Item::Item(uint32_t lowId, uint32_t accountId, const KeyValue &kv, const ItemSch
             m_desc.equips.emplace_back(equipClass, equpSlot);
         }
     }
+
+    // stupid hack to fix saved item qualities, unique is correct for any gc generated item
+    if (m_desc.quality == Quality::Normal)
+    {
+        m_desc.quality = Quality::Unique;
+    }
 }
 
 Item::Item(uint32_t lowId, ItemDesc &&desc)
     : m_lowId{ lowId }
     , m_desc{ std::move(desc) }
 {
+    // i guess we do this here as well for now...
+    if (m_desc.quality == Quality::Normal)
+    {
+        m_desc.quality = Quality::Unique;
+    }
 }
 
 void Item::ToKeyValue(KeyValueWrite &kv) const
 {
+    // schizo check, these should not be generated normally
+    assert(m_desc.quality != Quality::Normal);
+
     kv.AddNumber("inventory", m_desc.inventory);
     kv.AddNumber("def_index", FromEnum(m_desc.defIndex));
     kv.AddNumber("level", m_desc.level);

@@ -50,6 +50,7 @@ public:
     InventoryChangeMessages RemoveItemName(uint64_t itemId);
     InventoryChangeMessages CasketItemAdd(uint64_t casketId, uint64_t itemId);
     InventoryChangeMessages CasketItemExtract(uint64_t casketId, uint64_t itemId);
+    InventoryChangeMessages CraftItem(std::span<const uint64_t> inputItemIds, uint64_t &outputItemId);
 
     InventoryChangeMessages SetItemPositions(const CMsgSetItemPositions &message, std::vector<CMsgItemAcknowledged> &acknowledgements);
     InventoryChangeMessages PurchaseItems(const std::vector<uint32_t> &defIndexes, std::vector<uint64_t> &itemIds);
