@@ -97,3 +97,7 @@ if (APPLE)
     target_link_libraries(csgo_gc PRIVATE "-framework Foundation")
 endif()
 
+# libwebsockets kludge
+if(WIN32)
+    target_link_libraries(csgo_gc PRIVATE synchronization)
+endif()
