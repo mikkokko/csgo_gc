@@ -55,6 +55,10 @@ else()
     if (NOT APPLE)
         add_link_options(-Wl,--no-undefined -z noexecstack)
     endif()
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_link_options(-static-libstdc++ -static-libgcc)
+    endif()
 endif()
 
 add_subdirectory(csgo_gc)
