@@ -18,6 +18,13 @@
 constexpr int MaxConnectMessages = 5;
 constexpr int ConnectMessageDelayBase = 5;
 
+// Once the burst above is spent the handshake does not stop: it keeps probing at this
+// slow rate for as long as the client stays on the list. A client that was not ready
+// during the burst window (its csgo_gc not loaded yet, a map load swallowing the
+// messages, the GC starting after the player joined) would otherwise sit without a
+// session for the rest of the map and show an empty inventory until it reconnected.
+constexpr std::chrono::seconds ConnectIdleProbeDelay{ 60 };
+
 ServerGC::ServerGC()
 {
     // also called from ClientGC's constructor
@@ -103,11 +110,22 @@ void ServerGC::HandleMessage(uint32_t type, const void *data, uint32_t size)
 
 void ServerGC::ClientConnected(uint64_t steamId, std::vector<uint8_t> &&ticket)
 {
-    auto [it, inserted] = m_clients.try_emplace(steamId, std::move(ticket));
-    if (!inserted)
+    auto it = m_clients.find(steamId);
+    if (it == m_clients.end())
     {
-        Platform::Print("got ClientConnected for {} but they're already on the list! ignoring\n", steamId);
-        return;
+        it = m_clients.emplace(steamId, std::move(ticket)).first;
+    }
+    else
+    {
+        // The game can begin a new auth session for a player without telling us that the
+        // previous one ended. The connect message carries this ticket and the client
+        // validates it, so the old one is useless now: take the new ticket and re-send
+        // the handshake instead of ignoring the connection.
+        Platform::Print("got ClientConnected for {} but they're already on the list, refreshing the session\n", steamId);
+
+        it->second.authTicket = std::move(ticket);
+        it->second.hasSOCache = false;
+        it->second.connectSendCount = 0;
     }
 
     SendConnectMessage(steamId, it->second);
@@ -146,12 +164,18 @@ void ServerGC::UpdateConnections()
 {
     for (auto &[steamId, state] : m_clients)
     {
-        if (state.hasSOCache || state.connectSendCount >= MaxConnectMessages)
+        if (state.hasSOCache)
         {
             continue;
         }
 
-        auto nextTime = state.lastConnectSend + std::chrono::seconds{ state.connectSendCount * ConnectMessageDelayBase };
+        // The count selects the delay; it is not a budget. Past the burst the handshake
+        // keeps probing slowly instead of going silent for the rest of the map.
+        auto delay = state.connectSendCount >= MaxConnectMessages
+            ? ConnectIdleProbeDelay
+            : std::chrono::seconds{ state.connectSendCount * ConnectMessageDelayBase };
+
+        auto nextTime = state.lastConnectSend + delay;
         if (std::chrono::steady_clock::now() >= nextTime)
         {
             SendConnectMessage(steamId, state);
@@ -170,7 +194,15 @@ void ServerGC::SendConnectMessage(uint64_t steamId, GCClientState &state)
     state.connectSendCount++;
     SendMessageToClient(steamId, std::move(messageWrite).TakeBuffer());
 
-    Platform::Print("Queued connect message {}/{} to {}\n", state.connectSendCount, MaxConnectMessages, steamId);
+    if (state.connectSendCount == MaxConnectMessages)
+    {
+        Platform::Print("Connect handshake with {} used its {} fast messages, continuing at one probe every {}\n",
+            steamId, state.connectSendCount, ConnectIdleProbeDelay);
+    }
+    else if (state.connectSendCount < MaxConnectMessages)
+    {
+        Platform::Print("Queued connect message {}/{} to {}\n", state.connectSendCount, MaxConnectMessages, steamId);
+    }
 }
 
 void ServerGC::SendMessageToClient(uint64_t steamId, std::vector<uint8_t> &&buffer)
